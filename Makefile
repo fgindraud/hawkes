@@ -15,13 +15,18 @@ CXX_FLAGS_DEBUG = $(CXX_FLAGS_COMMON) -O2 -g
 # Explicitely call 'make hawkes_debug' for a version with debug info (for use with gdb / valgrind)
 all: hawkes
 
+# Precompile fmtlib for speed
+fmtlib.o: src/external/fmt/format.cc $(wildcard src/external/fmt/*.h) Makefile
+	$(CXX) -c $(CXX_FLAGS_RELEASE) -I src/external -o $@ $<
+
 # All possible binaries
-hawkes: src/main.cpp $(wildcard src/*.h) Makefile
-	$(CXX) $(CXX_FLAGS_RELEASE) -o $@ $<
+hawkes: src/main.cpp fmtlib.o $(wildcard src/*.h) Makefile
+	$(CXX) $(CXX_FLAGS_RELEASE) -o $@ $< fmtlib.o
 
-hawkes_debug: src/main.cpp $(wildcard src/*.h) Makefile
-	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $<
+hawkes_debug: src/main.cpp fmtlib.o $(wildcard src/*.h) Makefile
+	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
 
+# FIXME restore tests
 unit_tests: src/unit_tests.cpp $(wildcard src/*.h) Makefile
 	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $<
 
