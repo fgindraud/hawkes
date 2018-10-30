@@ -7,6 +7,7 @@
 #endif
 
 #include "command_line.h"
+#include "computations.h"
 #include "utils.h"
 
 /******************************************************************************
