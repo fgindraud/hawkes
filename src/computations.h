@@ -165,6 +165,51 @@ inline int compute_cross_correlation (const SortedProcess & l_process, const Sor
 	return 0;
 }
 
+#include "utils.h"
+inline void test (const SortedProcess & p, HistogramBase::Interval interval) {
+	fmt::print ("N_m size * delta: {}\n", p.nb_points () * (interval.to - interval.from));
+
+	auto next_point = [&p](int i, int shift) {
+		if (i < p.nb_points ()) {
+			return p.point (i) + shift;
+		} else {
+			return INT_MAX;
+		}
+	};
+
+	int current_value = 0;
+	int accumulated_area = 0;
+	int current_x = 0;
+
+	int current_i_from = 0;
+	int current_i_to = 0;
+
+	int next_x_from = next_point (current_i_from, interval.from);
+	int next_x_to = next_point (current_i_to, interval.to);
+
+	while (true) {
+		const int next_x = std::min (next_x_from, next_x_to);
+		fmt::print ("n_x = {} ; c_v = {} ; n_x_f/t = {}/{}\n", next_x, current_value, next_x_from, next_x_to);
+		if (next_x == INT_MAX) {
+			assert (current_value == 0);
+			break;
+		}
+		accumulated_area += current_value * (next_x - current_x);
+		current_x = next_x;
+		if (next_x == next_x_from) {
+			current_value += 1;
+			current_i_from += 1;
+			next_x_from = next_point (current_i_from, interval.from);
+		}
+		if (next_x == next_x_to) {
+			current_value -= 1;
+			current_i_to += 1;
+			next_x_to = next_point (current_i_to, interval.to);
+		}
+	}
+	fmt::print ("area = {}\n", accumulated_area);
+}
+
 inline MatrixB compute_b (const SortedProcesses & processes, const HistogramBase & base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
