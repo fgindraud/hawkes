@@ -98,6 +98,13 @@ struct MatrixG {
 
 struct SortedProcess {
 	std::vector<std::int32_t> points;
+
+	int nb_points () const { return int(points.size ()); }
+
+	std::int32_t point (int i) const {
+		assert (0 <= i && i < nb_points ());
+		return points[i];
+	}
 };
 struct SortedProcesses {
 	std::vector<SortedProcess> processes;
@@ -105,7 +112,7 @@ struct SortedProcesses {
 	int nb_processes () const { return int(processes.size ()); }
 
 	const SortedProcess & process (ProcessId l) const {
-		assert (0 <= l.value && l.value < int(processes.size ()));
+		assert (0 <= l.value && l.value < nb_processes ());
 		return processes[std::size_t (l.value)];
 	}
 };
@@ -113,14 +120,40 @@ struct SortedProcesses {
 struct HistogramBase {
 	int base_size; // [1, inf[
 	int delta;     // [1, inf[
+
+	// ]from; to]
+	struct Interval {
+		int from;
+		int to;
+	};
+
+	Interval interval (FunctionBaseId k) const { return {k.value * delta, (k.value + 1) * delta}; }
 };
 
-inline std::size_t compute_b_mlk_histogram (const SortedProcess & m_process, const SortedProcess & l_process,
-                                            FunctionBaseId k, int delta) {
+inline int count_point_difference_in_interval (const SortedProcess & m_process, const SortedProcess & l_process,
+                                               HistogramBase::Interval interval) {
 	// Count pair of points within the k-th interval
-	// TODO impl from rust tests
+	// TODO dichotomic search & count += interval_size instead of looking at each element
 	// TODO impl by doing all k at once ? bench ?
-	return 0;
+	const auto n_m = m_process.nb_points ();
+	int count = 0;
+	int last_starting_i = 0;
+	for (const auto x_l : l_process.points) {
+		// Count x_m in ]x_l + interval.from, x_l + interval.to]
+
+		// Find first i where Nm[i] is in the interval
+		while (last_starting_i < n_m && !(x_l + interval.from < m_process.point (last_starting_i))) {
+			last_starting_i += 1;
+		}
+		// i is out of bounds or Nm[i] > x_l + interval.from
+		int i = last_starting_i;
+		// Count elements of Nm still in interval
+		while (i < n_m && m_process.point (i) <= x_l + interval.to) {
+			count += 1;
+			i += 1;
+		}
+	}
+	return count;
 }
 
 inline MatrixB compute_b (const SortedProcesses & processes, const HistogramBase & base) {
@@ -132,15 +165,22 @@ inline MatrixB compute_b (const SortedProcesses & processes, const HistogramBase
 		const auto & m_process = processes.process (m);
 
 		// b0
-		b.set_0 (m, double(m_process.points.size ()));
+		b.set_0 (m, double(m_process.nb_points ()));
 
 		// b_lk
 		for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
 			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
-				const auto count = compute_b_mlk_histogram (m_process, processes.process (l), k, base.delta);
+				const auto count = count_point_difference_in_interval (m_process, processes.process (l), base.interval (k));
 				b.set_lk (m, l, k, double(count));
 			}
 		}
 	}
 	return b;
+}
+
+inline MatrixG compute_g (const SortedProcesses & processes, const HistogramBase & base) {
+	const auto nb_processes = processes.nb_processes ();
+	const auto base_size = base.base_size;
+	MatrixG g (nb_processes, base_size);
+	return g;
 }
