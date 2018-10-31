@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <cmath>
 #include <eigen3/Eigen/Core>
 #include <vector>
 
@@ -36,18 +37,18 @@ struct MatrixB {
 	}
 
 	// b_m,l,k
-	int row_index (ProcessId l, FunctionBaseId k) const {
+	int lk_index (ProcessId l, FunctionBaseId k) const {
 		assert (0 <= l.value && l.value < nb_processes);
 		assert (0 <= k.value && k.value < base_size);
 		return 1 + l.value * base_size + k.value;
 	}
 	double get_lk (ProcessId m, ProcessId l, FunctionBaseId k) const {
 		assert (0 <= m.value && m.value < nb_processes);
-		return inner (row_index (l, k), m.value);
+		return inner (lk_index (l, k), m.value);
 	}
 	void set_lk (ProcessId m, ProcessId l, FunctionBaseId k, double v) {
 		assert (0 <= m.value && m.value < nb_processes);
-		inner (row_index (l, k), m.value) = v;
+		inner (lk_index (l, k), m.value) = v;
 	}
 };
 using MatrixA = MatrixB;
@@ -127,7 +128,10 @@ struct HistogramBase {
 		int to;
 	};
 
-	Interval interval (FunctionBaseId k) const { return {k.value * delta, (k.value + 1) * delta}; }
+	Interval interval (FunctionBaseId k) const {
+		assert (0 <= k.value && k.value < base_size);
+		return {k.value * delta, (k.value + 1) * delta};
+	}
 };
 
 inline int count_point_difference_in_interval (const SortedProcess & m_process, const SortedProcess & l_process,
@@ -156,6 +160,11 @@ inline int count_point_difference_in_interval (const SortedProcess & m_process, 
 	return count;
 }
 
+inline int compute_cross_correlation (const SortedProcess & l_process, const SortedProcess & l2_process,
+                                      HistogramBase::Interval interval, HistogramBase::Interval interval2) {
+	return 0;
+}
+
 inline MatrixB compute_b (const SortedProcesses & processes, const HistogramBase & base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
@@ -182,5 +191,27 @@ inline MatrixG compute_g (const SortedProcesses & processes, const HistogramBase
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
 	MatrixG g (nb_processes, base_size);
+
+	g.set_tmax (0); // FIXME how is Tmax determined ?
+
+	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
+		const auto g_lk = processes.process (l).nb_points () * std::sqrt (base.delta);
+		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
+			g.set_g (l, k, g_lk);
+		}
+	}
+
+	// G symmetric, only compute for (l2,k2) >= (l,k)
+	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
+		for (ProcessId l2{l.value}; l2.value < nb_processes; ++l2.value) {
+			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
+				for (FunctionBaseId k2{k.value}; k2.value < base_size; ++k2.value) {
+					const auto v = compute_cross_correlation (processes.process (l), processes.process (l2), base.interval (k),
+					                                          base.interval (k2));
+					g.set_G (l, l2, k, k2, double(v));
+				}
+			}
+		}
+	}
 	return g;
 }
