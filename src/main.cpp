@@ -94,15 +94,6 @@ int main (int argc, char * argv[]) {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
 
-		auto do_test = [](int nb_points) {
-			auto p = random_process (nb_points, 100);
-			fmt::print ("Points: {}\n", fmt::join (p.points, " "));
-			test (p, HistogramBase::Interval{0, 10});
-		};
-		do_test (0);
-		do_test (5);
-		do_test (20);
-
 	} catch (const CommandLineParser::Exception & exc) {
 		fmt::print (stderr, "Error: {}. Use --help for a list of options.\n", exc.what ());
 		return EXIT_FAILURE;

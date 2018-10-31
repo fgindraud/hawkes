@@ -2,7 +2,9 @@
 
 #include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <eigen3/Eigen/Core>
+#include <limits>
 #include <vector>
 
 struct ProcessId {
@@ -97,16 +99,19 @@ struct MatrixG {
 	}
 };
 
+using Point = std::int32_t;
+
 struct SortedProcess {
-	std::vector<std::int32_t> points;
+	std::vector<Point> points;
 
 	int nb_points () const { return int(points.size ()); }
 
-	std::int32_t point (int i) const {
+	Point point (int i) const {
 		assert (0 <= i && i < nb_points ());
 		return points[i];
 	}
 };
+
 struct SortedProcesses {
 	std::vector<SortedProcess> processes;
 
@@ -142,7 +147,7 @@ inline int count_point_difference_in_interval (const SortedProcess & m_process, 
 	const auto n_m = m_process.nb_points ();
 	int count = 0;
 	int last_starting_i = 0;
-	for (const auto x_l : l_process.points) {
+	for (const Point x_l : l_process.points) {
 		// Count x_m in ]x_l + interval.from, x_l + interval.to]
 
 		// Find first i where Nm[i] is in the interval
@@ -162,52 +167,67 @@ inline int count_point_difference_in_interval (const SortedProcess & m_process, 
 
 inline int compute_cross_correlation (const SortedProcess & l_process, const SortedProcess & l2_process,
                                       HistogramBase::Interval interval, HistogramBase::Interval interval2) {
-	return 0;
-}
+	constexpr Point inf = std::numeric_limits<Point>::max ();
 
-#include "utils.h"
-inline void test (const SortedProcess & p, HistogramBase::Interval interval) {
-	fmt::print ("N_m size * delta: {}\n", p.nb_points () * (interval.to - interval.from));
+	struct SlidingInterval {
+		const SortedProcess & points;   // Points to slide on
+		HistogramBase::Interval shifts; // Shifting of interval bounds
 
-	auto next_point = [&p](int i, int shift) {
-		if (i < p.nb_points ()) {
-			return p.point (i) + shift;
-		} else {
-			return INT_MAX;
+		int current_points_inside = 0;
+		// Indexes of next points to enter/exit interval
+		int next_i_entering = 0;
+		int next_i_exiting = 0;
+		// Value of next points to enter/exit interval, or inf if no more points
+		Point next_x_entering = 0;
+		Point next_x_exiting = 0;
+
+		SlidingInterval (const SortedProcess & points, HistogramBase::Interval shifts) : points (points), shifts (shifts) {
+			next_x_entering = get_shifted_point (0, shifts.from);
+			next_x_exiting = get_shifted_point (0, shifts.to);
+		}
+		Point get_shifted_point (int i, int shift) const {
+			if (i < points.nb_points ()) {
+				return points.point (i) + shift;
+			} else {
+				return inf;
+			}
+		}
+		void advance_to (Point new_x) {
+			if (new_x == next_x_entering) {
+				current_points_inside += 1;
+				next_i_entering += 1;
+				next_x_entering = get_shifted_point (next_i_entering, shifts.from);
+			}
+			if (new_x == next_x_exiting) {
+				current_points_inside += 1;
+				next_i_exiting += 1;
+				next_x_exiting = get_shifted_point (next_i_exiting, shifts.to);
+			}
 		}
 	};
 
-	int current_value = 0;
 	int accumulated_area = 0;
-	int current_x = 0;
-
-	int current_i_from = 0;
-	int current_i_to = 0;
-
-	int next_x_from = next_point (current_i_from, interval.from);
-	int next_x_to = next_point (current_i_to, interval.to);
+	Point current_x = 0;
+	SlidingInterval si1 (l_process, interval);
+	SlidingInterval si2 (l2_process, interval2);
 
 	while (true) {
-		const int next_x = std::min (next_x_from, next_x_to);
-		fmt::print ("n_x = {} ; c_v = {} ; n_x_f/t = {}/{}\n", next_x, current_value, next_x_from, next_x_to);
-		if (next_x == INT_MAX) {
-			assert (current_value == 0);
+		const Point next_x = std::min ({si1.next_x_entering, si1.next_x_exiting, si2.next_x_entering, si2.next_x_exiting});
+		if (next_x == inf) {
+			// No more points to process, all next points are inf.
+			assert (si1.current_points_inside == 0);
+			assert (si2.current_points_inside == 0);
 			break;
 		}
-		accumulated_area += current_value * (next_x - current_x);
+		// Integrate the constant between current and next x.
+		accumulated_area += si1.current_points_inside * si2.current_points_inside * (next_x - current_x);
+		// Move reference to next_x
 		current_x = next_x;
-		if (next_x == next_x_from) {
-			current_value += 1;
-			current_i_from += 1;
-			next_x_from = next_point (current_i_from, interval.from);
-		}
-		if (next_x == next_x_to) {
-			current_value -= 1;
-			current_i_to += 1;
-			next_x_to = next_point (current_i_to, interval.to);
-		}
+		si1.advance_to (next_x);
+		si2.advance_to (next_x);
+		// TODO improvement: when one of SI.current_points_inside is 0, advance to next entering of this SI
 	}
-	fmt::print ("area = {}\n", accumulated_area);
+	return accumulated_area;
 }
 
 inline MatrixB compute_b (const SortedProcesses & processes, const HistogramBase & base) {
