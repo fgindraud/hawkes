@@ -11,6 +11,7 @@
 
 #include "command_line.h"
 #include "computations.h"
+#include "input.h"
 #include "utils.h"
 
 /******************************************************************************
