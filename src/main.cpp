@@ -50,24 +50,6 @@ static std::chrono::high_resolution_clock::time_point instant () {
 }
 
 /******************************************************************************
- * Generate random processes.
- */
-static SortedProcess random_process (int nb_points, int tmax) {
-	assert (nb_points >= 0);
-	assert (tmax > 0);
-	std::random_device rd;
-	std::mt19937 gen (rd ());
-	std::uniform_int_distribution<int> distribution (0, tmax);
-	SortedProcess p;
-	p.points.resize (nb_points);
-	for (auto & point : p.points) {
-		point = distribution (gen);
-	}
-	std::sort (p.points.begin (), p.points.end ());
-	return p;
-}
-
-/******************************************************************************
  * Program entry point.
  */
 int main (int argc, char * argv[]) {

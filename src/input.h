@@ -11,7 +11,7 @@
 #include <string>
 #include <system_error> // io errors
 
-#include "computations.h" // FIXME move defs to their own file when stabilised
+#include "types.h"
 #include "utils.h"
 
 /******************************************************************************
