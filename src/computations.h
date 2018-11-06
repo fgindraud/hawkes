@@ -5,11 +5,30 @@
 
 #include "types.h"
 
+inline std::int64_t tmax_for_region (const ProcessData<Point> & processes, RegionId region) {
+	std::int64_t min = std::numeric_limits<std::int64_t>::max ();
+	std::int64_t max = std::numeric_limits<std::int64_t>::min ();
+
+	for (ProcessId m{0}; m.value < processes.nb_processes (); ++m.value) {
+		const auto & points = processes.data (m, region);
+		if (points.size () > 0) {
+			min = std::min (min, std::int64_t (points[0]));
+			max = std::max (max, std::int64_t (points[points.size () - 1]));
+		}
+	}
+
+	if (min <= max) {
+		return max - min;
+	} else {
+		return 0; // If there are no points at all, return 0
+	}
+}
+
 inline std::int64_t count_point_difference_in_interval (const SortedVec<Point> & m_process,
                                                         const SortedVec<Point> & l_process,
                                                         HistogramBase::Interval interval) {
 	// Count pair of points within the k-th interval
-	// TODO impl by doing all k at once ? bench !
+	// TODO impl by doing all k at once, from rust experiment
 	const auto n_m = m_process.size ();
 	std::int64_t count = 0;
 	int last_starting_i = 0;
@@ -97,13 +116,13 @@ inline std::int64_t compute_cross_correlation (const SortedVec<Point> & l_proces
 	return accumulated_area;
 }
 
-inline MatrixB compute_b (const SortedProcesses & processes, const HistogramBase & base) {
+inline MatrixB compute_b (const ProcessData<Point> & processes, RegionId region, const HistogramBase & base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
 	MatrixB b (nb_processes, base_size);
 
 	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
-		const auto & m_process = processes.process (m);
+		const auto & m_process = processes.data (m, region);
 
 		// b0
 		b.set_0 (m, double(m_process.size ()));
@@ -111,7 +130,8 @@ inline MatrixB compute_b (const SortedProcesses & processes, const HistogramBase
 		// b_lk
 		for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
 			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
-				const auto count = count_point_difference_in_interval (m_process, processes.process (l), base.interval (k));
+				const auto count =
+				    count_point_difference_in_interval (m_process, processes.data (l, region), base.interval (k));
 				b.set_lk (m, l, k, double(count));
 			}
 		}
@@ -119,15 +139,15 @@ inline MatrixB compute_b (const SortedProcesses & processes, const HistogramBase
 	return b;
 }
 
-inline MatrixG compute_g (const SortedProcesses & processes, const HistogramBase & base) {
+inline MatrixG compute_g (const ProcessData<Point> & processes, RegionId region, const HistogramBase & base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
 	MatrixG g (nb_processes, base_size);
 
-	g.set_tmax (0); // FIXME how is Tmax determined ?
+	g.set_tmax (tmax_for_region (processes, region));
 
 	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
-		const auto g_lk = processes.process (l).size () * std::sqrt (base.delta);
+		const auto g_lk = processes.data (l, region).size () * std::sqrt (base.delta);
 		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
 			g.set_g (l, k, g_lk);
 		}
@@ -138,8 +158,8 @@ inline MatrixG compute_g (const SortedProcesses & processes, const HistogramBase
 		for (ProcessId l2{l.value}; l2.value < nb_processes; ++l2.value) {
 			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
 				for (FunctionBaseId k2{k.value}; k2.value < base_size; ++k2.value) {
-					const auto v = compute_cross_correlation (processes.process (l), processes.process (l2), base.interval (k),
-					                                          base.interval (k2));
+					const auto v = compute_cross_correlation (processes.data (l, region), processes.data (l2, region),
+					                                          base.interval (k), base.interval (k2));
 					g.set_G (l, l2, k, k2, double(v));
 				}
 			}

@@ -1,14 +1,14 @@
 #pragma once
 // Contains vocabulary types, basic functions used in many places.
 
+#include <algorithm>
 #include <cassert>
 #include <cctype>
 #include <cstdlib>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include <algorithm>
-#include <optional>
 
 /* Use external printf C++ library : fmtlib.
  * From https://github.com/fmtlib/fmt
@@ -53,7 +53,10 @@ template <typename T> struct span {
 	T * begin () const { return base_; }
 	T * end () const { return base_ + size_; }
 	std::size_t size () const { return size_; }
-	T & operator[] (std::size_t index) const { return base_[index]; }
+	T & operator[] (std::size_t index) const {
+		assert (index < size ());
+		return base_[index];
+	}
 };
 
 // Create span from data structures
@@ -79,8 +82,7 @@ template <typename T> span<T> slice_from (span<T> s, std::size_t from) {
 }
 
 // Get index of an element in a span
-template <typename T, typename U>
-std::optional<std::size_t> index_of (const T & element, span<const U> slice) {
+template <typename T, typename U> std::optional<std::size_t> index_of (const T & element, span<const U> slice) {
 	auto it = std::find (slice.begin (), slice.end (), element);
 	if (it != slice.end ()) {
 		return std::distance (slice.begin (), it);
@@ -141,8 +143,7 @@ inline string_view trim_ws_left (string_view str) {
 }
 inline string_view trim_ws_right (string_view str) {
 	using reverse_it = std::reverse_iterator<string_view::iterator>;
-	auto last_skipped_space =
-	    std::find_if_not (reverse_it (str.end ()), reverse_it (str.begin ()), is_space).base ();
+	auto last_skipped_space = std::find_if_not (reverse_it (str.end ()), reverse_it (str.begin ()), is_space).base ();
 	return make_string_view (str.begin (), last_skipped_space);
 }
 inline string_view trim_ws (string_view str) {
@@ -184,8 +185,7 @@ inline std::size_t parse_positive_int (string_view str, string_view what) {
 	char * end = nullptr;
 	const long n = std::strtol (null_terminated.data (), &end, 0);
 	if (end == null_terminated.data () || n < 0) {
-		throw std::runtime_error (
-		    fmt::format ("Unable to parse positive value for {} from '{}'", what, str));
+		throw std::runtime_error (fmt::format ("Unable to parse positive value for {} from '{}'", what, str));
 	}
 	return std::size_t (n);
 }
@@ -201,6 +201,12 @@ private:
 	std::size_t nb_rows_{};
 	std::size_t nb_cols_{};
 
+	std::size_t linear_index (std::size_t row_index, std::size_t col_index) const {
+		assert (row_index < nb_rows_);
+		assert (col_index < nb_cols_);
+		return row_index * nb_cols_ + col_index;
+	}
+
 public:
 	// Empty vector
 	Vector2d () = default;
@@ -215,27 +221,37 @@ public:
 
 	// Access cells directly
 	const T & operator() (std::size_t row_index, std::size_t col_index) const noexcept {
-		return inner_[row_index * nb_cols_ + col_index];
+		return inner_[linear_index (row_index, col_index)];
 	}
 	T & operator() (std::size_t row_index, std::size_t col_index) noexcept {
-		return inner_[row_index * nb_cols_ + col_index];
+		return inner_[linear_index (row_index, col_index)];
 	}
 
 	// Access rows
 	span<const T> row (std::size_t row_index) const noexcept {
-		return slice (make_span (inner_), row_index * nb_cols_, nb_cols_);
+		return slice (make_span (inner_), linear_index (row_index, 0), nb_cols_);
 	}
 	span<T> row (std::size_t row_index) noexcept {
-		return slice (make_span (inner_), row_index * nb_cols_, nb_cols_);
+		return slice (make_span (inner_), linear_index (row_index, 0), nb_cols_);
 	}
 
 	// Indexation operator[]: return row.
 	span<const T> operator[] (std::size_t row_index) const noexcept { return row (row_index); }
 	span<T> operator[] (std::size_t row_index) noexcept { return row (row_index); }
 
+	// Add a row by copying elements from a span.
 	void append_row (span<const T> values) {
-		assert (values.size () == nb_cols ());
+		assert (values.size () == nb_cols_);
 		inner_.insert (inner_.end (), values.begin (), values.end ());
 		++nb_rows_;
 	}
+	// Add a row by moving elements from a span<T> (the span will point to moved-from T).
+	void append_row_move (span<T> values) {
+		assert (values.size () == nb_cols_);
+		inner_.reserve (inner_.size () + nb_cols_);
+		std::move (values.begin (), values.end (), std::back_inserter (inner_));
+		++nb_rows_;
+	}
+	// Add a row by moving elements (selected if given a r-value vector).
+	void append_row (std::vector<T> && values) { append_row_move (make_span (values)); }
 };
