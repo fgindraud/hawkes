@@ -106,4 +106,53 @@ inline bool LineByLineReader::read_next_line () {
 
 /******************************************************************************
  * BED format parsing.
+ * TODO factorize by DataType, with a DataType from_bed_interval (start, end) function.
+ * TODO support explicit listing of which region goes into what vector index.
  */
+
+inline std::vector<ProcessRegionData<Point>> read_points_from_bed_file (not_null<FILE *> file) {
+	std::vector<ProcessRegionData<Point>> regions;
+	LineByLineReader reader (file);
+
+	std::vector<Point> current_region_points;
+	std::string current_region_name;
+
+	try {
+		while (reader.read_next_line ()) {
+			const string_view line = trim_ws (reader.current_line ());
+			if (starts_with ('#', line)) {
+				// Comment or header, ignore
+			} else {
+				const auto fields = split ('\t', line);
+				if (!(fields.size () >= 3)) {
+					throw std::runtime_error ("Line must contain at least 3 fields: (region, start, end)");
+				}
+				const string_view region_name = fields[0];
+				const std::size_t interval_start_position = parse_positive_int (fields[1], "interval position start");
+				const std::size_t interval_end_position = parse_positive_int (fields[2], "interval position end");
+				if (!(interval_start_position < interval_end_position)) {
+					throw std::runtime_error ("interval bounds are invalid");
+				}
+				// Check is start of a new region
+				if (region_name != current_region_name) {
+					if (empty (region_name)) {
+						throw std::runtime_error ("empty string as a region name");
+					}
+					if (!empty (current_region_name)) {
+						// End current region and store its data
+						regions.emplace_back (ProcessRegionData<Point>{
+						    current_region_name, SortedVec<Point>::from_unsorted (std::move (current_region_points))});
+					}
+					current_region_points.clear ();
+					current_region_name = to_string (region_name);
+				}
+				current_region_points.emplace_back ((interval_end_position - interval_start_position) / 2);
+			}
+		}
+		return regions;
+	} catch (const std::runtime_error & e) {
+		// Add some context to an error.
+		throw std::runtime_error (
+		    fmt::format ("Parsing BED file at line {}: {}", reader.current_line_number () + 1, e.what ()));
+	}
+}
