@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "utils.h"
+
 /******************************************************************************
  * Index types.
  */
@@ -27,50 +29,29 @@ struct RegionId {
 // Single coordinate for a process represented by points.
 using Point = std::int32_t;
 
-template <typename T> class SortedVec {
-private:
-	std::vector<T> inner;
-	SortedVec (std::vector<T> && sorted_data) : inner (std::move (sorted_data)) {}
-
-public:
-	SortedVec () = default;
-	static SortedVec from_sorted (std::vector<T> && sorted_data) {
-		if (!std::is_sorted (sorted_data.begin (), sorted_data.end ())) {
-			throw std::runtime_error ("SortedVec::from_sorted: unsorted data");
-		}
-		return SortedVec (std::move (sorted_data));
-	}
-	static SortedVec from_unsorted (std::vector<T> && data) {
-		std::sort (data.begin (), data.end ());
-		auto new_end = std::unique (data.begin (), data.end ());
-		data.erase (new_end, data.end ());
-		return SortedVec (std::move (data));
-	}
-
-	int size () const { return int(inner.size ()); }
-	const T & operator[] (int i) const {
-		assert (0 <= i && i < size ());
-		return inner[std::size_t (i)];
-	}
-
-	using const_iterator = typename std::vector<T>::const_iterator;
-	const_iterator begin () const { return inner.begin (); }
-	const_iterator end () const { return inner.end (); }
+// Store a process region data: its name and list of data elements, sorted.
+template <typename DataType> struct ProcessRegionData {
+	std::string name;
+	SortedVec<DataType> data;
 };
 
-template <typename DataType> struct ProcessData {
-	Vector2d<SortedVec<DataType>> inner; // Rows = processes, Cols = regions
+// Store the data for multiple processes and regions.
+// All processes must have the same number of regions.
+template <typename DataType> struct ProcessesData {
+	Vector2d<ProcessRegionData<DataType>> inner; // Rows = processes, Cols = regions
 
 	// TODO add process and region names ? move to a class for invariants
 
 	int nb_processes () const { return int(inner.nb_rows ()); }
 	int nb_regions () const { return int(inner.nb_cols ()); }
 
-	const SortedVec<DataType> & data (ProcessId m, RegionId r) const {
+	const ProcessRegionData<DataType> & process_region (ProcessId m, RegionId r) const {
 		assert (0 <= m.value && m.value < nb_processes ());
 		assert (0 <= r.value && r.value < nb_regions ());
 		return inner (std::size_t (m.value), std::size_t (r.value));
 	}
+	const SortedVec<DataType> & data (ProcessId m, RegionId r) const { return process_region (m, r).data; }
+	const std::string & region_name (ProcessId m, RegionId r) const { return process_region (m, r).name; }
 };
 
 /******************************************************************************

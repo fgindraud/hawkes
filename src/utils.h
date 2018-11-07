@@ -255,3 +255,37 @@ public:
 	// Add a row by moving elements (selected if given a r-value vector).
 	void append_row (std::vector<T> && values) { append_row_move (make_span (values)); }
 };
+
+/*******************************************************************************
+ * Vector<T> that keep its elements sorted and unique.
+ */
+template <typename T> class SortedVec {
+private:
+	std::vector<T> inner;
+	SortedVec (std::vector<T> && sorted_data) : inner (std::move (sorted_data)) {}
+
+public:
+	SortedVec () = default;
+	static SortedVec from_sorted (std::vector<T> && sorted_data) {
+		if (!std::is_sorted (sorted_data.begin (), sorted_data.end ())) {
+			throw std::runtime_error ("SortedVec::from_sorted: unsorted data");
+		}
+		return SortedVec (std::move (sorted_data));
+	}
+	static SortedVec from_unsorted (std::vector<T> && data) {
+		std::sort (data.begin (), data.end ());
+		auto new_end = std::unique (data.begin (), data.end ());
+		data.erase (new_end, data.end ());
+		return SortedVec (std::move (data));
+	}
+
+	int size () const { return int(inner.size ()); }
+	const T & operator[] (int i) const {
+		assert (0 <= i && i < size ());
+		return inner[std::size_t (i)];
+	}
+
+	using const_iterator = typename std::vector<T>::const_iterator;
+	const_iterator begin () const { return inner.begin (); }
+	const_iterator end () const { return inner.end (); }
+};

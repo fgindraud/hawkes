@@ -5,7 +5,7 @@
 
 #include "types.h"
 
-inline std::int64_t tmax_for_region (const ProcessData<Point> & processes, RegionId region) {
+inline std::int64_t tmax_for_region (const ProcessesData<Point> & processes, RegionId region) {
 	std::int64_t min = std::numeric_limits<std::int64_t>::max ();
 	std::int64_t max = std::numeric_limits<std::int64_t>::min ();
 
@@ -116,7 +116,7 @@ inline std::int64_t compute_cross_correlation (const SortedVec<Point> & l_proces
 	return accumulated_area;
 }
 
-inline MatrixB compute_b (const ProcessData<Point> & processes, RegionId region, const HistogramBase & base) {
+inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId region, const HistogramBase & base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
 	MatrixB b (nb_processes, base_size);
@@ -139,7 +139,7 @@ inline MatrixB compute_b (const ProcessData<Point> & processes, RegionId region,
 	return b;
 }
 
-inline MatrixG compute_g (const ProcessData<Point> & processes, RegionId region, const HistogramBase & base) {
+inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId region, const HistogramBase & base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
 	MatrixG g (nb_processes, base_size);
