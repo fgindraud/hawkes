@@ -128,8 +128,8 @@ inline std::vector<ProcessRegionData<Point>> read_points_from_bed_file (not_null
 					throw std::runtime_error ("Line must contain at least 3 fields: (region, start, end)");
 				}
 				const string_view region_name = fields[0];
-				const std::size_t interval_start_position = parse_positive_int (fields[1], "interval position start");
-				const std::size_t interval_end_position = parse_positive_int (fields[2], "interval position end");
+				const auto interval_start_position = parse_int (fields[1], "interval_position_start");
+				const auto interval_end_position = parse_int (fields[2], "interval_position_end");
 				if (!(interval_start_position < interval_end_position)) {
 					throw std::runtime_error ("interval bounds are invalid");
 				}

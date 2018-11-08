@@ -180,6 +180,15 @@ inline double parse_double_0_1 (string_view str, string_view what) {
 	}
 	return d;
 }
+inline long parse_int (string_view str, string_view what) {
+	const auto null_terminated = to_string (str);
+	char * end = nullptr;
+	const long n = std::strtol (null_terminated.data (), &end, 0);
+	if (end == null_terminated.data ()) {
+		throw std::runtime_error (fmt::format ("Unable to parse integer value for {} from '{}'", what, str));
+	}
+	return n;
+}
 inline std::size_t parse_positive_int (string_view str, string_view what) {
 	const auto null_terminated = to_string (str);
 	char * end = nullptr;
