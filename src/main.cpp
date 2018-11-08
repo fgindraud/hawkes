@@ -52,11 +52,12 @@ static std::chrono::high_resolution_clock::time_point instant () {
 /******************************************************************************
  * Reading process data.
  */
-inline void read_process_data (ProcessesData<Point> & processes, string_view filename) {
+template <typename DataType>
+static void read_all_process_data (ProcessesData<DataType> & processes, string_view filename) {
 	try {
 		const auto start = instant ();
 		auto file = open_file (filename, "r");
-		const auto id = processes.add_process (filename, read_points_from_bed_file (file.get ()));
+		const auto id = processes.add_process (filename, read_all_from_bed_file<DataType> (file.get ()));
 		const auto end = instant ();
 		fmt::print (stderr, "Process {} loaded from {}: regions = {} ; time = {}\n", id.value, filename,
 		            processes.nb_regions (), duration_string (end - start));
@@ -91,8 +92,8 @@ int main (int argc, char * argv[]) {
 	});
 #endif
 
-	parser.option ({"f"}, "filename", "Process data file",
-	               [&](string_view filename) { read_process_data (point_processes, filename); });
+	parser.option ({"f"}, "filename", "Add a process with all regions from the file",
+	               [&](string_view filename) { read_all_process_data (point_processes, filename); });
 
 	try {
 		// Parse command line arguments. All actions declared to the parser will be called here.

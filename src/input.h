@@ -110,7 +110,8 @@ inline bool LineByLineReader::read_next_line () {
 
 // Add process to table with checking of region number
 template <typename DataType>
-ProcessId ProcessesData<DataType>::add_process (string_view name, std::vector<ProcessRegionData<DataType>> && regions) {
+inline ProcessId ProcessesData<DataType>::add_process (string_view name,
+                                                       std::vector<ProcessRegionData<DataType>> && regions) {
 	if (nb_processes () == 0) {
 		// First process defines the number of regions
 		process_regions_ = Vector2d<ProcessRegionData<DataType>> (0, regions.size ());
@@ -125,17 +126,22 @@ ProcessId ProcessesData<DataType>::add_process (string_view name, std::vector<Pr
 	return new_process_id;
 }
 
+template <typename DataType> inline DataType bed_interval_to_data (long start, long end);
+template <> inline Point bed_interval_to_data<Point> (long start, long end) {
+	return (end - start) / 2;
+}
+
 /******************************************************************************
  * BED format parsing.
- * TODO factorize by DataType, with a DataType from_bed_interval (start, end) function.
  * TODO support explicit listing of which region goes into what vector index.
  */
 
-inline std::vector<ProcessRegionData<Point>> read_points_from_bed_file (not_null<FILE *> file) {
-	std::vector<ProcessRegionData<Point>> regions;
+template <typename DataType>
+inline std::vector<ProcessRegionData<DataType>> read_all_from_bed_file (not_null<FILE *> file) {
+	std::vector<ProcessRegionData<DataType>> regions;
 	LineByLineReader reader (file);
 
-	std::vector<Point> current_region_points;
+	std::vector<DataType> current_region_points;
 	std::string current_region_name;
 
 	try {
@@ -161,13 +167,14 @@ inline std::vector<ProcessRegionData<Point>> read_points_from_bed_file (not_null
 					}
 					if (!empty (current_region_name)) {
 						// End current region and store its data
-						regions.emplace_back (ProcessRegionData<Point>{
-						    current_region_name, SortedVec<Point>::from_unsorted (std::move (current_region_points))});
+						regions.emplace_back (ProcessRegionData<DataType>{
+						    current_region_name, SortedVec<DataType>::from_unsorted (std::move (current_region_points))});
 					}
 					current_region_points.clear ();
 					current_region_name = to_string (region_name);
 				}
-				current_region_points.emplace_back ((interval_end_position - interval_start_position) / 2);
+				current_region_points.emplace_back (
+				    bed_interval_to_data<DataType> (interval_start_position, interval_end_position));
 			}
 		}
 		return regions;
