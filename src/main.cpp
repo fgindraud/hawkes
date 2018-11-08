@@ -50,9 +50,32 @@ static std::chrono::high_resolution_clock::time_point instant () {
 }
 
 /******************************************************************************
+ * Reading process data.
+ */
+inline void read_process_data (ProcessesData<Point> & processes, string_view filename) {
+	try {
+		const auto start = instant ();
+		auto file = open_file (filename, "r");
+		const auto id = processes.add_process (filename, read_points_from_bed_file (file.get ()));
+		const auto end = instant ();
+
+		fmt::print (stderr, "Process {} loaded from {}: time = {} ; regions = ", id.value, filename,
+		            duration_string (end - start));
+		for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
+			fmt::print (stderr, "{},", processes.region_name (id, r));
+		}
+		fmt::print (stderr, "\n");
+	} catch (const std::runtime_error & e) {
+		throw std::runtime_error (fmt::format ("Reading process data from {}: {}", filename, e.what ()));
+	}
+}
+
+/******************************************************************************
  * Program entry point.
  */
 int main (int argc, char * argv[]) {
+	ProcessesData<Point> point_processes;
+
 	// Command line parsing setup
 	const auto command_line = CommandLineView (argc, argv);
 	auto parser = CommandLineParser ();
@@ -72,6 +95,9 @@ int main (int argc, char * argv[]) {
 		omp_set_num_threads (int(nb_threads));
 	});
 #endif
+
+	parser.option ({"f"}, "filename", "Process data file",
+	               [&](string_view filename) { read_process_data (point_processes, filename); });
 
 	try {
 		// Parse command line arguments. All actions declared to the parser will be called here.

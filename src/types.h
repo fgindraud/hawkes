@@ -37,21 +37,31 @@ template <typename DataType> struct ProcessRegionData {
 
 // Store the data for multiple processes and regions.
 // All processes must have the same number of regions.
-template <typename DataType> struct ProcessesData {
-	Vector2d<ProcessRegionData<DataType>> inner; // Rows = processes, Cols = regions
+template <typename DataType> class ProcessesData {
+private:
+	std::vector<std::string> process_names_;
+	Vector2d<ProcessRegionData<DataType>> process_regions_; // Rows = processes, Cols = regions
 
-	// TODO add process and region names ? move to a class for invariants
+public:
+	ProcessesData () = default;
 
-	int nb_processes () const { return int(inner.nb_rows ()); }
-	int nb_regions () const { return int(inner.nb_cols ()); }
+	int nb_processes () const { return int(process_regions_.nb_rows ()); }
+	int nb_regions () const { return int(process_regions_.nb_cols ()); }
 
 	const ProcessRegionData<DataType> & process_region (ProcessId m, RegionId r) const {
 		assert (0 <= m.value && m.value < nb_processes ());
 		assert (0 <= r.value && r.value < nb_regions ());
-		return inner (std::size_t (m.value), std::size_t (r.value));
+		return process_regions_ (std::size_t (m.value), std::size_t (r.value));
 	}
 	const SortedVec<DataType> & data (ProcessId m, RegionId r) const { return process_region (m, r).data; }
 	const std::string & region_name (ProcessId m, RegionId r) const { return process_region (m, r).name; }
+	const std::string & process_name (ProcessId m) const {
+		assert (0 <= m.value && m.value < nb_processes ());
+		return process_names_[std::size_t (m.value)];
+	}
+
+	// Returns new process id. Defined in input.h
+	ProcessId add_process (string_view name, std::vector<ProcessRegionData<DataType>> && regions);
 };
 
 /******************************************************************************

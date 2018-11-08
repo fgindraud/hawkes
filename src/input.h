@@ -105,6 +105,27 @@ inline bool LineByLineReader::read_next_line () {
 }
 
 /******************************************************************************
+ * Parsing utils.
+ */
+
+// Add process to table with checking of region number
+template <typename DataType>
+ProcessId ProcessesData<DataType>::add_process (string_view name, std::vector<ProcessRegionData<DataType>> && regions) {
+	if (nb_processes () == 0) {
+		// First process defines the number of regions
+		process_regions_ = Vector2d<ProcessRegionData<DataType>> (0, regions.size ());
+	}
+	if (int(regions.size ()) != nb_regions ()) {
+		throw std::runtime_error (
+		    fmt::format ("Adding process data: expected {} regions, got {}", nb_regions (), regions.size ()));
+	}
+	const auto new_process_id = ProcessId{nb_processes ()};
+	process_regions_.append_row (std::move (regions));
+	process_names_.emplace_back (to_string (name));
+	return new_process_id;
+}
+
+/******************************************************************************
  * BED format parsing.
  * TODO factorize by DataType, with a DataType from_bed_interval (start, end) function.
  * TODO support explicit listing of which region goes into what vector index.
@@ -130,7 +151,7 @@ inline std::vector<ProcessRegionData<Point>> read_points_from_bed_file (not_null
 				const string_view region_name = fields[0];
 				const auto interval_start_position = parse_int (fields[1], "interval_position_start");
 				const auto interval_end_position = parse_int (fields[2], "interval_position_end");
-				if (!(interval_start_position < interval_end_position)) {
+				if (!(interval_start_position <= interval_end_position)) {
 					throw std::runtime_error ("interval bounds are invalid");
 				}
 				// Check is start of a new region
