@@ -126,15 +126,15 @@ inline ProcessId ProcessesData<DataType>::add_process (string_view name,
 	return new_process_id;
 }
 
+/******************************************************************************
+ * BED format parsing.
+ */
+
+// Convert an interval to the data type used to represent marks.
 template <typename DataType> inline DataType bed_interval_to_data (long start, long end);
 template <> inline Point bed_interval_to_data<Point> (long start, long end) {
 	return (end - start) / 2;
 }
-
-/******************************************************************************
- * BED format parsing.
- * TODO support explicit listing of which region goes into what vector index.
- */
 
 template <typename DataType>
 inline std::vector<ProcessRegionData<DataType>> read_all_from_bed_file (not_null<FILE *> file) {
@@ -183,4 +183,22 @@ inline std::vector<ProcessRegionData<DataType>> read_all_from_bed_file (not_null
 		throw std::runtime_error (
 		    fmt::format ("Parsing BED file at line {}: {}", reader.current_line_number () + 1, e.what ()));
 	}
+}
+
+template <typename DataType>
+inline std::vector<ProcessRegionData<DataType>> read_selected_from_bed_file (not_null<FILE *> file,
+                                                                             span<const string_view> region_names) {
+	std::vector<ProcessRegionData<DataType>> all_regions = read_all_from_bed_file<DataType> (file);
+	std::vector<ProcessRegionData<DataType>> selected_regions;
+	selected_regions.reserve (region_names.size ());
+	for (const string_view name : region_names) {
+		auto it = std::find_if (all_regions.begin (), all_regions.end (),
+		                        [name](const auto & element) { return element.name == name; });
+		if (it != all_regions.end ()) {
+			selected_regions.emplace_back (ProcessRegionData<DataType>{to_string (name), it->data});
+		} else {
+			throw std::runtime_error (fmt::format ("Selected region was not found: {}", name));
+		}
+	}
+	return selected_regions;
 }

@@ -53,11 +53,14 @@ static std::chrono::high_resolution_clock::time_point instant () {
  * Reading process data.
  */
 template <typename DataType>
-static void read_all_process_data (ProcessesData<DataType> & processes, string_view filename) {
+static void read_process_data_from (ProcessesData<DataType> & processes, string_view filename,
+                                    std::optional<span<const string_view>> selected_regions) {
 	try {
 		const auto start = instant ();
 		auto file = open_file (filename, "r");
-		const auto id = processes.add_process (filename, read_all_from_bed_file<DataType> (file.get ()));
+		auto data = selected_regions ? read_selected_from_bed_file<DataType> (file.get (), *selected_regions)
+		                             : read_all_from_bed_file<DataType> (file.get ());
+		const auto id = processes.add_process (filename, std::move (data));
 		const auto end = instant ();
 		fmt::print (stderr, "Process {} loaded from {}: regions = {} ; time = {}\n", id.value, filename,
 		            processes.nb_regions (), duration_string (end - start));
@@ -93,7 +96,12 @@ int main (int argc, char * argv[]) {
 #endif
 
 	parser.option ({"f"}, "filename", "Add a process with all regions from the file",
-	               [&](string_view filename) { read_all_process_data (point_processes, filename); });
+	               [&](string_view filename) { read_process_data_from (point_processes, filename, std::nullopt); });
+	parser.option2 ({"s"}, "filename", "r1[,r2,...]", "Add selected regions from process file",
+	                [&](string_view filename, string_view regions) {
+		                auto region_names = split (',', regions);
+		                read_process_data_from (point_processes, filename, make_span (region_names));
+	                });
 
 	try {
 		// Parse command line arguments. All actions declared to the parser will be called here.
