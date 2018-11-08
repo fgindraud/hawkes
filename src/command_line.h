@@ -54,6 +54,8 @@ public:
 	void flag (std::initializer_list<string_view> names, string_view description, std::function<void()> action);
 	void option (std::initializer_list<string_view> names, string_view value_name, string_view description,
 	             std::function<void(string_view value)> action);
+	void option2 (std::initializer_list<string_view> names, string_view value1_name, string_view value2_name,
+	              string_view description, std::function<void(string_view value1, string_view value2)> action);
 
 	/* Declare positional arguments.
 	 * Each call of add_positional_argument declares a single argument.
@@ -96,16 +98,19 @@ private:
 	 */
 	struct Option {
 		enum class Type {
-			Flag, // Option is an optional flag without value
-			Value // Option is an optional flag with a value
+			Flag,  // Option is an optional flag without value
+			Value, // Option is an optional flag with a value
+			Value2 // Option is an optional flag with two values
 		};
 		Type type;
 
-		std::function<void(string_view value)> value_action;
 		std::function<void()> flag_action;
+		std::function<void(string_view value)> value_action;
+		std::function<void(string_view value1, string_view value2)> value2_action;
 
 		// Usage text (may be null)
 		std::string value_name;
+		std::string value2_name;
 		std::string description;
 	};
 	struct OptionNameLess : std::less<void> {
@@ -178,6 +183,17 @@ inline void CommandLineParser::option (std::initializer_list<string_view> names,
 	opt.description = to_string (description);
 }
 
+inline void CommandLineParser::option2 (std::initializer_list<string_view> names, string_view value1_name,
+                                        string_view value2_name, string_view description,
+                                        std::function<void(string_view value1, string_view value2)> action) {
+	auto & opt = new_named_uninitialized_option (names);
+	opt.type = Option::Type::Value2;
+	opt.value2_action = std::move (action);
+	opt.value_name = to_string (value1_name);
+	opt.value2_name = to_string (value2_name);
+	opt.description = to_string (description);
+}
+
 inline void CommandLineParser::positional (string_view value_name, string_view description,
                                            std::function<void(string_view value)> action) {
 	positional_arguments_.emplace_back ();
@@ -209,14 +225,13 @@ inline void CommandLineParser::usage (not_null<std::FILE *> output, string_view 
 			text.append (opt_name.size () == 1 ? "-" : "--");
 			text.append (opt_name);
 		}
+		// Append value name for value options
 		for (std::size_t i = 0; i < options_.size (); ++i) {
 			const auto & opt = options_[i];
 			if (opt.type == Option::Type::Value) {
-				// Append value name for value options
-				auto & text = option_text[i];
-				text.append (" <");
-				text.append (opt.value_name);
-				text.append (">");
+				option_text[i] += fmt::format (" <{}>", opt.value_name);
+			} else if (opt.type == Option::Type::Value2) {
+				option_text[i] += fmt::format (" <{}> <{}>", opt.value_name, opt.value2_name);
 			}
 		}
 
@@ -316,12 +331,24 @@ inline void CommandLineParser::parse (const CommandLineView & command_line) {
 						// Value is the next argument
 						++current;
 						if (current == nb) {
-							throw Exception (fmt::format ("Option '{}' requires a value", opt_name_with_dashes));
+							throw Exception (fmt::format ("Option '{}' requires a value: {}", opt_name_with_dashes, opt.value_name));
 						}
 						value = command_line.argument (current);
 					}
-					assert (opt.value_action);
-					opt.value_action (value);
+					if (opt.type == Option::Type::Value) {
+						assert (opt.value_action);
+						opt.value_action (value);
+					} else if (opt.type == Option::Type::Value2) {
+						// Extract second value
+						++current;
+						if (current == nb) {
+							throw Exception (
+							    fmt::format ("Option '{}' requires a second value: {}", opt_name_with_dashes, opt.value2_name));
+						}
+						const string_view value2 = command_line.argument (current);
+						assert (opt.value2_action);
+						opt.value2_action (value, value2);
+					}
 				}
 			}
 		} else {

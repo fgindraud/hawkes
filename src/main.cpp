@@ -58,13 +58,8 @@ inline void read_process_data (ProcessesData<Point> & processes, string_view fil
 		auto file = open_file (filename, "r");
 		const auto id = processes.add_process (filename, read_points_from_bed_file (file.get ()));
 		const auto end = instant ();
-
-		fmt::print (stderr, "Process {} loaded from {}: time = {} ; regions = ", id.value, filename,
-		            duration_string (end - start));
-		for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
-			fmt::print (stderr, "{},", processes.region_name (id, r));
-		}
-		fmt::print (stderr, "\n");
+		fmt::print (stderr, "Process {} loaded from {}: regions = {} ; time = {}\n", id.value, filename,
+		            processes.nb_regions (), duration_string (end - start));
 	} catch (const std::runtime_error & e) {
 		throw std::runtime_error (fmt::format ("Reading process data from {}: {}", filename, e.what ()));
 	}

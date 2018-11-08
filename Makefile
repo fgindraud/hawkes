@@ -26,9 +26,8 @@ hawkes: src/main.cpp fmtlib.o $(wildcard src/*.h) Makefile
 hawkes_debug: src/main.cpp fmtlib.o $(wildcard src/*.h) Makefile
 	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
 
-# FIXME restore tests
-unit_tests: src/unit_tests.cpp $(wildcard src/*.h) Makefile
-	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $<
+unit_tests: src/unit_tests.cpp fmtlib.o $(wildcard src/*.h) Makefile
+	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
 
 test: unit_tests
 	./unit_tests
