@@ -24,36 +24,20 @@ inline std::int64_t tmax_for_region (const ProcessesData<Point> & processes, Reg
 	}
 }
 
-inline std::int64_t count_point_difference_in_interval (const SortedVec<Point> & m_process,
-                                                        const SortedVec<Point> & l_process,
-                                                        HistogramBase::Interval interval) {
-	// Count pair of points within the k-th interval
-	const auto n_m = m_process.size ();
-	std::int64_t count = 0;
-	int last_starting_i = 0;
-	for (const Point x_l : l_process) {
-		// Count x_m in ]x_l + interval.from, x_l + interval.to]
-
-		// Find first i where Nm[i] is in the interval
-		while (last_starting_i < n_m && !(x_l + interval.from < m_process[last_starting_i])) {
-			last_starting_i += 1;
-		}
-		// i is out of bounds or Nm[i] > x_l + interval.from
-		int i = last_starting_i;
-		// Count elements of Nm still in interval
-		while (i < n_m && m_process[i] <= x_l + interval.to) {
-			count += 1;
-			i += 1;
-		}
-	}
-	return count;
-}
-
-// Return a vector of k counts.
+/* Compute b_{m,l,k} for all k, for the histogram base.
+ * Return a vector with the k values.
+ * Complexity is O( |N_l| + (K+1) * |N_m| ).
+ *
+ * In the histogram case, b_{m,l,k} = sum_{(x_l,x_m) in (N_l,N_m) / k*delta < x_m - x_l <= (k+1)*delta} 1.
+ * The strategy is to count points of N_l in the interval ] k*delta + x_l, (k+1)*delta + x_l ] for each x_l.
+ * This specific functions does it for all k at once.
+ * This is more efficient because the upper bound of the k-th interval is the lower bound of the (k+1)-th.
+ * Thus we compute the bounds only once.
+ */
 inline std::vector<std::int64_t> compute_b_ml_histogram_for_all_k (const SortedVec<Point> & m_process,
                                                                    const SortedVec<Point> & l_process,
                                                                    const HistogramBase & base) {
-	// Accumulator for sum_{x_l} |{x_m, (x_m - x_l) in ] k*delta, (k+1)*delta ]
+	// Accumulator for sum_{x_l} count ({x_m, (x_m - x_l) in ] k*delta, (k+1)*delta ]})
 	std::vector<std::int64_t> counts (base.base_size, 0);
 	// Invariant: for x_l last visited point of process l:
 	// sib[k] = index of first x_m with x_m - x_l > k*delta
@@ -80,8 +64,18 @@ inline std::vector<std::int64_t> compute_b_ml_histogram_for_all_k (const SortedV
 	return counts;
 }
 
-inline std::int64_t compute_cross_correlation (const SortedVec<Point> & l_process, const SortedVec<Point> & l2_process,
-                                               HistogramBase::Interval interval, HistogramBase::Interval interval2) {
+/* Compute G_{l,l2,k,k2} in the histogram case.
+ * Complexity is O( |N_l| + |N_m| ).
+ *
+ * G_{l,l2,k,k2} = integral_x sum_{x_l,x_l2} phi_k (x - x_l) phi_k2 (x - x_l2) dx.
+ * G_{l,l2,k,k2} = integral_x N_l(]x - (k+1)*delta, x - k*delta]) N_l2(]x - (k2+1)*delta, x - k2*delta]) dx.
+ * With N_l(I) = sum_{x_l in N_l / x_l in I} 1 = number of points of N_l in interval I.
+ * This product of counts is constant by chunks.
+ * The strategy is to compute the integral by splitting R in the constant parts of N_l(..) * N_l2(..).
+ * Thus we loop over all points of changes of this product.
+ */
+inline std::int64_t compute_g_ll2kk2_histogram (const SortedVec<Point> & l_process, const SortedVec<Point> & l2_process,
+                                                HistogramBase::Interval interval, HistogramBase::Interval interval2) {
 	constexpr Point inf = std::numeric_limits<Point>::max ();
 
 	struct SlidingInterval {
@@ -115,7 +109,7 @@ inline std::int64_t compute_cross_correlation (const SortedVec<Point> & l_proces
 				next_x_entering = get_shifted_point (next_i_entering, shifts.from);
 			}
 			if (new_x == next_x_exiting) {
-				current_points_inside += 1;
+				current_points_inside -= 1;
 				next_i_exiting += 1;
 				next_x_exiting = get_shifted_point (next_i_exiting, shifts.to);
 			}
@@ -159,28 +153,6 @@ inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId regio
 
 		// b_lk
 		for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
-			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
-				const auto count =
-				    count_point_difference_in_interval (m_process, processes.data (l, region), base.interval (k));
-				b.set_lk (m, l, k, double(count));
-			}
-		}
-	}
-	return b;
-}
-inline MatrixB compute_b2 (const ProcessesData<Point> & processes, RegionId region, const HistogramBase & base) {
-	const auto nb_processes = processes.nb_processes ();
-	const auto base_size = base.base_size;
-	MatrixB b (nb_processes, base_size);
-
-	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
-		const auto & m_process = processes.data (m, region);
-
-		// b0
-		b.set_0 (m, double(m_process.size ()));
-
-		// b_lk
-		for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
 			auto counts = compute_b_ml_histogram_for_all_k (m_process, processes.data (l, region), base);
 			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
 				b.set_lk (m, l, k, double(counts[k.value]));
@@ -209,8 +181,8 @@ inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId regio
 		for (ProcessId l2{l.value}; l2.value < nb_processes; ++l2.value) {
 			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
 				for (FunctionBaseId k2{k.value}; k2.value < base_size; ++k2.value) {
-					const auto v = compute_cross_correlation (processes.data (l, region), processes.data (l2, region),
-					                                          base.interval (k), base.interval (k2));
+					const auto v = compute_g_ll2kk2_histogram (processes.data (l, region), processes.data (l2, region),
+					                                           base.interval (k), base.interval (k2));
 					g.set_G (l, l2, k, k2, double(v));
 				}
 			}

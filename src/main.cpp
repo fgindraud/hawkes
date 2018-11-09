@@ -73,37 +73,26 @@ static void read_process_data_from (ProcessesData<DataType> & processes, string_
  * Tests
  */
 template <typename DataType> static void do_test (const ProcessesData<DataType> & processes) {
-	HistogramBase base{10, 10000};
-	std::vector<MatrixB> matrix_b_1;
-	std::vector<MatrixB> matrix_b_2;
-	std::vector<MatrixG> matrix_g;
-	{
-		const auto start = instant ();
-		for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
-			matrix_b_1.emplace_back (compute_b (processes, r, base));
+	for (int delta = 10; delta < 1000000; delta *= 10) {
+		fmt::print ("### Delta = {}\n", delta);
+		HistogramBase base{10, delta};
+		std::vector<MatrixB> matrix_b;
+		std::vector<MatrixG> matrix_g;
+		{
+			const auto start = instant ();
+			for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
+				matrix_b.emplace_back (compute_b (processes, r, base));
+			}
+			const auto end = instant ();
+			fmt::print (stderr, "matrix_b: time = {}\n", duration_string (end - start));
 		}
-		const auto end = instant ();
-		fmt::print (stderr, "matrix_b_1: time = {}\n", duration_string (end - start));
-	}
-	{
-		const auto start = instant ();
-		for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
-			matrix_b_2.emplace_back (compute_b2 (processes, r, base));
-		}
-		const auto end = instant ();
-		fmt::print (stderr, "matrix_b_2: time = {}\n", duration_string (end - start));
-	}
-	{
-		const auto start = instant ();
-		for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
-			matrix_g.emplace_back (compute_g (processes, r, base));
-		}
-		const auto end = instant ();
-		fmt::print (stderr, "matrix_g: time = {}\n", duration_string (end - start));
-	}
-	for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
-		if (matrix_b_1[r.value].inner != matrix_b_2[r.value].inner) {
-			fmt::print (stderr, "matrix_b_1[{0}] != matrix_b_2[{0}] !\n", r.value);
+		{
+			const auto start = instant ();
+			for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
+				matrix_g.emplace_back (compute_g (processes, r, base));
+			}
+			const auto end = instant ();
+			fmt::print (stderr, "matrix_g: time = {}\n", duration_string (end - start));
 		}
 	}
 }
