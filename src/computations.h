@@ -28,7 +28,6 @@ inline std::int64_t count_point_difference_in_interval (const SortedVec<Point> &
                                                         const SortedVec<Point> & l_process,
                                                         HistogramBase::Interval interval) {
 	// Count pair of points within the k-th interval
-	// TODO impl by doing all k at once, from rust experiment
 	const auto n_m = m_process.size ();
 	std::int64_t count = 0;
 	int last_starting_i = 0;
@@ -48,6 +47,37 @@ inline std::int64_t count_point_difference_in_interval (const SortedVec<Point> &
 		}
 	}
 	return count;
+}
+
+// Return a vector of k counts.
+inline std::vector<std::int64_t> compute_b_ml_histogram_for_all_k (const SortedVec<Point> & m_process,
+                                                                   const SortedVec<Point> & l_process,
+                                                                   const HistogramBase & base) {
+	// Accumulator for sum_{x_l} |{x_m, (x_m - x_l) in ] k*delta, (k+1)*delta ]
+	std::vector<std::int64_t> counts (base.base_size, 0);
+	// Invariant: for x_l last visited point of process l:
+	// sib[k] = index of first x_m with x_m - x_l > k*delta
+	std::vector<int> sliding_interval_bounds (base.base_size + 1, 0);
+
+	const auto n_m = m_process.size ();
+	for (const Point x_l : l_process) {
+		// Compute indexes of all k interval boundaries, shifted from the current x_l.
+		// This can be done by searching m points starting at the previous positions (x_l increased).
+		for (int k = 0; k < base.base_size + 1; ++k) {
+			const int shift = k * base.delta;
+			int i = sliding_interval_bounds[k];
+			while (i < n_m && !(m_process[i] - x_l > shift)) {
+				i += 1;
+			}
+			sliding_interval_bounds[k] = i;
+		}
+		// Accumulate the number of points in each shifted interval for the current x_l.
+		// Number of points = difference between indexes of interval boundaries.
+		for (int k = 0; k < base.base_size; ++k) {
+			counts[k] += sliding_interval_bounds[k + 1] - sliding_interval_bounds[k];
+		}
+	}
+	return counts;
 }
 
 inline std::int64_t compute_cross_correlation (const SortedVec<Point> & l_process, const SortedVec<Point> & l2_process,
@@ -133,6 +163,27 @@ inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId regio
 				const auto count =
 				    count_point_difference_in_interval (m_process, processes.data (l, region), base.interval (k));
 				b.set_lk (m, l, k, double(count));
+			}
+		}
+	}
+	return b;
+}
+inline MatrixB compute_b2 (const ProcessesData<Point> & processes, RegionId region, const HistogramBase & base) {
+	const auto nb_processes = processes.nb_processes ();
+	const auto base_size = base.base_size;
+	MatrixB b (nb_processes, base_size);
+
+	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
+		const auto & m_process = processes.data (m, region);
+
+		// b0
+		b.set_0 (m, double(m_process.size ()));
+
+		// b_lk
+		for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
+			auto counts = compute_b_ml_histogram_for_all_k (m_process, processes.data (l, region), base);
+			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
+				b.set_lk (m, l, k, double(counts[k.value]));
 			}
 		}
 	}

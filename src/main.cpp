@@ -70,6 +70,45 @@ static void read_process_data_from (ProcessesData<DataType> & processes, string_
 }
 
 /******************************************************************************
+ * Tests
+ */
+template <typename DataType> static void do_test (const ProcessesData<DataType> & processes) {
+	HistogramBase base{10, 10000};
+	std::vector<MatrixB> matrix_b_1;
+	std::vector<MatrixB> matrix_b_2;
+	std::vector<MatrixG> matrix_g;
+	{
+		const auto start = instant ();
+		for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
+			matrix_b_1.emplace_back (compute_b (processes, r, base));
+		}
+		const auto end = instant ();
+		fmt::print (stderr, "matrix_b_1: time = {}\n", duration_string (end - start));
+	}
+	{
+		const auto start = instant ();
+		for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
+			matrix_b_2.emplace_back (compute_b2 (processes, r, base));
+		}
+		const auto end = instant ();
+		fmt::print (stderr, "matrix_b_2: time = {}\n", duration_string (end - start));
+	}
+	{
+		const auto start = instant ();
+		for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
+			matrix_g.emplace_back (compute_g (processes, r, base));
+		}
+		const auto end = instant ();
+		fmt::print (stderr, "matrix_g: time = {}\n", duration_string (end - start));
+	}
+	for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
+		if (matrix_b_1[r.value].inner != matrix_b_2[r.value].inner) {
+			fmt::print (stderr, "matrix_b_1[{0}] != matrix_b_2[{0}] !\n", r.value);
+		}
+	}
+}
+
+/******************************************************************************
  * Program entry point.
  */
 int main (int argc, char * argv[]) {
@@ -106,6 +145,8 @@ int main (int argc, char * argv[]) {
 	try {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
+
+		do_test (point_processes);
 
 	} catch (const CommandLineParser::Exception & exc) {
 		fmt::print (stderr, "Error: {}. Use --help for a list of options.\n", exc.what ());
