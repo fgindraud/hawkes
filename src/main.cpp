@@ -72,10 +72,11 @@ static void read_process_data_from (ProcessesData<DataType> & processes, string_
 /******************************************************************************
  * Tests
  */
+#include <iostream>
 template <typename DataType> static void do_test (const ProcessesData<DataType> & processes) {
 	for (int delta = 10; delta < 1000000; delta *= 10) {
 		fmt::print ("### Delta = {}\n", delta);
-		HistogramBase base{10, delta};
+		HistogramBase base{4, delta};
 		std::vector<MatrixB> matrix_b;
 		std::vector<MatrixG> matrix_g;
 		{
@@ -94,6 +95,7 @@ template <typename DataType> static void do_test (const ProcessesData<DataType> 
 			const auto end = instant ();
 			fmt::print (stderr, "matrix_g: time = {}\n", duration_string (end - start));
 		}
+		std::cerr << matrix_g[0].inner << "\n";
 	}
 }
 

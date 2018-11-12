@@ -24,19 +24,19 @@ inline std::int64_t tmax_for_region (const ProcessesData<Point> & processes, Reg
 	}
 }
 
-/* Compute b_{m,l,k} for all k, for the histogram base.
+/* Compute b_{m,l,k} * sqrt(delta) for all k, for the histogram base.
  * Return a vector with the k values.
  * Complexity is O( |N_l| + (K+1) * |N_m| ).
  *
- * In the histogram case, b_{m,l,k} = sum_{(x_l,x_m) in (N_l,N_m) / k*delta < x_m - x_l <= (k+1)*delta} 1.
+ * In the histogram case, b_{m,l,k} = sum_{(x_l,x_m) in (N_l,N_m) / k*delta < x_m - x_l <= (k+1)*delta} 1/sqrt(delta).
  * The strategy is to count points of N_l in the interval ] k*delta + x_l, (k+1)*delta + x_l ] for each x_l.
  * This specific functions does it for all k at once.
  * This is more efficient because the upper bound of the k-th interval is the lower bound of the (k+1)-th.
  * Thus we compute the bounds only once.
  */
-inline std::vector<std::int64_t> compute_b_ml_histogram_for_all_k (const SortedVec<Point> & m_process,
-                                                                   const SortedVec<Point> & l_process,
-                                                                   const HistogramBase & base) {
+inline std::vector<std::int64_t> compute_b_ml_histogram_counts_for_all_k (const SortedVec<Point> & m_process,
+                                                                          const SortedVec<Point> & l_process,
+                                                                          const HistogramBase & base) {
 	// Accumulator for sum_{x_l} count ({x_m, (x_m - x_l) in ] k*delta, (k+1)*delta ]})
 	std::vector<std::int64_t> counts (base.base_size, 0);
 	// Invariant: for x_l last visited point of process l:
@@ -64,25 +64,28 @@ inline std::vector<std::int64_t> compute_b_ml_histogram_for_all_k (const SortedV
 	return counts;
 }
 
-/* Compute G_{l,l2,k,k2} in the histogram case.
+/* Compute G_{l,l2,k,k2} * delta in the histogram case.
  * Complexity is O( |N_l| + |N_m| ).
  *
  * G_{l,l2,k,k2} = integral_x sum_{x_l,x_l2} phi_k (x - x_l) phi_k2 (x - x_l2) dx.
- * G_{l,l2,k,k2} = integral_x N_l(]x - (k+1)*delta, x - k*delta]) N_l2(]x - (k2+1)*delta, x - k2*delta]) dx.
+ * G_{l,l2,k,k2}*delta = integral_x N_l(]x - (k+1)*delta, x - k*delta]) N_l2(]x - (k2+1)*delta, x - k2*delta]) dx.
  * With N_l(I) = sum_{x_l in N_l / x_l in I} 1 = number of points of N_l in interval I.
  * This product of counts is constant by chunks.
  * The strategy is to compute the integral by splitting R in the constant parts of N_l(..) * N_l2(..).
  * Thus we loop over all points of changes of this product.
  */
-inline std::int64_t compute_g_ll2kk2_histogram (const SortedVec<Point> & l_process, const SortedVec<Point> & l2_process,
-                                                HistogramBase::Interval interval, HistogramBase::Interval interval2) {
+inline std::int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_process,
+                                                         const SortedVec<Point> & l2_process,
+                                                         HistogramBase::Interval interval,
+                                                         HistogramBase::Interval interval2) {
+	// TODO replace Point by int64_t to avoid overflows ?
 	constexpr Point inf = std::numeric_limits<Point>::max ();
 
 	struct SlidingInterval {
 		const SortedVec<Point> & points; // Points to slide on
 		HistogramBase::Interval shifts;  // Shifting of interval bounds
 
-		int current_points_inside = 0;
+		std::int64_t current_points_inside = 0;
 		// Indexes of next points to enter/exit interval
 		int next_i_entering = 0;
 		int next_i_exiting = 0;
@@ -140,9 +143,13 @@ inline std::int64_t compute_g_ll2kk2_histogram (const SortedVec<Point> & l_proce
 	return accumulated_area;
 }
 
+// TODO: B and G are average (or sums) of region-specific B and G, so compute the global one directly
+
+// Complexity: O( M^2 * K * max(|N_m|) ).
 inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId region, const HistogramBase & base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
+	const auto inv_sqrt_delta = 1 / std::sqrt (double(base.delta));
 	MatrixB b (nb_processes, base_size);
 
 	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
@@ -153,37 +160,51 @@ inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId regio
 
 		// b_lk
 		for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
-			auto counts = compute_b_ml_histogram_for_all_k (m_process, processes.data (l, region), base);
+			auto counts = compute_b_ml_histogram_counts_for_all_k (m_process, processes.data (l, region), base);
 			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
-				b.set_lk (m, l, k, double(counts[k.value]));
+				b.set_lk (m, l, k, double(counts[k.value]) * inv_sqrt_delta);
 			}
 		}
 	}
 	return b;
 }
 
+// Complexity: O( M^2 * K^2 * max(|N_m|) ).
 inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId region, const HistogramBase & base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
+	const auto sqrt_delta = std::sqrt (double(base.delta));
+	const auto inv_delta = 1 / double(base.delta);
 	MatrixG g (nb_processes, base_size);
 
 	g.set_tmax (tmax_for_region (processes, region));
 
 	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
-		const auto g_lk = processes.data (l, region).size () * std::sqrt (base.delta);
+		const auto g_lk = processes.data (l, region).size () * sqrt_delta;
 		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
 			g.set_g (l, k, g_lk);
 		}
 	}
 
-	// G symmetric, only compute for (l2,k2) >= (l,k)
+	auto compute_g = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
+		const auto v = compute_g_ll2kk2_histogram_integral (processes.data (l, region), processes.data (l2, region),
+		                                                    base.interval (k), base.interval (k2));
+		g.set_G (l, l2, k, k2, double(v) * inv_delta);
+	};
+	// G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
+	// TODO compute only for 2K+1 (borders) !
 	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
+		// Case l2 == l:
+		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
+			for (FunctionBaseId k2{k.value}; k2.value < base_size; ++k2.value) {
+				compute_g (l, l, k, k2);
+			}
+		}
+		// Case l2 > l:
 		for (ProcessId l2{l.value}; l2.value < nb_processes; ++l2.value) {
 			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
-				for (FunctionBaseId k2{k.value}; k2.value < base_size; ++k2.value) {
-					const auto v = compute_g_ll2kk2_histogram (processes.data (l, region), processes.data (l2, region),
-					                                           base.interval (k), base.interval (k2));
-					g.set_G (l, l2, k, k2, double(v));
+				for (FunctionBaseId k2{0}; k2.value < base_size; ++k2.value) {
+					compute_g (l, l2, k, k2);
 				}
 			}
 		}
