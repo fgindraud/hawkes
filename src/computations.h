@@ -191,8 +191,8 @@ inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId regio
 		                                                    base.interval (k), base.interval (k2));
 		g.set_G (l, l2, k, k2, double(v) * inv_delta);
 	};
-	// G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
-	// TODO compute only for 2K+1 (borders) !
+	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
+	 */
 	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
 		// Case l2 == l:
 		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {

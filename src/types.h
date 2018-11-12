@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstdint>
 #include <eigen3/Eigen/Core>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -94,10 +95,11 @@ struct MatrixB {
 	int base_size;    // K
 	Eigen::MatrixXd inner;
 
-	MatrixB (int nb_processes, int base_size)
-	    : nb_processes (nb_processes), base_size (base_size), inner (1 + base_size * nb_processes, nb_processes) {
+	MatrixB (int nb_processes, int base_size) : nb_processes (nb_processes), base_size (base_size) {
 		assert (nb_processes > 0);
 		assert (base_size > 0);
+		const auto size = 1 + base_size * nb_processes;
+		inner = Eigen::MatrixXd::Constant (size, nb_processes, std::numeric_limits<double>::quiet_NaN ());
 	}
 
 	// b_m,0
@@ -141,6 +143,8 @@ struct MatrixG {
 	      inner (1 + base_size * nb_processes, 1 + base_size * nb_processes) {
 		assert (nb_processes > 0);
 		assert (base_size > 0);
+		const auto size = 1 + base_size * nb_processes;
+		inner = Eigen::MatrixXd::Constant (size, size, std::numeric_limits<double>::quiet_NaN ());
 	}
 
 	int lk_index (ProcessId l, FunctionBaseId k) const {

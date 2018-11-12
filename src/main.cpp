@@ -76,7 +76,7 @@ static void read_process_data_from (ProcessesData<DataType> & processes, string_
 template <typename DataType> static void do_test (const ProcessesData<DataType> & processes) {
 	for (int delta = 10; delta < 1000000; delta *= 10) {
 		fmt::print ("### Delta = {}\n", delta);
-		HistogramBase base{4, delta};
+		HistogramBase base{7, delta};
 		std::vector<MatrixB> matrix_b;
 		std::vector<MatrixG> matrix_g;
 		{
