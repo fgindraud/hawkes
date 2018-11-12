@@ -169,7 +169,7 @@ inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId regio
 	return b;
 }
 
-// Complexity: O( M^2 * K^2 * max(|N_m|) ).
+// Complexity: O( M^2 * K * max(|N_m|) ).
 inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId region, const HistogramBase & base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
@@ -186,25 +186,46 @@ inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId regio
 		}
 	}
 
-	auto compute_g = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
-		const auto v = compute_g_ll2kk2_histogram_integral (processes.data (l, region), processes.data (l2, region),
-		                                                    base.interval (k), base.interval (k2));
-		g.set_G (l, l2, k, k2, double(v) * inv_delta);
+	auto G_value = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
+		const auto integral = compute_g_ll2kk2_histogram_integral (processes.data (l, region), processes.data (l2, region),
+		                                                           base.interval (k), base.interval (k2));
+		return double(integral) * inv_delta;
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
+	 *
+	 * G_{l,l2,k,k2} = integral_x sum_{x_l,x_l2} phi_k (x - x_l) phi_k2 (x - x_l2) dx.
+	 * By change of variable x -> x + c*delta: G_{l,l2,k,k2} = G_{l,l2,k+c,k2+c}.
+	 * Thus for each block of G for (l,l2), we only need to compute 2K+1 values of G.
+	 * We compute the values on two borders, and copy the values for all inner cells.
 	 */
 	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
-		// Case l2 == l:
+		// Case l2 == l: compute for k2 >= k:
 		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
-			for (FunctionBaseId k2{k.value}; k2.value < base_size; ++k2.value) {
-				compute_g (l, l, k, k2);
+			// Compute G_{l,l,0,k} and copy to G_{l,l,c,k+c} for k in [0,K[.
+			const auto v = G_value (l, l, FunctionBaseId{0}, k);
+			for (int c = 0; k.value + c < base_size; ++c) {
+				g.set_G (l, l, FunctionBaseId{c}, FunctionBaseId{k.value + c}, v);
 			}
 		}
-		// Case l2 > l:
+		// Case l2 > l: compute for all (k,k2):
 		for (ProcessId l2{l.value}; l2.value < nb_processes; ++l2.value) {
-			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
-				for (FunctionBaseId k2{0}; k2.value < base_size; ++k2.value) {
-					compute_g (l, l2, k, k2);
+			// Compute G_{l,l2,0,0} and copy to G_{l,l2,c,c}.
+			{
+				const auto v = G_value (l, l2, FunctionBaseId{0}, FunctionBaseId{0});
+				for (int c = 0; c < base_size; ++c) {
+					g.set_G (l, l2, FunctionBaseId{c}, FunctionBaseId{c}, v);
+				}
+			}
+			/* for k in [1,K[:
+			 * Compute G_{l,l2,0,k} and copy to G_{l,l2,c,k+c}.
+			 * Compute G_{l,l2,k,0} and copy to G_{l,l2,k+c,c}.
+			 */
+			for (FunctionBaseId k{1}; k.value < base_size; ++k.value) {
+				const auto v_0k = G_value (l, l2, FunctionBaseId{0}, k);
+				const auto v_k0 = G_value (l, l2, k, FunctionBaseId{0});
+				for (int c = 0; k.value + c < base_size; ++c) {
+					g.set_G (l, l2, FunctionBaseId{c}, FunctionBaseId{k.value + c}, v_0k);
+					g.set_G (l, l2, FunctionBaseId{k.value + c}, FunctionBaseId{c}, v_k0);
 				}
 			}
 		}
