@@ -24,6 +24,10 @@ inline std::int64_t tmax_for_region (const ProcessesData<Point> & processes, Reg
 	}
 }
 
+/******************************************************************************
+ * Basic histogram case.
+ */
+
 /* Compute b_{m,l,k} * sqrt(delta) for all k, for the histogram base.
  * Return a vector with the k values.
  * Complexity is O( |N_l| + (K+1) * |N_m| ).
@@ -232,3 +236,86 @@ inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId regio
 	}
 	return g;
 }
+
+/******************************************************************************
+ * Histogram with interval convolution kernels.
+ */
+
+enum class Bound { Open, Closed };
+
+constexpr Bound invert (Bound b) {
+	if (b == Bound::Open) {
+		return Bound::Closed;
+	} else {
+		return Bound::Open;
+	}
+}
+template <Bound b, typename T> constexpr bool compare (const T & lhs, const T & rhs) {
+	if constexpr (b == Bound::Open) {
+		return lhs < rhs;
+	} else {
+		return lhs <= rhs;
+	}
+}
+
+template <typename T, Bound left_bound, Bound right_bound> struct Interval {
+	T from;
+	T to;
+};
+template <typename T, Bound l, Bound r>
+inline Interval<T, l, r> operator+ (const T & offset, const Interval<T, l, r> & i) {
+	return {offset + i.from, offset + i.to};
+}
+template <typename T, Bound l, Bound r> inline bool contains (const Interval<T, l, r> & i, const T & value) {
+	return compare<l> (i.from, value) && compare<r> (value, i.to);
+}
+
+// Type tag to indicate that a value is supposed to be in the non zero domain.
+struct PointInNonZeroDomain {
+	Point value;
+};
+
+// 1_[-half_width, half_width] (x). Centered on 0.
+struct IntervalFunction0 {
+	int half_width; // [1, inf[
+
+	int operator() (Point x) const {
+		if (contains (non_zero_domain (), x)) {
+			return 1;
+		} else {
+			return 0;
+		}
+	}
+	Interval<Point, Bound::Closed, Bound::Closed> non_zero_domain () const { return {-half_width, half_width}; }
+	int operator() (PointInNonZeroDomain x) const {
+		assert (contains (non_zero_domain (), x.value));
+		static_cast<void> (x);
+		return 1;
+	}
+};
+
+// Indicator function for interval centered at 'center'.
+struct IntervalFunction {
+	int center;
+	IntervalFunction0 interval;
+
+	int operator() (Point x) const { return interval (x - center); }
+	Interval<Point, Bound::Closed, Bound::Closed> non_zero_domain () const {
+		return center + interval.non_zero_domain ();
+	}
+	int operator() (PointInNonZeroDomain x) const {
+		assert (contains (non_zero_domain (), x.value));
+		static_cast<void> (x);
+		return 1;
+	}
+};
+
+struct TrapezoidFunction0 {
+	int h;
+	int half_b;
+};
+
+// W_width
+struct IntervalKernel {
+	int width;
+};
