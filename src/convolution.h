@@ -1,12 +1,16 @@
 #pragma once
 
 #include <cmath>
+#include <type_traits>
 
 #include "types.h"
 
 namespace shape {
 
 using ::Point;
+using std::int32_t;
+using std::int64_t;
+static_assert (std::is_same<Point, int32_t>::value, "Point must be an int32_t to avoid any overflow");
 
 // [from, to]
 template <typename T> struct ClosedInterval {
@@ -33,67 +37,74 @@ template <typename Inner> struct Shifted {
 	Inner inner;
 
 	ClosedInterval<Point> non_zero_domain () const { return shift + inner.non_zero_domain (); }
-	int operator() (PointInNonZeroDomain x) const {
+	auto operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		return inner (PointInNonZeroDomain{x.value - shift});
 	}
-	int operator() (Point x) const { return inner (x - shift); }
+	auto operator() (Point x) const { return inner (x - shift); }
 };
 template <typename Inner> struct Scaled {
-	int scale;
+	int64_t scale;
 	Inner inner;
 
 	ClosedInterval<Point> non_zero_domain () const { return inner.non_zero_domain (); }
-	int operator() (PointInNonZeroDomain x) const { return scale * inner (x); }
-	int operator() (Point x) const { return scale * inner (x); }
+	auto operator() (PointInNonZeroDomain x) const { return scale * inner (x); }
+	auto operator() (Point x) const { return scale * inner (x); }
 };
 
 // Indicator function for an interval.
 struct IntervalIndicator {
-	int half_width; // [0, inf[
+	int32_t half_width; // [0, inf[
 
 	ClosedInterval<Point> non_zero_domain () const { return {-half_width, half_width}; }
-	int operator() (PointInNonZeroDomain x) const {
+	int32_t operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		return 1;
 	}
-	int operator() (Point x) const { return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0; }
+	int32_t operator() (Point x) const {
+		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0;
+	}
 };
 
 // Triangle (0,0), (side, 0), (side, side)
 struct PositiveTriangle {
-	int side; // [0, inf[
+	int32_t side; // [0, inf[
 
 	ClosedInterval<Point> non_zero_domain () const { return {0, side}; }
-	int operator() (PointInNonZeroDomain x) const {
+	int32_t operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		return x.value;
 	}
-	int operator() (Point x) const { return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0; }
+	int32_t operator() (Point x) const {
+		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0;
+	}
 };
 
 // Triangle (0,0), (-side, 0), (-side, side)
 struct NegativeTriangle {
-	int side; // [0, inf[
+	int32_t side; // [0, inf[
 
 	ClosedInterval<Point> non_zero_domain () const { return {-side, 0}; }
-	int operator() (PointInNonZeroDomain x) const {
+	int32_t operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		return -x.value;
 	}
-	int operator() (Point x) const { return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0; }
+	int32_t operator() (Point x) const {
+		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0;
+	}
 };
 
 // Trapezoid with a block (2*half_base, height) with a PositiveTriangle(height) on the left and a negative on the right.
 struct Trapezoid {
-	int height;    // [0, inf[
-	int half_base; // [0, inf[
+	int32_t height;    // [0, inf[
+	int32_t half_base; // [0, inf[
 
 	ClosedInterval<Point> non_zero_domain () const {
 		const auto half_len = height + half_base;
 		return {-half_len, half_len};
 	}
-	int operator() (PointInNonZeroDomain x) const {
+	int32_t operator() (PointInNonZeroDomain x) const {
+		assert (contains (non_zero_domain (), x.value));
 		if (x.value < -half_base) {
 			return x.value - (half_base + height); // Left triangle
 		} else if (x.value > half_base) {
@@ -102,7 +113,9 @@ struct Trapezoid {
 			return height; // Central block
 		}
 	}
-	int operator() (Point x) const { return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0; }
+	int32_t operator() (Point x) const {
+		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0;
+	}
 };
 
 inline Scaled<IntervalIndicator> central_block (const Trapezoid & trapezoid) {
@@ -117,6 +130,46 @@ inline Shifted<NegativeTriangle> right_triangle (const Trapezoid & trapezoid) {
 
 inline Trapezoid convolution (const IntervalIndicator & left, const IntervalIndicator & right) {
 	return {std::min (left.half_width, right.half_width) * 2, std::abs (left.half_width - right.half_width)};
+}
+
+// Convolution between IntervalIndicator(half_width=l/2) and PositiveTriangle(side=c)
+struct ConvolutionIntervalPositiveTriangle {
+	int32_t half_l;
+	int32_t c;
+	ClosedInterval<int32_t> central_section; // Cached boundaries for the central section
+
+	ConvolutionIntervalPositiveTriangle (int32_t half_l, int32_t c) : half_l (half_l), c (c) {
+		const auto p = std::minmax (half_l, c - half_l);
+		central_section = {p.first, p.second};
+	}
+
+	ClosedInterval<Point> non_zero_domain () const { return {-half_l, c + half_l}; }
+	double operator() (PointInNonZeroDomain x) const {
+		assert (contains (non_zero_domain (), x.value));
+		if (x.value < central_section.from) {
+			// Quadratic left part
+			const int64_t sx = x.value + half_l;
+			return double(sx * sx) * 0.5;
+		} else if (x.value > central_section.to) {
+			// Quadratic right part
+			const int64_t sx = x.value - half_l;
+			return double(int64_t (c) * int64_t (c) - sx * sx) / 2.;
+		} else {
+			// Central section has two behaviors depending on l <=> c
+			if (2 * half_l >= c) {
+				return double(int64_t (c) * int64_t (c)) / 2.; // l >= c : constant central part
+			} else {
+				return double(int64_t (x.value) * int64_t (2 * half_l)); // l < c : linear central part
+			}
+		}
+	}
+	double operator() (Point x) const {
+		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
+	}
+};
+
+inline ConvolutionIntervalPositiveTriangle convolution (const IntervalIndicator & lhs, const PositiveTriangle & rhs) {
+	return {lhs.half_width, rhs.side};
 }
 
 } // namespace shape
