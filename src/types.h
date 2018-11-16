@@ -10,17 +10,20 @@
 
 #include "utils.h"
 
+using std::int32_t;
+using std::int64_t;
+
 /******************************************************************************
  * Index types.
  */
 struct ProcessId {
-	int value; // [0; nb_processes[
+	int32_t value; // [0; nb_processes[
 };
 struct FunctionBaseId {
-	int value; // [0; base_size[
+	int32_t value; // [0; base_size[
 };
 struct RegionId {
-	int value; // [0; nb_regions[
+	int32_t value; // [0; nb_regions[
 };
 
 /******************************************************************************
@@ -28,7 +31,7 @@ struct RegionId {
  */
 
 // Single coordinate for a process represented by points.
-using Point = std::int32_t;
+using Point = int32_t;
 
 // Store a process region data: its name and list of data elements, sorted.
 template <typename DataType> struct ProcessRegionData {
@@ -46,8 +49,8 @@ private:
 public:
 	ProcessesData () = default;
 
-	int nb_processes () const { return int(process_regions_.nb_rows ()); }
-	int nb_regions () const { return int(process_regions_.nb_cols ()); }
+	int32_t nb_processes () const { return int32_t (process_regions_.nb_rows ()); }
+	int32_t nb_regions () const { return int32_t (process_regions_.nb_cols ()); }
 
 	const ProcessRegionData<DataType> & process_region (ProcessId m, RegionId r) const {
 		assert (0 <= m.value && m.value < nb_processes ());
@@ -69,13 +72,13 @@ public:
  * Function bases.
  */
 struct HistogramBase {
-	int base_size; // [1, inf[
-	int delta;     // [1, inf[
+	int32_t base_size; // [1, inf[
+	int32_t delta;     // [1, inf[
 
 	// ]from; to]
 	struct Interval {
-		int from;
-		int to;
+		int32_t from;
+		int32_t to;
 	};
 
 	Interval interval (FunctionBaseId k) const {
@@ -91,11 +94,11 @@ struct MatrixB {
 	// Stores values for b_m and estimated a_m for all m.
 	// Invariant: K > 0 && M > 0 && inner.size() == (1 + K * M, M).
 
-	int nb_processes; // M
-	int base_size;    // K
+	int32_t nb_processes; // M
+	int32_t base_size;    // K
 	Eigen::MatrixXd inner;
 
-	MatrixB (int nb_processes, int base_size) : nb_processes (nb_processes), base_size (base_size) {
+	MatrixB (int32_t nb_processes, int32_t base_size) : nb_processes (nb_processes), base_size (base_size) {
 		assert (nb_processes > 0);
 		assert (base_size > 0);
 		const auto size = 1 + base_size * nb_processes;
@@ -113,7 +116,7 @@ struct MatrixB {
 	}
 
 	// b_m,l,k
-	int lk_index (ProcessId l, FunctionBaseId k) const {
+	int32_t lk_index (ProcessId l, FunctionBaseId k) const {
 		assert (0 <= l.value && l.value < nb_processes);
 		assert (0 <= k.value && k.value < base_size);
 		return 1 + l.value * base_size + k.value;
@@ -133,11 +136,11 @@ struct MatrixG {
 	// Stores value of the G matrix (symmetric).
 	// Invariant: K > 0 && M > 0 && inner.size() == (1 + K * M, 1 + K * M)
 
-	int nb_processes; // M
-	int base_size;    // K
+	int32_t nb_processes; // M
+	int32_t base_size;    // K
 	Eigen::MatrixXd inner;
 
-	MatrixG (int nb_processes, int base_size)
+	MatrixG (int32_t nb_processes, int32_t base_size)
 	    : nb_processes (nb_processes),
 	      base_size (base_size),
 	      inner (1 + base_size * nb_processes, 1 + base_size * nb_processes) {
@@ -147,7 +150,7 @@ struct MatrixG {
 		inner = Eigen::MatrixXd::Constant (size, size, std::numeric_limits<double>::quiet_NaN ());
 	}
 
-	int lk_index (ProcessId l, FunctionBaseId k) const {
+	int32_t lk_index (ProcessId l, FunctionBaseId k) const {
 		assert (0 <= l.value && l.value < nb_processes);
 		assert (0 <= k.value && k.value < base_size);
 		return 1 + l.value * base_size + k.value;
