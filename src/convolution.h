@@ -29,11 +29,9 @@ struct PointInNonZeroDomain {
 	Point value;
 };
 
-// Convolution
-
-// Combinators
+// Temporal shift of a shape: move it forward by 'shift'.
 template <typename Inner> struct Shifted {
-	Point shift;
+	int32_t shift;
 	Inner inner;
 
 	ClosedInterval<Point> non_zero_domain () const { return shift + inner.non_zero_domain (); }
@@ -43,6 +41,22 @@ template <typename Inner> struct Shifted {
 	}
 	auto operator() (Point x) const { return inner (x - shift); }
 };
+template <typename Inner> inline auto shifted (int32_t shift, Inner inner) {
+	return Shifted<Inner>{shift, inner};
+}
+
+// Convolution simplifications: propagate shift to the outer levels
+template <typename L, typename R> inline auto convolution (const Shifted<L> & lhs, const Shifted<R> & rhs) {
+	return shifted (lhs.shift + rhs.shift, convolution (lhs.inner, rhs.inner));
+}
+template <typename L, typename R> inline auto convolution (const Shifted<L> & lhs, const R & rhs) {
+	return shifted (lhs.shift, convolution (lhs.inner, rhs));
+}
+template <typename L, typename R> inline auto convolution (const L & lhs, const Shifted<R> & rhs) {
+	return shifted (rhs.shift, convolution (lhs, rhs.inner));
+}
+
+// Scale a shape on the vertical axis by 'scale'.
 template <typename Inner> struct Scaled {
 	int64_t scale;
 	Inner inner;
@@ -51,10 +65,27 @@ template <typename Inner> struct Scaled {
 	auto operator() (PointInNonZeroDomain x) const { return scale * inner (x); }
 	auto operator() (Point x) const { return scale * inner (x); }
 };
+template <typename Inner> inline auto scaled (int64_t scale, Inner inner) {
+	return Scaled<Inner>{scale, inner};
+}
+
+// Convolution simplification: propagate scaling to the outer levels
+template <typename L, typename R> inline auto convolution (const Scaled<L> & lhs, const Scaled<R> & rhs) {
+	return scaled (lhs.scale * rhs.scale, convolution (lhs.inner, rhs.inner));
+}
+template <typename L, typename R> inline auto convolution (const Scaled<L> & lhs, const R & rhs) {
+	return scaled (lhs.scale, convolution (lhs.inner, rhs));
+}
+template <typename L, typename R> inline auto convolution (const L & lhs, const Scaled<R> & rhs) {
+	return scaled (rhs.scale, convolution (lhs, rhs.inner));
+}
 
 // Indicator function for an interval.
 struct IntervalIndicator {
 	int32_t half_width; // [0, inf[
+
+	static IntervalIndicator with_half_width (int32_t half_width) { return {half_width}; }
+	static IntervalIndicator with_width (int32_t width) { return {width / 2}; }
 
 	ClosedInterval<Point> non_zero_domain () const { return {-half_width, half_width}; }
 	int32_t operator() (PointInNonZeroDomain x) const {
@@ -118,14 +149,14 @@ struct Trapezoid {
 	}
 };
 
-inline Scaled<IntervalIndicator> central_block (const Trapezoid & trapezoid) {
-	return {trapezoid.height, {trapezoid.half_base}};
+inline auto central_block (const Trapezoid & trapezoid) {
+	return scaled (trapezoid.height, IntervalIndicator::with_half_width (trapezoid.half_base));
 }
-inline Shifted<PositiveTriangle> left_triangle (const Trapezoid & trapezoid) {
-	return {-(trapezoid.height + trapezoid.half_base), {trapezoid.height}};
+inline auto left_triangle (const Trapezoid & trapezoid) {
+	return shifted (-(trapezoid.height + trapezoid.half_base), PositiveTriangle{trapezoid.height});
 }
-inline Shifted<NegativeTriangle> right_triangle (const Trapezoid & trapezoid) {
-	return {trapezoid.height + trapezoid.half_base, {trapezoid.height}};
+inline auto right_triangle (const Trapezoid & trapezoid) {
+	return shifted (trapezoid.height + trapezoid.half_base, NegativeTriangle{trapezoid.height});
 }
 
 inline Trapezoid convolution (const IntervalIndicator & left, const IntervalIndicator & right) {
@@ -170,6 +201,9 @@ struct ConvolutionIntervalPositiveTriangle {
 
 inline ConvolutionIntervalPositiveTriangle convolution (const IntervalIndicator & lhs, const PositiveTriangle & rhs) {
 	return {lhs.half_width, rhs.side};
+}
+inline ConvolutionIntervalPositiveTriangle convolution (const PositiveTriangle & lhs, const IntervalIndicator & rhs) {
+	return convolution (rhs, lhs);
 }
 
 } // namespace shape

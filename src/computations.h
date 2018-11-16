@@ -151,7 +151,7 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
 // TODO: B and G are average (or sums) of region-specific B and G, so compute the global one directly
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId region, const HistogramBase & base) {
+inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId region, HistogramBase base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
 	const auto inv_sqrt_delta = 1 / std::sqrt (double(base.delta));
@@ -175,7 +175,7 @@ inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId regio
 }
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId region, const HistogramBase & base) {
+inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId region, HistogramBase base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
 	const auto sqrt_delta = std::sqrt (double(base.delta));
@@ -247,32 +247,54 @@ struct IntervalKernel {
 	int32_t width;
 };
 
-// FIXME WIP
+inline auto to_shape (HistogramBase::Interval i) {
+	const auto delta = i.to - i.from;
+	const auto center = (i.from + i.to) / 2;
+	return shape::shifted (center, shape::IntervalIndicator::with_width (delta));
+}
+inline auto to_shape (IntervalKernel kernel) {
+	return shape::IntervalIndicator::with_width (kernel.width);
+}
+
+template <typename T> struct DT;
+
 inline double compute_b_mlk_histogram (const SortedVec<Point> & m_process, const SortedVec<Point> & l_process,
-                                       const HistogramBase::Interval & base_interval, const IntervalKernel & m_kernel,
-                                       const IntervalKernel & l_kernel) {
+                                       HistogramBase::Interval base_interval, IntervalKernel m_kernel,
+                                       IntervalKernel l_kernel) {
+	// Ignore scaling for now FIXME
+	const auto w_m = to_shape (m_kernel);
+	const auto w_l = to_shape (l_kernel);
+	const auto phi_k = to_shape (base_interval);
+
+	// To compute b_mlk, we need to compute convolution(w_m,w_l,phi_k)(x):
+	const auto trapezoid = convolution (w_m, w_l);
+	const auto a = convolution (left_triangle (trapezoid), phi_k);
+	//	const auto b = convolution (central_block (trapezoid), phi_k);
 
 	return 0.;
 }
 
-inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId region, const HistogramBase & base,
+inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId region, HistogramBase base,
                           span<const IntervalKernel> kernels) {
+	assert (int32_t (kernels.size ()) == processes.nb_processes ());
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
-	const auto inv_sqrt_delta = 1 / std::sqrt (double(base.delta));
 	MatrixB b (nb_processes, base_size);
 
 	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
 		const auto & m_process = processes.data (m, region);
+		const auto & m_kernel = kernels[m.value];
 
 		// b0
-		b.set_0 (m, double(m_process.size ()));
+		b.set_0 (m, double(int64_t (m_process.size ()) * int64_t (m_kernel.width)));
 
 		// b_lk
 		for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
-			auto counts = compute_b_ml_histogram_counts_for_all_k (m_process, processes.data (l, region), base);
+			const auto & l_kernel = kernels[l.value];
 			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
-				b.set_lk (m, l, k, double(counts[k.value]) * inv_sqrt_delta);
+				const auto v =
+				    compute_b_mlk_histogram (m_process, processes.data (l, region), base.interval (k), m_kernel, l_kernel);
+				b.set_lk (m, l, k, v);
 			}
 		}
 	}
