@@ -269,7 +269,10 @@ inline double compute_b_mlk_histogram (const SortedVec<Point> & m_process, const
 	// To compute b_mlk, we need to compute convolution(w_m,w_l,phi_k)(x):
 	const auto trapezoid = convolution (w_m, w_l);
 	const auto a = convolution (left_triangle (trapezoid), phi_k);
-	//	const auto b = convolution (central_block (trapezoid), phi_k);
+	const auto b = convolution (central_block (trapezoid), phi_k);
+
+	DT<decltype (a)> at;
+	DT<decltype (b)> bt;
 
 	return 0.;
 }

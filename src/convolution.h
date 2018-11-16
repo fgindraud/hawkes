@@ -20,6 +20,9 @@ template <typename T> struct ClosedInterval {
 template <typename T> inline ClosedInterval<T> operator+ (const T & offset, const ClosedInterval<T> & i) {
 	return {offset + i.from, offset + i.to};
 }
+template <typename T> inline ClosedInterval<T> operator- (const ClosedInterval<T> & i) {
+	return {-i.to, -i.from};
+}
 template <typename T> inline bool contains (const ClosedInterval<T> & i, const T & value) {
 	return i.from <= value && value <= i.to;
 }
@@ -28,6 +31,9 @@ template <typename T> inline bool contains (const ClosedInterval<T> & i, const T
 struct PointInNonZeroDomain {
 	Point value;
 };
+
+// Priority flag
+template <typename T> struct Priority { static constexpr int value = 0; };
 
 // Temporal shift of a shape: move it forward by 'shift'.
 template <typename Inner> struct Shifted {
@@ -41,18 +47,18 @@ template <typename Inner> struct Shifted {
 	}
 	auto operator() (Point x) const { return inner (x - shift); }
 };
+template <typename Inner> struct Priority<Shifted<Inner>> { static constexpr int value = 1; };
 template <typename Inner> inline auto shifted (int32_t shift, Inner inner) {
 	return Shifted<Inner>{shift, inner};
 }
 
 // Convolution simplifications: propagate shift to the outer levels
-template <typename L, typename R> inline auto convolution (const Shifted<L> & lhs, const Shifted<R> & rhs) {
-	return shifted (lhs.shift + rhs.shift, convolution (lhs.inner, rhs.inner));
-}
-template <typename L, typename R> inline auto convolution (const Shifted<L> & lhs, const R & rhs) {
+template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 1)>>
+inline auto convolution (const Shifted<L> & lhs, const R & rhs) {
 	return shifted (lhs.shift, convolution (lhs.inner, rhs));
 }
-template <typename L, typename R> inline auto convolution (const L & lhs, const Shifted<R> & rhs) {
+template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= 1)>>
+inline auto convolution (const L & lhs, const Shifted<R> & rhs) {
 	return shifted (rhs.shift, convolution (lhs, rhs.inner));
 }
 
@@ -65,18 +71,18 @@ template <typename Inner> struct Scaled {
 	auto operator() (PointInNonZeroDomain x) const { return scale * inner (x); }
 	auto operator() (Point x) const { return scale * inner (x); }
 };
+template <typename Inner> struct Priority<Scaled<Inner>> { static constexpr int value = 2; };
 template <typename Inner> inline auto scaled (int64_t scale, Inner inner) {
 	return Scaled<Inner>{scale, inner};
 }
 
 // Convolution simplification: propagate scaling to the outer levels
-template <typename L, typename R> inline auto convolution (const Scaled<L> & lhs, const Scaled<R> & rhs) {
-	return scaled (lhs.scale * rhs.scale, convolution (lhs.inner, rhs.inner));
-}
-template <typename L, typename R> inline auto convolution (const Scaled<L> & lhs, const R & rhs) {
+template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 2)>>
+inline auto convolution (const Scaled<L> & lhs, const R & rhs) {
 	return scaled (lhs.scale, convolution (lhs.inner, rhs));
 }
-template <typename L, typename R> inline auto convolution (const L & lhs, const Scaled<R> & rhs) {
+template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= 2)>>
+inline auto convolution (const L & lhs, const Scaled<R> & rhs) {
 	return scaled (rhs.scale, convolution (lhs, rhs.inner));
 }
 
