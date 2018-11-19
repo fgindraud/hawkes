@@ -248,6 +248,7 @@ struct IntervalKernel {
 };
 
 inline auto to_shape (HistogramBase::Interval i) {
+	// TODO Histo::Interval is ]from; to], but shape::Interval is [from; to].
 	const auto delta = i.to - i.from;
 	const auto center = (i.from + i.to) / 2;
 	return shape::shifted (center, shape::IntervalIndicator::with_width (delta));
@@ -270,7 +271,7 @@ inline double compute_b_mlk_histogram (const SortedVec<Point> & m_process, const
 	const auto trapezoid = convolution (w_m, w_l);
 	const auto a = convolution (left_triangle (trapezoid), phi_k);
 	const auto b = convolution (central_block (trapezoid), phi_k);
-	const auto c = convolution (right_triangle(trapezoid), phi_k);
+	const auto c = convolution (right_triangle (trapezoid), phi_k);
 
 	DT<decltype (a)> at;
 	DT<decltype (b)> bt;

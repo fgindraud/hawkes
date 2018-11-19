@@ -32,7 +32,11 @@ struct PointInNonZeroDomain {
 	Point value;
 };
 
-// Combinator: Invert the temporal space.
+/******************************************************************************
+ * Combinators.
+ */
+
+// Invert the temporal space.
 template <typename Inner> struct Reversed {
 	Inner inner;
 
@@ -43,11 +47,8 @@ template <typename Inner> struct Reversed {
 	}
 	auto operator() (Point x) const { return inner (-x); }
 };
-template <typename Inner> inline auto reversed (Inner inner) {
-	return Reversed<Inner>{inner};
-}
 
-// Combinator: Temporal shift of a shape: move it forward by 'shift'.
+// Temporal shift of a shape: move it forward by 'shift'.
 template <typename Inner> struct Shifted {
 	int32_t shift;
 	Inner inner;
@@ -59,11 +60,8 @@ template <typename Inner> struct Shifted {
 	}
 	auto operator() (Point x) const { return inner (x - shift); }
 };
-template <typename Inner> inline auto shifted (int32_t shift, Inner inner) {
-	return Shifted<Inner>{shift, inner};
-}
 
-// Combinator: Scale a shape on the vertical axis by 'scale'.
+// Scale a shape on the vertical axis by 'scale'.
 template <typename Inner> struct Scaled {
 	int64_t scale;
 	Inner inner;
@@ -72,9 +70,58 @@ template <typename Inner> struct Scaled {
 	auto operator() (PointInNonZeroDomain x) const { return scale * inner (x); }
 	auto operator() (Point x) const { return scale * inner (x); }
 };
-template <typename Inner> inline auto scaled (int64_t scale, Inner inner) {
+
+/* Priority value for combinator application.
+ * This is used to force order of simplifications in convolution(a,b) or other modificators.
+ * Without it, we have multiple valid overloads and ambiguity, leading to a compile error.
+ * The higher the priority, the quickest a rule is applied.
+ */
+template <typename T> struct Priority { static constexpr int value = 0; };
+
+template <typename Inner> struct Priority<Reversed<Inner>> { static constexpr int value = 1; };
+template <typename Inner> struct Priority<Shifted<Inner>> { static constexpr int value = 2; };
+template <typename Inner> struct Priority<Scaled<Inner>> { static constexpr int value = 3; };
+
+template <typename Inner> inline auto reversed (const Inner & inner) {
+	return Reversed<Inner>{inner};
+}
+
+template <typename Inner> inline auto shifted (int32_t shift, const Inner & inner) {
+	return Shifted<Inner>{shift, inner};
+}
+template <typename Inner> inline auto shifted (int32_t shift, const Shifted<Inner> & s) {
+	return shifted (shift + s.shift, s.inner);
+}
+
+template <typename Inner> inline auto scaled (int64_t scale, const Inner & inner) {
 	return Scaled<Inner>{scale, inner};
 }
+template <typename Inner> inline auto scaled (int64_t scale, const Scaled<Inner> & s) {
+	return scaled (scale * s.scale, s.inner);
+}
+
+// Convolution simplifications: propagate combinators to the outer levels
+template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 2)>>
+inline auto convolution (const Shifted<L> & lhs, const R & rhs) {
+	return shifted (lhs.shift, convolution (lhs.inner, rhs));
+}
+template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= 2)>>
+inline auto convolution (const L & lhs, const Shifted<R> & rhs) {
+	return shifted (rhs.shift, convolution (lhs, rhs.inner));
+}
+
+template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 3)>>
+inline auto convolution (const Scaled<L> & lhs, const R & rhs) {
+	return scaled (lhs.scale, convolution (lhs.inner, rhs));
+}
+template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= 3)>>
+inline auto convolution (const L & lhs, const Scaled<R> & rhs) {
+	return scaled (rhs.scale, convolution (lhs, rhs.inner));
+}
+
+/******************************************************************************
+ * Base shapes.
+ */
 
 // Indicator function for an interval.
 struct IntervalIndicator {
@@ -211,38 +258,6 @@ inline auto convolution (const PositiveTriangle & lhs, const IntervalIndicator &
 }
 inline auto convolution (const NegativeTriangle & lhs, const IntervalIndicator & rhs) {
 	return convolution (rhs, lhs);
-}
-
-/* Priority value for shapes for operations like convolution.
- * Must be redefined for combinators.
- * This is used to force order of simplifications in convolution(a,b).
- * Without it, we have multiple valid overloads and ambiguity, leading to a compile error.
- * The higher the priority, the quickest a rule is applied.
- */
-template <typename T> struct Priority { static constexpr int value = 0; };
-
-template <typename Inner> struct Priority<Reversed<Inner>> { static constexpr int value = 1; };
-template <typename Inner> struct Priority<Shifted<Inner>> { static constexpr int value = 2; };
-template <typename Inner> struct Priority<Scaled<Inner>> { static constexpr int value = 3; };
-
-// Convolution simplifications: propagate combinators to the outer levels
-
-template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 2)>>
-inline auto convolution (const Shifted<L> & lhs, const R & rhs) {
-	return shifted (lhs.shift, convolution (lhs.inner, rhs));
-}
-template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= 2)>>
-inline auto convolution (const L & lhs, const Shifted<R> & rhs) {
-	return shifted (rhs.shift, convolution (lhs, rhs.inner));
-}
-
-template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 3)>>
-inline auto convolution (const Scaled<L> & lhs, const R & rhs) {
-	return scaled (lhs.scale, convolution (lhs.inner, rhs));
-}
-template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= 3)>>
-inline auto convolution (const L & lhs, const Scaled<R> & rhs) {
-	return scaled (rhs.scale, convolution (lhs, rhs.inner));
 }
 
 } // namespace shape
