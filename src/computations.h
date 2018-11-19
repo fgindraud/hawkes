@@ -6,6 +6,70 @@
 #include "convolution.h"
 #include "types.h"
 
+/******************************************************************************
+ * Generic functions useful for all cases.
+ */
+
+/* Compute sum_{x_m in N_m, x_l in N_l} shape(x_m - x_l).
+ * Shape must be any shape from the shape namespace:
+ * - with a method non_zero_domain() returning the interval where the shape is non zero.
+ * - with an operator()(x) returning the value at point x.
+ *
+ * Worst case complexity: O(|N|^2).
+ * Average complexity: O(|N| * density(N) * width(shape)) = O(|N|^2 * width(shape) / Tmax).
+ */
+template <typename Shape>
+inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
+                                              const Shape & shape) {
+	using ReturnType = decltype (shape (Point{}));
+	ReturnType sum{};
+
+	// shape(x) != 0 => x in shape.non_zero_domain().
+	// Thus sum_{x_m,x_l} shape(x_m - x_l) = sum_{(x_m, x_l), x_m - x_l in non_zero_domain} shape(x_m - x_l).
+	const auto non_zero_domain = shape.non_zero_domain ();
+
+	int32_t starting_i_m = 0;
+	for (const Point x_l : l_points) {
+		// x_l = N_l[i_l], with N_l[x] a strictly increasing function of x.
+		// Compute shape(x_m - x_l) for all x_m in (x_l + non_zero_domain) interval.
+		const auto interval_i_l = x_l + non_zero_domain;
+
+		// starting_i_m = min{i_m, N_m[i_m] - N_l[i_l] >= non_zero_domain.from}.
+		// We can restrict the search by starting from:
+		// last_starting_i_m = min{i_m, N_m[i_m] - N_l[i_l - 1] >= non_zero_domain.from or i_m == 0}.
+		// We have: N_m[starting_i_m] >= N_l[i_l] + nzd.from > N_l[i_l - 1] + nzd.from.
+		// Because N_m is increasing and properties of the min, starting_i_m >= last_starting_i_m.
+		while (starting_i_m < m_points.size () && !(interval_i_l.from <= m_points[starting_i_m])) {
+			starting_i_m += 1;
+		}
+		if (starting_i_m == m_points.size ()) {
+			// starting_i_m is undefined because last(N_m) < N_l[i_l] + non_zero_domain.from.
+			// last(N_m) == max(x_m in N_m) because N_m[x] is strictly increasing.
+			// So for each j > i_l , max(x_m) < N[j] + non_zero_domain.from, and shape (x_m - N_l[j]) == 0.
+			// We can stop there as the sum is already complete.
+			break;
+		}
+		// Sum values of shape(x_m - x_l) as long as x_m is in interval_i_l.
+		// starting_i_m defined => for each i_m < starting_i_m, shape(N_m[i_m] - x_l) == 0.
+		// Thus we only scan from starting_i_m to the last i_m in interval.
+		// N_m[x] is strictly increasing so we only need to check the right bound of the interval.
+		for (int32_t i_m = starting_i_m; i_m < m_points.size () && m_points[i_m] <= interval_i_l.to; i_m += 1) {
+			sum += shape (shape::PointInNonZeroDomain{m_points[i_m] - x_l});
+		}
+	}
+
+	return sum;
+}
+
+// Scaling can be moved out of computation.
+template <typename Inner>
+inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
+                                              const shape::Scaled<Inner> & shape) {
+	return shape.scale * compute_sum_of_point_differences (m_points, l_points, shape.inner);
+}
+
+/* Compute Tmax (used in G).
+ */
 inline int64_t tmax_for_region (const ProcessesData<Point> & processes, RegionId region) {
 	int64_t min = std::numeric_limits<int64_t>::max ();
 	int64_t max = std::numeric_limits<int64_t>::min ();
@@ -251,61 +315,11 @@ inline auto to_shape (HistogramBase::Interval i) {
 	// TODO Histo::Interval is ]from; to], but shape::Interval is [from; to].
 	const auto delta = i.to - i.from;
 	const auto center = (i.from + i.to) / 2;
-	return shape::shifted (center, shape::IntervalIndicator::with_width (delta));
+	return shape::scaled (1 / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
 }
 inline auto to_shape (IntervalKernel kernel) {
+	// TODO do we have scaling here ?
 	return shape::IntervalIndicator::with_width (kernel.width);
-}
-
-/* Compute sum_{x_m in N_m, x_l in N_l} shape(x_m - x_l).
- * Shape must be any shape from the shape namespace:
- * - with a method non_zero_domain() returning the interval where the shape is non zero.
- * - with an operator()(x) returning the value at point x.
- *
- * Worst case complexity: O(|N|^2).
- * Average complexity: O(|N| * density(N) * width(shape)) = O(|N|^2 * width(shape) / Tmax).
- */
-template <typename Shape>
-inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
-                                              const Shape & shape) {
-	using ReturnType = decltype (shape (Point{}));
-	ReturnType sum{};
-
-	// shape(x) != 0 => x in shape.non_zero_domain().
-	// Thus sum_{x_m,x_l} shape(x_m - x_l) = sum_{(x_m, x_l), x_m - x_l in non_zero_domain} shape(x_m - x_l).
-	const auto non_zero_domain = shape.non_zero_domain ();
-
-	int32_t starting_i_m = 0;
-	for (const Point x_l : l_points) {
-		// x_l = N_l[i_l], with N_l[x] a strictly increasing function of x.
-		// Compute shape(x_m - x_l) for all x_m in (x_l + non_zero_domain) interval.
-		const auto interval_i_l = x_l + non_zero_domain;
-
-		// starting_i_m = min{i_m, N_m[i_m] - N_l[i_l] >= non_zero_domain.from}.
-		// We can restrict the search by starting from:
-		// last_starting_i_m = min{i_m, N_m[i_m] - N_l[i_l - 1] >= non_zero_domain.from or i_m == 0}.
-		// We have: N_m[starting_i_m] >= N_l[i_l] + nzd.from > N_l[i_l - 1] + nzd.from.
-		// Because N_m is increasing and properties of the min, starting_i_m >= last_starting_i_m.
-		while (starting_i_m < m_points.size () && !(interval_i_l.from <= m_points[starting_i_m])) {
-			starting_i_m += 1;
-		}
-		if (starting_i_m == m_points.size ()) {
-			// starting_i_m is undefined because last(N_m) < N_l[i_l] + non_zero_domain.from.
-			// last(N_m) == max(x_m in N_m) because N_m[x] is strictly increasing.
-			// So for each j > i_l , max(x_m) < N[j] + non_zero_domain.from, and shape (x_m - N_l[j]) == 0.
-			// We can stop there as the sum is already complete.
-			break;
-		}
-		// Sum values of shape(x_m - x_l) as long as x_m is in interval_i_l.
-		// starting_i_m defined => for each i_m < starting_i_m, shape(N_m[i_m] - x_l) == 0.
-		// Thus we only scan from starting_i_m to the last i_m in interval.
-		// N_m[x] is strictly increasing so we only need to check the right bound of the interval.
-		for (int32_t i_m = starting_i_m; i_m < m_points.size () && m_points[i_m] <= interval_i_l.to; i_m += 1) {
-			sum += shape (shape::PointInNonZeroDomain{m_points[i_m] - x_l});
-		}
-	}
-
-	return sum;
 }
 
 template <typename T> struct DT;
@@ -313,16 +327,16 @@ template <typename T> struct DT;
 inline double compute_b_mlk_histogram (const SortedVec<Point> & m_process, const SortedVec<Point> & l_process,
                                        HistogramBase::Interval base_interval, IntervalKernel m_kernel,
                                        IntervalKernel l_kernel) {
-	// Ignore scaling for now FIXME
+	// Base shapes
 	const auto w_m = to_shape (m_kernel);
 	const auto w_l = to_shape (l_kernel);
 	const auto phi_k = to_shape (base_interval);
 
 	// To compute b_mlk, we need to compute convolution(w_m,w_l,phi_k)(x):
 	const auto trapezoid = convolution (w_m, w_l);
-	const auto a = convolution (left_triangle (trapezoid), phi_k);
-	const auto b = convolution (central_block (trapezoid), phi_k);
-	const auto c = convolution (right_triangle (trapezoid), phi_k);
+	const auto a = convolution (component (trapezoid, shape::Trapezoid::LeftTriangle{}), phi_k);
+	const auto b = convolution (component (trapezoid, shape::Trapezoid::CentralBlock{}), phi_k);
+	const auto c = convolution (component (trapezoid, shape::Trapezoid::RightTriangle{}), phi_k);
 
 	/*
 	DT<decltype (a)> at;

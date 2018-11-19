@@ -100,6 +100,11 @@ template <typename Inner> inline auto scaled (int64_t scale, const Scaled<Inner>
 	return scaled (scale * s.scale, s.inner);
 }
 
+// Component decomposition
+template <typename Shape, typename ComponentTag> inline auto component (const Scaled<Shape> & shape, ComponentTag tag) {
+	return scaled (shape.scale, component (shape.inner, tag));
+}
+
 // Convolution simplifications: propagate combinators to the outer levels
 template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 2)>>
 inline auto convolution (const Shifted<L> & lhs, const R & rhs) {
@@ -123,7 +128,9 @@ inline auto convolution (const L & lhs, const Scaled<R> & rhs) {
  * Base shapes.
  */
 
-// Indicator function for an interval.
+/* Indicator function for an interval.
+ * Not normalized, returns 1. in the interval.
+ */
 struct IntervalIndicator {
 	int32_t half_width; // [0, inf[
 
@@ -141,7 +148,8 @@ struct IntervalIndicator {
 	}
 };
 
-// Triangle (0,0), (side, 0), (side, side)
+/* Triangle (0,0), (side, 0), (side, side).
+ */
 struct PositiveTriangle {
 	int32_t side; // [0, inf[
 
@@ -155,7 +163,8 @@ struct PositiveTriangle {
 	}
 };
 
-// Triangle (0,0), (-side, 0), (-side, side)
+/* Triangle (0,0), (-side, 0), (-side, side).
+ */
 struct NegativeTriangle {
 	int32_t side; // [0, inf[
 
@@ -173,7 +182,8 @@ inline auto as_positive_triangle (NegativeTriangle t) {
 	return reversed (PositiveTriangle{t.side});
 }
 
-// Trapezoid with a block (2*half_base, height) with a PositiveTriangle(height) on the left and a negative on the right.
+/* Trapezoid with a block (2*half_base, height) with a PositiveTriangle(height) on the left and a negative on the right.
+ */
 struct Trapezoid {
 	int32_t height;    // [0, inf[
 	int32_t half_base; // [0, inf[
@@ -195,15 +205,21 @@ struct Trapezoid {
 	int32_t operator() (Point x) const {
 		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0;
 	}
+
+	// Component type tags.
+	struct LeftTriangle {};
+	struct CentralBlock {};
+	struct RightTriangle {};
 };
 
-inline auto central_block (const Trapezoid & trapezoid) {
+// Decompose into components
+inline auto component (const Trapezoid & trapezoid, Trapezoid::CentralBlock) {
 	return scaled (trapezoid.height, IntervalIndicator::with_half_width (trapezoid.half_base));
 }
-inline auto left_triangle (const Trapezoid & trapezoid) {
+inline auto component (const Trapezoid & trapezoid, Trapezoid::LeftTriangle) {
 	return shifted (-(trapezoid.height + trapezoid.half_base), PositiveTriangle{trapezoid.height});
 }
-inline auto right_triangle (const Trapezoid & trapezoid) {
+inline auto component (const Trapezoid & trapezoid, Trapezoid::RightTriangle) {
 	return shifted (trapezoid.height + trapezoid.half_base, NegativeTriangle{trapezoid.height});
 }
 
@@ -211,7 +227,8 @@ inline Trapezoid convolution (const IntervalIndicator & left, const IntervalIndi
 	return {std::min (left.half_width, right.half_width) * 2, std::abs (left.half_width - right.half_width)};
 }
 
-// Convolution between IntervalIndicator(half_width=l/2) and PositiveTriangle(side=c)
+/* Convolution between IntervalIndicator(half_width=l/2) and PositiveTriangle(side=c).
+ */
 struct ConvolutionIntervalPositiveTriangle {
 	int32_t half_l;
 	int32_t c;
