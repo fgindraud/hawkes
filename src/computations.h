@@ -62,9 +62,9 @@ inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points,
 }
 
 // Scaling can be moved out of computation.
-template <typename Inner>
+template <typename T, typename Inner>
 inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
-                                              const shape::Scaled<Inner> & shape) {
+                                              const shape::Scaled<T, Inner> & shape) {
 	return shape.scale * compute_sum_of_point_differences (m_points, l_points, shape.inner);
 }
 
@@ -218,7 +218,7 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
 inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId region, HistogramBase base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
-	const auto inv_sqrt_delta = 1 / std::sqrt (double(base.delta));
+	const auto inv_sqrt_delta = 1. / std::sqrt (double(base.delta));
 	MatrixB b (nb_processes, base_size);
 
 	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
@@ -315,7 +315,7 @@ inline auto to_shape (HistogramBase::Interval i) {
 	// TODO Histo::Interval is ]from; to], but shape::Interval is [from; to].
 	const auto delta = i.to - i.from;
 	const auto center = (i.from + i.to) / 2;
-	return shape::scaled (1 / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
+	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
 }
 inline auto to_shape (IntervalKernel kernel) {
 	// TODO do we have scaling here ?

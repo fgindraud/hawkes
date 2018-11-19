@@ -62,8 +62,8 @@ template <typename Inner> struct Shifted {
 };
 
 // Scale a shape on the vertical axis by 'scale'.
-template <typename Inner> struct Scaled {
-	int64_t scale;
+template <typename T, typename Inner> struct Scaled {
+	T scale;
 	Inner inner;
 
 	ClosedInterval<Point> non_zero_domain () const { return inner.non_zero_domain (); }
@@ -80,7 +80,7 @@ template <typename T> struct Priority { static constexpr int value = 0; };
 
 template <typename Inner> struct Priority<Reversed<Inner>> { static constexpr int value = 1; };
 template <typename Inner> struct Priority<Shifted<Inner>> { static constexpr int value = 2; };
-template <typename Inner> struct Priority<Scaled<Inner>> { static constexpr int value = 3; };
+template <typename T, typename Inner> struct Priority<Scaled<T, Inner>> { static constexpr int value = 3; };
 
 template <typename Inner> inline auto reversed (const Inner & inner) {
 	return Reversed<Inner>{inner};
@@ -93,15 +93,16 @@ template <typename Inner> inline auto shifted (int32_t shift, const Shifted<Inne
 	return shifted (shift + s.shift, s.inner);
 }
 
-template <typename Inner> inline auto scaled (int64_t scale, const Inner & inner) {
-	return Scaled<Inner>{scale, inner};
+template <typename T, typename Inner> inline auto scaled (T scale, const Inner & inner) {
+	return Scaled<T, Inner>{scale, inner};
 }
-template <typename Inner> inline auto scaled (int64_t scale, const Scaled<Inner> & s) {
+template <typename T, typename U, typename Inner> inline auto scaled (T scale, const Scaled<U, Inner> & s) {
 	return scaled (scale * s.scale, s.inner);
 }
 
 // Component decomposition
-template <typename Shape, typename ComponentTag> inline auto component (const Scaled<Shape> & shape, ComponentTag tag) {
+template <typename T, typename Inner, typename ComponentTag>
+inline auto component (const Scaled<T, Inner> & shape, ComponentTag tag) {
 	return scaled (shape.scale, component (shape.inner, tag));
 }
 
@@ -115,12 +116,12 @@ inline auto convolution (const L & lhs, const Shifted<R> & rhs) {
 	return shifted (rhs.shift, convolution (lhs, rhs.inner));
 }
 
-template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 3)>>
-inline auto convolution (const Scaled<L> & lhs, const R & rhs) {
+template <typename T, typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 3)>>
+inline auto convolution (const Scaled<T, L> & lhs, const R & rhs) {
 	return scaled (lhs.scale, convolution (lhs.inner, rhs));
 }
-template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= 3)>>
-inline auto convolution (const L & lhs, const Scaled<R> & rhs) {
+template <typename L, typename T, typename R, typename = std::enable_if_t<(Priority<L>::value <= 3)>>
+inline auto convolution (const L & lhs, const Scaled<T, R> & rhs) {
 	return scaled (rhs.scale, convolution (lhs, rhs.inner));
 }
 
