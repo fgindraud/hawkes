@@ -133,6 +133,7 @@ struct IntervalIndicator {
 	ClosedInterval<Point> non_zero_domain () const { return {-half_width, half_width}; }
 	int32_t operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
+		static_cast<void> (x);
 		return 1;
 	}
 	int32_t operator() (Point x) const {
