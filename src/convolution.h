@@ -141,7 +141,7 @@ struct IntervalIndicator {
 	ClosedInterval<Point> non_zero_domain () const { return {-half_width, half_width}; }
 	int32_t operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
-		static_cast<void> (x);
+		static_cast<void> (x); // Ignored, only used in assert
 		return 1;
 	}
 	int32_t operator() (Point x) const {
@@ -266,7 +266,7 @@ struct ConvolutionIntervalPositiveTriangle {
 };
 
 inline auto convolution (const IntervalIndicator & lhs, const PositiveTriangle & rhs) {
-	return ConvolutionIntervalPositiveTriangle{lhs.half_width, rhs.side};
+	return ConvolutionIntervalPositiveTriangle (lhs.half_width, rhs.side);
 }
 inline auto convolution (const IntervalIndicator & lhs, const NegativeTriangle & rhs) {
 	// IntervalIndicator is symmetric, and NegativeTriangle(x) == PositiveTriangle(-x)
@@ -277,6 +277,53 @@ inline auto convolution (const PositiveTriangle & lhs, const IntervalIndicator &
 }
 inline auto convolution (const NegativeTriangle & lhs, const IntervalIndicator & rhs) {
 	return convolution (rhs, lhs);
+}
+
+/* Convolution between PositiveTriangle(side=l) and PositiveTriangle(side=c).
+ */
+struct ConvolutionPositiveTrianglePositiveTriangle {
+	int32_t l;
+	int32_t c;
+	ClosedInterval<int32_t> central_section; // Cached
+
+	ConvolutionPositiveTrianglePositiveTriangle (int32_t l, int32_t c) : l (l), c (c) {
+		const auto p = std::minmax (0, c - l);
+		central_section = {p.first, p.second};
+	}
+
+	ClosedInterval<Point> non_zero_domain () const { return {-l, c}; }
+	double operator() (PointInNonZeroDomain x) const {
+		assert (contains (non_zero_domain (), x.value));
+		if (x.value < central_section.from) {
+			// Cubic left part
+			const int64_t x_plus_l = x.value + l;
+			return double(x_plus_l * x_plus_l) * double(2 * l - x.value) / 6.;
+		} else if (x.value > central_section.to) {
+			// Cubic right part
+			const int64_t c_minus_x = c - x.value;
+			return double(c_minus_x * c_minus_x) * double(2 * c + x.value) / 6.;
+		} else {
+			// Central section has two behaviors depending on l <=> c
+			if (l < c) {
+				// Linear central part for [0, c - l].
+				return double(int64_t (l) * int64_t (l)) * double(2 * l + 3 * x.value) / 6.;
+			} else {
+				// Linear central part for [c - l, 0].
+				return double(int64_t (c) * int64_t (c)) * double(2 * c - 3 * x.value) / 6.;
+			}
+		}
+	}
+	double operator() (Point x) const {
+		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
+	}
+};
+
+inline auto convolution (const PositiveTriangle & lhs, const PositiveTriangle & rhs) {
+	return ConvolutionPositiveTrianglePositiveTriangle (lhs.side, rhs.side);
+}
+inline auto convolution (const NegativeTriangle & lhs, const NegativeTriangle & rhs) {
+	// Reversing the time dimension transforms both negative triangles into positive ones.
+	return reversed (convolution (PositiveTriangle{lhs.side}, PositiveTriangle{rhs.side}));
 }
 
 } // namespace shape
