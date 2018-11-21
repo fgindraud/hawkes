@@ -4,8 +4,10 @@
 \usepackage{tikz}
 \usepackage{bbm}
 \usepackage{amsmath}
+\usepackage{hyperref}
 
 \newcommand\Shifted[2]{\Delta_{#1}(#2)}
+\newcommand\Reversed[1]{\overline{#1}}
 
 \newcommand\SymSquare{\begin{tikzpicture}%
         \draw (0,0) -- (0,1em) -- (1em,1em) -- (1em,0) -- cycle;
@@ -23,19 +25,19 @@
 \newcommand\NegativeTriangle[1]{\SymNegativeTriangle(#1)}
 
 \newcommand\SymTrapezoid{\begin{tikzpicture}%
-        \draw (0,0) -- (3em) -- (2em,1em) -- (1em,1em) -- cycle;
+        \draw (0,0) -- (3em,0) -- (2em,1em) -- (1em,1em) -- cycle;
 \end{tikzpicture}}
-\newcommand\Trapezoid[2]{\SymTrapezoid(#1,#2)}
+\newcommand\Trapezoid[2]{\SymTrapezoid(#1,#2)}% Trapezoid(h,b)
 
 \newcommand\Convolution{\star}
 \newcommand\ConvolutionInt[2]{\int_{-\infty}^{\infty}#1 \mathrm{d}#2}
+\newcommand\Equiv{\Leftrightarrow}
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \title{Convolution formulas using shapes}
 \author{Francois Gindraud}
 \date{}
-
 \begin{document}
-
 \maketitle
 
 Formulas for convolutions are very quickly unwieldy, especially if the functions being convoluted are defined by parts.
@@ -59,6 +61,7 @@ Convolution is noted using the $\Convolution$ operator, with the usual definitio
 \[ \left[ f \Convolution g \right](x) = \ConvolutionInt{f(x - t) g(t)}{t} \]
 Convolution is commutative and associative.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Combinators}
 
 \paragraph{Time shifting}
@@ -84,6 +87,19 @@ Scaling combines multiplicatively with itself, and can be swapped with time shif
 Convolution of scaled functions is a scaled convolution:
 \[ (c \times f) \Convolution g = c \times (f \Convolution g) \]
 
+\paragraph{Time inversion}
+A \emph{reversed} function is the shape mirrored by the vertical axis:
+\[ \Reversed{f}(x) = f(-x) \]
+Simplifications:
+\[ \Reversed{\Reversed{f}} = f \]
+\[ \Reversed{c \times f} = c \times \Reversed{f} \]
+\[ \Reversed{\Shifted{h}{f}}(x) = \Shifted{h}{f}(-x) = f(-x-h) = \Reversed{f}(x+h) = \Shifted{-h}{\Reversed{f}}(x) \]
+Convolution:
+\[
+    \Reversed{f \Convolution g}(x) = \ConvolutionInt{f(-x-t) g(t)}{t} = \ConvolutionInt{f(-x+T) g(-T)}{T} = \left[ \Reversed{f} \Convolution \Reversed{g} \right] (x)
+\]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Basic shape definitions}
 
 \paragraph{Indicator function}
@@ -110,7 +126,7 @@ The \emph{indicator function} of width $l$ is a rectangle of width $l$, height $
     \end{cases}
 \]
 The function is symmetric:
-\[ \Indicator{l}(-x) = \Indicator{l}(x) \]
+\[ \Reversed{\Indicator{l}}(x) = \Indicator{l}(-x) = \Indicator{l}(x) \]
 
 \paragraph{Positive triangle}
 The \emph{positive triangle} of side $c$ is a triangle formed by coordinates $\{ (0,0), (c, 0), (c,c) \}$:
@@ -158,7 +174,7 @@ The \emph{negative triangle} of side $c$ is a triangle formed by coordinates $\{
     \end{cases}
 \]
 A reversed negative triangle is a positive triangle:
-\[ \NegativeTriangle{c}(-x) = \PositiveTriangle{c}(x) \]
+\[ \Reversed{\NegativeTriangle{c}}(x) =  \NegativeTriangle{c}(-x) = \PositiveTriangle{c}(x) \]
 
 \paragraph{Trapezoid}
 A \emph{trapezoid} of height $h$ and central block width $b$ is formed by a central rectangle of size $(b,h)$ centered on $0$, and flanked by triangles of side size $h$:
@@ -179,12 +195,130 @@ A \emph{trapezoid} of height $h$ and central block width $b$ is formed by a cent
     \node[below,color=blue] at (-2.3,0) {$-h-\frac{b}{2}$};
     \node[below,color=blue] at (2.3,0) {$h+\frac{b}{2}$};
 \end{tikzpicture}\end{center}
-%TODO formula
-%TODO decomposition
-%TODO convolution of square,square, +link to proof
+\[
+    \Trapezoid{h}{b}(x) = \begin{cases}
+        x - (h + \frac{b}{2}) & x \in \left[ - (h + \frac{b}{2}), -\frac{b}{2} \right] \\
+        h & x \in \left[ -\frac{b}{2}, \frac{b}{2} \right] \\
+        (h + \frac{b}{2}) - x & x \in \left[ \frac{b}{2}, h + \frac{b}{2} \right] \\
+        0 & \text{otherwise}
+    \end{cases}
+\]
+A trapezoid is symetric:
+\[ \Reversed{\Trapezoid{h}{b}}(x) = \Trapezoid{h}{b}(-x) = \Trapezoid{h}{b}(x) \]
+A trapezoid can be decomposed into an indicator function and two triangles:
+\[ \Trapezoid{h}{b} = \Shifted{-(h+\frac{b}{2})}{\PositiveTriangle{h}} + h \times \Indicator{b} + \Shifted{h+\frac{b}{2}}{\NegativeTriangle{h}} \]
+A trapezoid is the resulting shape of a convolution of two rectangles (see~\ref{proof_convolution_indicator_indicator}):
+\[ \Indicator{a} \Convolution \Indicator{b} = \Trapezoid{\min(a,b)}{|a - b|} \]
 
 \section{Convolution shapes}
 
 \section{Proofs}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Convolution of indicator with indicator}\label{proof_convolution_indicator_indicator}
+
+We want to compute the formula for:
+\[ \begin{split}
+    C_{a,b}(x) = \left[ \Indicator{a} \Convolution \Indicator{b} \right] (x) & = \ConvolutionInt{\Indicator{a}(x-t) \Indicator{b}(t)}{t} \\
+    & = \ConvolutionInt{\Indicator{a}(t-x) \Indicator{b}(t)}{t} \\
+    & = \ConvolutionInt{\Shifted{x}{\Indicator{a}}(t) \Indicator{b}(t)}{t}
+\end{split} \]
+$C_{a,b}(x)$ is symmetric:
+\[ \Reversed{\Indicator{a} \Convolution \Indicator{b}} = \Reversed{\Indicator{a}} \Convolution \Reversed{\Indicator{b}} = \Indicator{a} \Convolution \Indicator{b} \]
+By using the commutativity of the convolution, $C_{a,b}(x) = C_{\min(a,b),\max(a,b)}(x)$.
+Thus we can compute $C_{a,b}(x)$ for only $x \ge 0$ and $a \le b$, and extend to the whole domain using symmetries.
+$C_{a,b}(x)$ is the width of the intersection between two rectangles: one of width $b$ centered on $0$, the other of width $a$ centered on $x$.
+In the following pictures $\Indicator{a}$ is in red and $\Indicator{b}$ is in blue.
+
+\paragraph{No overlap}
+$x - \frac{a}{2} \ge \frac{b}{2} \Equiv x \ge \frac{a+b}{2}$.
+$C_{a,b}(x) = 0$.
+
+\begin{center}\begin{tikzpicture}
+    % Grid, axis, ticks
+    \draw[very thin,color=gray] (-3.5,-0.5) grid (4.5,1.7);
+    \draw[->] (-3.5,0) -- (4.5,0) node[right] {$x$};
+    \draw[->] (0,-0.5) -- (0,1.7);
+    \node[below right] at (0,0) {$0$};
+    \node[below right] at (0,1) {$1$};
+    \node[below right] at (1,0) {$1$};
+    % B
+    \draw[color=blue] (-1.5,0) -- (-1.5,1) -- (1.5,1) -- (1.5,0);
+    \node[below,color=blue] at (-1.5,0) {$-\frac{b}{2}$};
+    \node[below,color=blue] at (1.5,0) {$\frac{b}{2}$};
+    % A
+    \draw[color=red] (2.5,0) -- (2.5,1) -- (3.5,1) -- (3.5,0);
+    \draw[dashed,color=red] (2.5,0) -- (2.5,-0.5) node[below,color=red] {$x-\frac{a}{2}$};
+    \draw[dashed,color=red] (3.5,0) -- (3.5,-0.5) node[below,color=red] {$x+\frac{a}{2}$};
+\end{tikzpicture}\end{center}
+
+\paragraph{Partial overlap}
+$x - \frac{a}{2} \le \frac{b}{2} \le x + \frac{a}{2} \Equiv x \in \left[ \frac{b-a}{2}, \frac{a+b}{2} \right]$.
+\begin{center}\begin{tikzpicture}
+    % Grid, axis, ticks
+    \draw[very thin,color=gray] (-3.5,-0.5) grid (4.5,1.7);
+    \draw[->] (-3.5,0) -- (4.5,0) node[right] {$x$};
+    \draw[->] (0,-0.5) -- (0,1.7);
+    \node[below right] at (0,0) {$0$};
+    \node[below right] at (0,1) {$1$};
+    \node[below right] at (1,0) {$1$};
+    % B
+    \draw[color=blue] (-1.5,0) -- (-1.5,1) -- (1.5,1) -- (1.5,0);
+    \node[below,color=blue] at (-1.5,0) {$-\frac{b}{2}$};
+    \node[below,color=blue] at (1.5,0) {$\frac{b}{2}$};
+    % A
+    \draw[color=red] (1,0) -- (1,1) -- (2,1) -- (2,0);
+    \draw[dashed,color=red] (1,0) -- (1,-0.5) node[below,color=red] {$x-\frac{a}{2}$};
+    \draw[dashed,color=red] (2,0) -- (2,-0.5) node[below,color=red] {$x+\frac{a}{2}$};
+\end{tikzpicture}\end{center}
+\[
+    C_{a,b}(x) =
+    \int_{x-\frac{a}{2}}^{\frac{b}{2}} 1 \mathrm{d}t =
+    \frac{b}{2} - (x - \frac{a}{2}) =
+    \frac{a+b}{2} - x
+\]
+
+\paragraph{Complete inclusion}
+$0 \le x \wedge x + \frac{a}{2} \le \frac{b}{2} \Equiv x \in \left[ 0, \frac{b-a}{2} \right] $
+\begin{center}\begin{tikzpicture}
+    % Grid, axis, ticks
+    \draw[very thin,color=gray] (-3.5,-0.5) grid (4.5,1.7);
+    \draw[->] (-3.5,0) -- (4.5,0) node[right] {$x$};
+    \draw[->] (0,-0.5) -- (0,1.7);
+    \node[below right] at (0,0) {$0$};
+    \node[below right] at (0,1) {$1$};
+    % B
+    \draw[color=blue] (-1.5,0) -- (-1.5,1) -- (1.5,1) -- (1.5,0);
+    \node[below,color=blue] at (-1.5,0) {$-\frac{b}{2}$};
+    \node[below,color=blue] at (1.5,0) {$\frac{b}{2}$};    \node[below right] at (1,0) {$1$};
+    % A
+    \draw[color=red] (0.3,0) -- (0.3,1) -- (1.3,1) -- (1.3,0);
+    \draw[dashed,color=red] (0.3,0) -- (0.3,-0.5) node[below,color=red] {$x-\frac{a}{2}$};
+    \draw[dashed,color=red] (1.3,0) -- (1.3,-0.5) node[below,color=red] {$x+\frac{a}{2}$};
+\end{tikzpicture}\end{center}
+\[ C_{a,b}(x) = \int_{x-\frac{a}{2}}^{x+\frac{a}{2}} 1 \mathrm{d}t = a \]
+
+If we summarize, for $x \ge 0$ and $a \le b$:
+\[ C_{a,b}(x) = \begin{cases}
+    a & x \in \left[ 0, \frac{b-a}{2} \right] \\
+    \frac{a+b}{2} - x & x \in \left[ \frac{b-a}{2}, \frac{a+b}{2} \right] \\
+    0 & x \ge \frac{a+b}{2}
+\end{cases} \]
+
+For any $x$, $a$ and $b$, using the following identities:
+\[ \min(a,b) + \max(a,b) = a + b \]
+\[ \max(a,b) - \min(a,b) = |a - b| \]
+\[ C_{a,b}(x) = C_{\min(a,b),\max(a,b)}(|x|) = \begin{cases}
+    \min(a,b) & |x| \in \left[0, \frac{|a-b|}{2} \right] \\    
+    \frac{a+b}{2} - |x| & |x| \in \left[ \frac{|a-b|}{2}, \frac{a+b}{2} \right] \\
+    0 & |x| \ge \frac{a+b}{2}
+\end{cases} \]
+
+By using $h = \min(a,b)$ and $l = |a-b|$, $a+b=2h+l$ and:
+\[ C_{a,b}(x) = \begin{cases}
+    h & |x| \in \left[0, \frac{l}{2} \right] \\    
+    h+\frac{l}{2} - |x| & |x| \in \left[ \frac{l}{2}, h+\frac{l}{2} \right] \\
+    0 & |x| \ge h+\frac{l}{2}
+\end{cases} = \Trapezoid{h}{l}(|x|) = \Trapezoid{h}{l}(x) \]
 
 \end{document}
