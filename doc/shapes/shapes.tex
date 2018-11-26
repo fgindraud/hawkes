@@ -308,6 +308,7 @@ $a \le b$:
 
 Slope of $4$-th component:
 \[ \frac{\D C_{a,b}^4(x)}{\D x} = \frac{\D(\frac{1}{6} (a+b-x) (x^2 + x(a+b) -2a^2-2b^2+2ab))}{\D x} = \frac{1}{2} (a^2+b^2-x^2) \]
+
 Slopes:
 \[ \left. \frac{\D(\frac{x^3}{6})}{\D x} \right|_{x=0} = 0 \]
 \[
@@ -333,12 +334,57 @@ By posing $A=\min(a,b)$ and $B=\max(a,b)$ we have the condensed formula:
 \end{cases} \]
 
 Proof in section~\ref{proof_convolution_triangle_pos_pos}.
-Convolution with of negative triangles is obtained using time inversion:
+Convolution of negative triangles is obtained using time inversion:
 \[
     \NegativeTriangle{a} \Convolution \NegativeTriangle{b} =
     \Reversed{\PositiveTriangle{a}} \Convolution \Reversed{\PositiveTriangle{b}} =
     \Reversed{\PositiveTriangle{a} \Convolution \PositiveTriangle{b}}
 \]
+
+\subsection{Convolution of negative triangle with positive triangle}
+\[ C_{a,b}(x) = \left[ \NegativeTriangle{a} \Convolution \PositiveTriangle{b} \right] (x) \]
+
+\paragraph{Case 1}
+$a \le b$:
+\begin{center}\begin{tikzpicture}
+    \GridAxis{-2.5}{4.5}{-0.5}{3.5}
+    \begin{scope}[color=blue]
+        \draw (FuncStart) -- (-1.5,0) coordinate(a) parabola (0,1) coordinate(b) -- (1.1,2.7) coordinate(c) parabola[bend at end] (2.6,0) coordinate(d) -- (FuncEnd);
+        \draw (a |- Origin) -- +(0,-0.1) node[below] {$-a$};
+        \draw (b) -- +(-0.1,0) node[left] {$\frac{a^3}{3}$};
+        \draw[dashed] (c) -- (c |- Origin) node[below] {$b-a$};
+        \draw[dashed] (c) -- (c -| Origin) node[left] {$a^2 \frac{3b-a}{6}$};
+        \node[below] at (d) {$b$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[ C_{a,b}(x) = \begin{cases}
+    0 & x \le -a \\
+    (x+a)^2 \frac{2a-x}{6} & x \in [-a, 0] \\
+    a^2 \frac{3x+2a}{6} & x \in [0, b-a] \\
+    (b-x)^2 \frac{x+2b}{6} & x \in [b-a, b] \\
+    0 & x \ge b
+\end{cases} \]
+
+Slope of $4$-th component:
+\[  \frac{\D C_{a,b}^4(x)}{\D x} = \frac{\D((b-x)^2 \frac{x+2b}{6})}{\D x} = \frac{1}{2}(x^2-b^2) \]
+
+Slopes:
+\[ \left. \frac{\D((x+a)^2 \frac{2a-x}{6})}{\D x} \right|_{x=-a} = 0 \]
+\[ \left. \frac{\D((x+a)^2 \frac{2a-x}{6})}{\D x} \right|_{x=0} = \frac{a^2}{2} = \left. \frac{\D(a^2 \frac{3x+2a}{6})}{\D x} \right|_{x=0} \]
+\[ \left. \frac{\D C_{a,b}^4(x)}{\D x} \right|_{x=b-a} \le 0 \]
+\[ \left. \frac{\D C_{a,b}^4(x)}{\D x} \right|_{x=b} = 0 \]
+
+\paragraph{Case 2}
+$a \ge b$:
+%TODO formula, shape
+
+\paragraph{Factorized}
+TODO
+%TODO
+
+Proof in section~\ref{proof_convolution_triangle_neg_pos}.
+Convolution with of positive triangle with negative triangles is obtained using commutativity.
+\[ \PositiveTriangle{a} \Convolution \NegativeTriangle{b} = \NegativeTriangle {b} \Convolution \PositiveTriangle{a} \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Proofs}
@@ -683,7 +729,7 @@ $C_{a,b}(x) = 0$.
     \end{scope}
     \begin{scope}[color=red] % A
         \draw (FuncStart) -- (-1.5,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
+        \draw[dashed] (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
         \draw[dashed] (a) -- (a-| Origin) node[right] {$a$};
         \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
     \end{scope}
@@ -700,7 +746,7 @@ $x \ge 0 \And x-a \le 0 \Equiv x \in [0, a]$.
     \end{scope}
     \begin{scope}[color=red] % A
         \draw (FuncStart) -- (-0.5,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
+        \draw[dashed] (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
         \draw[dashed] (a) -- (a-| Origin) node[right] {$a$};
         \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
         \draw (-0.1,0.7) -- +(0.2,0) node[right] {$x$};
@@ -725,7 +771,7 @@ $x-a \ge 0 \And x \le b \Equiv x \in [a, b]$.
     \end{scope}
     \begin{scope}[color=red] % A
         \draw (FuncStart) -- (0.4,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
+        \draw[dashed] (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
         \draw[dashed] (a) -- (a-| Origin) node[left] {$a$};
         \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
     \end{scope}
@@ -744,11 +790,11 @@ $x-a \le b \And x \ge b \Equiv x \in [b, a+b]$.
         \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
         \node[below] at (a |- Origin) {$b$};
         \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-        \draw[dashed] (1.5,1.2) -- (1.5,1.5) -- (0,1.5) node[left] {$x-a$};
+        \draw[dashed] (1.5,1.2) |- (0,1.5) node[left] {$x-a$};
     \end{scope}
     \begin{scope}[color=red] % A
         \draw (FuncStart) -- (1.5,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
+        \draw[dashed] (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
         \draw[dashed] (a) -- (a-| Origin) node[left] {$a$};
         \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
     \end{scope}
@@ -773,7 +819,7 @@ $C_{a,b}(x) = 0$.
     \end{scope}
     \begin{scope}[color=red] % A
         \draw (FuncStart) -- (2.2,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
+        \draw[dashed] (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
         \draw[dashed] (a) -- (a-| Origin) node[left] {$a$};
         \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
     \end{scope}
@@ -798,5 +844,120 @@ For any $(a,b)$, using the commutativity of convolution, min/max identities and 
 \end{cases} \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Convolution of negative triangle with positive triangle}\label{proof_convolution_triangle_neg_pos}
+\[ \begin{split}
+    C_{a,b}(x) = \left[ \NegativeTriangle{a} \Convolution \PositiveTriangle{b} \right] (x) & = \ConvolutionInt{\NegativeTriangle{a}(x-t) \PositiveTriangle{b}(t)}{t} \\
+    & = \ConvolutionInt{\PositiveTriangle{a}(t-x) \PositiveTriangle{b}(t)}{t} \\
+    & = \ConvolutionInt{\Shifted{x}{\PositiveTriangle{a}}(t) \PositiveTriangle{b}(t)}{t}
+\end{split} \]
+The convolution value is the area of the product between a positive triangle of origin $x$ and a positive triangle with origin $0$.
+In the following pictures $\PositiveTriangle{a}$ is in red and $\PositiveTriangle{b}$ is in blue.
 
+\subsubsection{Negative triangle smaller than positive triangle}
+$a \le b$.
+
+\paragraph{No overlap, left}
+$x+a \le 0 \Equiv x \le -a$.
+$C_{a,b}(x) = 0$.
+\begin{center}\begin{tikzpicture}
+    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$b$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (-1.5,0) coordinate(a) -- +(1.2,1.2) coordinate(b) -- +(1.2,0) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
+        \draw[dashed] (b) -- (b -| Origin) node[right] {$a$};
+        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+
+\paragraph{Partial left overlap}
+$x+a \ge 0 \And x \le 0 \Equiv x \in [-a,0]$.
+\begin{center}\begin{tikzpicture}
+    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$b$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (-0.5,0) coordinate(a) -- +(1.2,1.2) coordinate(b) -- +(1.2,0) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
+        \draw[dashed] (b) -- (b -| Origin) node[left] {$a$};
+        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
+        \draw (0.1,0.5) -- +(-0.2,0) node[left] {$-x$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[ \begin{split}
+    C_{a,b}(x) & = \int_0^{x+a} (-x+t) \times t \times \D t = \int_0^{x+a} (t^2 -xt) \D t \\
+    & =  \left[ \frac{t^3}{3} - \frac{xt^2}{2} \right]_0^{x+a} = (x+a)^2 (\frac{x+a}{3} - \frac{x}{2}) = (x+a)^2 \frac{2a-x}{6}
+\end{split} \]
+
+\paragraph{Complete inclusion}
+$0 \le x \And x+a \le b \Equiv x \in [0,b-a]$.
+\begin{center}\begin{tikzpicture}
+    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$b$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
+        \draw[dashed] (0.3,0) |- (0,0.3) node[left] {$x$};
+        \draw[dashed] (1.5,1.2) |- (0,1.5) node[left] {$x+a$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (0.3,0) coordinate(a) -- +(1.2,1.2) coordinate(b) -- +(1.2,0) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
+        \draw[dashed] (b) -- (b -| Origin) node[left] {$a$};
+        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[ \begin{split}
+    C_{a,b}(x) & = \int_0^a (x+t) \times t \times \D t = \int_0^a (t^2 + xt) \D t \\
+    & =  \left[ \frac{t^3}{3} + \frac{xt^2}{2} \right]_0^a = a^2 (\frac{a}{3} + \frac{x}{2}) = a^2 \frac{3x+2a}{6}
+\end{split} \]
+
+\paragraph{Partial right overlap}
+$x \le b \And x+a \ge b \Equiv x \in [b-a,b]$.
+\begin{center}\begin{tikzpicture}
+    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$b$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
+        \draw[dashed] (0.8,0) |- (0,0.8) node[left] {$x$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (0.8,0) coordinate(a) -- +(1.2,1.2) coordinate(b) -- +(1.2,0) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
+        \draw[dashed] (b) -- (b -| Origin) node[left] {$a$};
+        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[ \begin{split}
+    C_{a,b}(x) & = \int_0^{b-x} (x+t) \times t \times \D t = \int_0^{b-x} (t^2 + xt) \D t \\
+    & =  \left[ \frac{t^3}{3} + \frac{xt^2}{2} \right]_0^{b-x} = (b-x)^2 (\frac{b-x}{3} + \frac{x}{2}) = (b-x)^2 \frac{x+2b}{6}
+\end{split} \]
+
+\paragraph{No overlap, left}
+$x \le b$.
+$C_{a,b}(x) = 0$.
+\begin{center}\begin{tikzpicture}
+    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$b$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (2.1,0) coordinate(a) -- +(1.2,1.2) coordinate(b) -- +(1.2,0) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
+        \draw[dashed] (b) -- (b -| Origin) node[left] {$a$};
+        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \end{document}
