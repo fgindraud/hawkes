@@ -211,7 +211,7 @@ A trapezoid is the resulting shape of a convolution of two rectangles (see~\ref{
 \section{Complex convolution shapes}
 
 \subsection{Convolution of indicator with positive triangle}
-\[ C(x) = \left[ \Indicator{l} \Convolution \PositiveTriangle{c} \right] (x) \]
+\[ C_{l,c}(x) = \left[ \Indicator{l} \Convolution \PositiveTriangle{c} \right] (x) \]
 
 \paragraph{Case 1}
 $l \le c$.
@@ -227,7 +227,7 @@ $l \le c$.
         \draw (d) -- +(0,-0.1) node[below] {$c+\frac{l}{2}$};
     \end{scope}
 \end{tikzpicture}\end{center}
-\[ C(x) = \begin{cases}
+\[ C_{l,c}(x) = \begin{cases}
     0 & x \le -\frac{l}{2} \\
     \frac{1}{2} (x+\frac{l}{2})^2 & x \in \left[ -\frac{l}{2}, \frac{l}{2} \right] \\
     xl & x \in \left[ \frac{l}{2}, c-\frac{l}{2} \right] \\
@@ -252,7 +252,7 @@ $l \ge c$
         \draw (d) -- +(0,-0.1) node[below] {$c+\frac{l}{2}$};
     \end{scope}
 \end{tikzpicture}\end{center}
-\[ C(x) = \begin{cases}
+\[ C_{l,c}(x) = \begin{cases}
     0 & x \le -\frac{l}{2} \\
     \frac{1}{2} (x+\frac{l}{2})^2 & x \in \left[ -\frac{l}{2}, c-\frac{l}{2} \right] \\
     \frac{c^2}{2} & x \in \left[ c-\frac{l}{2}, \frac{l}{2} \right] \\
@@ -264,7 +264,7 @@ Slopes:
 
 \paragraph{Factorized}
 By posing $(a,b) = (\min(\frac{l}{2}, c-\frac{l}{2}), \max(\frac{l}{2}, c-\frac{l}{2}))$, we can use a condensed form for the convolution:
-\[  \left[ \Indicator{l} \Convolution \PositiveTriangle{c} \right] (x) = \begin{cases}
+\[ C_{l,c}(x) = \begin{cases}
     0 & x \le -\frac{l}{2} \\
     \frac{1}{2} (x+\frac{l}{2})^2 & x \in \left[ -\frac{l}{2}, a \right] \\
     xl & x \in \left[ a, b \right] \And l \le c \\
@@ -277,8 +277,67 @@ Proof is in section~\ref{proof_convolution_indicator_triangle}.
 Convolution with a negative triangle is obtained using time inversion:
 \[
     \Indicator{l} \Convolution \NegativeTriangle{c} =
-    \Reversed{\Indicator{l}} \Convolution \Reversed{\PositiveTriangle{-c}} =
-    \Reversed{\Indicator{l} \Convolution \PositiveTriangle{-c}}
+    \Reversed{\Indicator{l}} \Convolution \Reversed{\PositiveTriangle{c}} =
+    \Reversed{\Indicator{l} \Convolution \PositiveTriangle{c}}
+\]
+
+\subsection{Convolution of positive triangle with positive triangle}
+\[ C_{a,b}(x) = \left[ \PositiveTriangle{a} \Convolution \PositiveTriangle{b} \right] (x) \]
+
+\paragraph{Case 1}
+$a \le b$:
+\begin{center}\begin{tikzpicture}
+    \GridAxis{-1.5}{6.5}{-0.5}{3.5}
+    \begin{scope}[color=blue]
+        \draw (FuncStart) -- (Origin) parabola (1.9,1.2) coordinate(a) -- (2.6,2.2) coordinate(b) parabola bend (3.2,2.6) (4.5,0) coordinate(d) -- (FuncEnd);
+        \draw[dashed] (a) -- (a |- Origin) -- +(0,-0.1) node[below] {$a$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$\frac{a^3}{6}$};
+        \draw[dashed] (b) -- (b |- Origin) node[below] {$b$};
+        \draw[dashed] (b) -- (b -| Origin) node[left] {$a^2 \frac{3b-2a}{6}$};
+        \draw[dashed] (3.2,2.6) -- (3.2,-0.4) node[below] {$\sqrt{a^2+b^2}$};
+        \node[below] at (d) {$a+b$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[ C_{a,b}(x) = \begin{cases}
+    0 & x \le 0 \\
+    \frac{x^3}{6} & x \in [0, a] \\
+    a^2 \frac{3x-2a}{6} & x \in [a, b] \\
+    \frac{1}{6} (a+b-x) (x^2 + x(a+b) -2a^2-2b^2+2ab) & x \in [b, a+b] \\
+    0 & x \ge a+b
+\end{cases} \]
+
+Slope of $4$-th component:
+\[ \frac{\D C_{a,b}^4(x)}{\D x} = \frac{\D(\frac{1}{6} (a+b-x) (x^2 + x(a+b) -2a^2-2b^2+2ab))}{\D x} = \frac{1}{2} (a^2+b^2-x^2) \]
+Slopes:
+\[ \left. \frac{\D(\frac{x^3}{6})}{\D x} \right|_{x=0} = 0 \]
+\[
+    \frac{a^2}{2} =
+    \left. \frac{\D(\frac{x^3}{6})}{\D x} \right|_{x\in [a,b]} =
+    \left. \frac{\D(a^2 \frac{3x-2a}{6})}{\D x} \right|_{x=a} =
+    \left. \frac{\D C_{a,b}^4(x)}{\D x} \right|_{x=b}
+\]
+\[ \left. \frac{\D C_{a,b}^4(x)}{\D x} \right|_{x=\sqrt{a^2+b^2}} = 0 \]
+
+\paragraph{Case 2}
+$a \ge b$.
+$C_{a,b}(x) = C_{b,a}(x)$, so this is the same shape and formula as case 1 with a swap of $a$ and $b$.
+
+\paragraph{Factorized}
+By posing $A=\min(a,b)$ and $B=\max(a,b)$ we have the condensed formula:
+\[ C_{a,b}(x) = \begin{cases}
+    0 & x \le 0 \\
+    \frac{x^3}{6} & x \in [0, A] \\
+    A^2 \frac{3x-2A}{6} & x \in [A, B] \\
+    \frac{1}{6} (a+b-x) (x^2 + x(a+b) -2a^2-2b^2+2ab) & x \in [B, a+b] \\
+    0 & x \ge a+b
+\end{cases} \]
+
+Proof in section~\ref{proof_convolution_triangle_pos_pos}.
+Convolution with of negative triangles is obtained using time inversion:
+\[
+    \NegativeTriangle{a} \Convolution \NegativeTriangle{b} =
+    \Reversed{\PositiveTriangle{a}} \Convolution \Reversed{\PositiveTriangle{b}} =
+    \Reversed{\PositiveTriangle{a} \Convolution \PositiveTriangle{b}}
 \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -390,11 +449,13 @@ By using $h = \min(a,b)$ and $l = |a-b|$, $a+b=2h+l$ and:
     & = \ConvolutionInt{\Indicator{l}(t-x) \PositiveTriangle{c}(t)}{t} \\
     & = \ConvolutionInt{\Shifted{x}{\Indicator{l}}(t) \PositiveTriangle{c}(t)}{t}
 \end{split} \]
+Thus the convolution value is the area of the product between a rectangle centered on $x$ and a positive triangle with origin $0$.
+In the following pictures $\Indicator{l}$ is in red and $\PositiveTriangle{c}$ is in blue.
 
 \subsubsection{Rectangle is smaller than triangle}
 $l \le c$.
 
-\paragraph{Case 1: No overlap, left}
+\paragraph{No overlap, left}
 $x+\frac{l}{2} \le 0 \Equiv x \le -\frac{l}{2}$.
 $C_{l,c}(x) = 0$.
 \begin{center}\begin{tikzpicture}
@@ -411,7 +472,7 @@ $C_{l,c}(x) = 0$.
     \end{scope}
 \end{tikzpicture}\end{center}
 
-\paragraph{Case 2: Partial left overlap}
+\paragraph{Partial left overlap}
 $x+\frac{l}{2} \ge 0 \And x-\frac{l}{2} \le 0 \Equiv x \in \left[ -\frac{l}{2}, \frac{l}{2} \right]$.
 \begin{center}\begin{tikzpicture}
     \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
@@ -433,7 +494,7 @@ $x+\frac{l}{2} \ge 0 \And x-\frac{l}{2} \le 0 \Equiv x \in \left[ -\frac{l}{2}, 
     \frac{1}{2} (x+\frac{l}{2})^2
 \]
 
-\paragraph{Case 3: Complete inclusion}
+\paragraph{Complete inclusion}
 $x-\frac{l}{2} \ge 0 \And x+\frac{l}{2} \le c \Equiv x \in \left[ \frac{l}{2}, c-\frac{l}{2} \right]$.
 \begin{center}\begin{tikzpicture}
     \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
@@ -456,7 +517,7 @@ $x-\frac{l}{2} \ge 0 \And x+\frac{l}{2} \le c \Equiv x \in \left[ \frac{l}{2}, c
     xl
 \]
 
-\paragraph{Case 4: Partial right overlap}
+\paragraph{Partial right overlap}
 $x-\frac{l}{2} \le c \And x+\frac{l}{2} \ge c \Equiv x \in \left[ c-\frac{l}{2}, c+\frac{l}{2} \right]$.
 \begin{center}\begin{tikzpicture}
     \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
@@ -478,7 +539,7 @@ $x-\frac{l}{2} \le c \And x+\frac{l}{2} \ge c \Equiv x \in \left[ c-\frac{l}{2},
     \frac{1}{2} (c^2 - (x-\frac{l}{2})^2)
 \]
 
-\paragraph{Case 5: No overlap, right}
+\paragraph{No overlap, right}
 $x-\frac{l}{2} \ge c \Equiv x \ge c+\frac{l}{2}$.
 $C_{l,c}(x) = 0$.
 \begin{center}\begin{tikzpicture}
@@ -498,7 +559,7 @@ $C_{l,c}(x) = 0$.
 \subsubsection{Rectangle is bigger than triangle}
 $l \ge c$.
 
-\paragraph{Case 1: No overlap, left}
+\paragraph{No overlap, left}
 $x+\frac{l}{2} \le 0 \Equiv x \le -\frac{l}{2}$.
 $C_{l,c}(x) = 0$.
 \begin{center}\begin{tikzpicture}
@@ -515,7 +576,7 @@ $C_{l,c}(x) = 0$.
     \end{scope}
 \end{tikzpicture}\end{center}
 
-\paragraph{Case 2: Partial left overlap}
+\paragraph{Partial left overlap}
 $x+\frac{l}{2} \ge 0 \And x+\frac{l}{2} \le c \Equiv x \in \left[ -\frac{l}{2}, c-\frac{l}{2} \right]$.
 \begin{center}\begin{tikzpicture}
     \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
@@ -537,7 +598,7 @@ $x+\frac{l}{2} \ge 0 \And x+\frac{l}{2} \le c \Equiv x \in \left[ -\frac{l}{2}, 
     \frac{1}{2} (x+\frac{l}{2})^2
 \]
 
-\paragraph{Case 3: Complete inclusion}
+\paragraph{Complete inclusion}
 $x-\frac{l}{2} \le 0 \And x+\frac{l}{2} \ge c \Equiv x \in \left[ c-\frac{l}{2}, \frac{l}{2} \right]$.
 \begin{center}\begin{tikzpicture}
     \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
@@ -559,7 +620,7 @@ $x-\frac{l}{2} \le 0 \And x+\frac{l}{2} \ge c \Equiv x \in \left[ c-\frac{l}{2},
     \frac{c^2}{2}
 \]
 
-\paragraph{Case 4: Partial right overlap}
+\paragraph{Partial right overlap}
 $0 \le x-\frac{l}{2} \le c \Equiv x \in \left[ \frac{l}{2}, c+\frac{l}{2} \right]$.
 \begin{center}\begin{tikzpicture}
     \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
@@ -581,7 +642,7 @@ $0 \le x-\frac{l}{2} \le c \Equiv x \in \left[ \frac{l}{2}, c+\frac{l}{2} \right
     \frac{1}{2} (c^2 - (x-\frac{l}{2})^2)
 \]
 
-\paragraph{Case 5: No overlap, right}
+\paragraph{No overlap, right}
 $x-\frac{l}{2} \ge c \Equiv x \ge c+\frac{l}{2}$.
 $C_{l,c}(x) = 0$.
 \begin{center}\begin{tikzpicture}
@@ -597,5 +658,145 @@ $C_{l,c}(x) = 0$.
         \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
     \end{scope}
 \end{tikzpicture}\end{center}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Convolution of positive triangle with positive triangle}\label{proof_convolution_triangle_pos_pos}
+\[ \begin{split}
+    C_{a,b}(x) = \left[ \PositiveTriangle{a} \Convolution \PositiveTriangle{b} \right] (x) & = \ConvolutionInt{\PositiveTriangle{a}(x-t) \PositiveTriangle{b}(t)}{t} \\
+    & = \ConvolutionInt{\NegativeTriangle{a}(t-x) \PositiveTriangle{b}(t)}{t} \\
+    & = \ConvolutionInt{\Shifted{x}{\NegativeTriangle{a}}(t) \PositiveTriangle{b}(t)}{t}
+\end{split} \]
+By using the commutativity of the convolution, $C_{a,b}(x) = C_{\min(a,b),\max(a,b)}(x)$.
+Thus we can compute $C_{a,b}(x)$ for only $a \le b$, and extend to the whole domain using symmetry.
+The convolution value is the area of the product between a negative triangle of origin $x$ and a positive triangle with origin $0$.
+In the following pictures $\NegativeTriangle{a}$ is in red and $\PositiveTriangle{b}$ is in blue.
+
+\paragraph{No overlap, left}
+$x \le 0$.
+$C_{a,b}(x) = 0$.
+\begin{center}\begin{tikzpicture}
+    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$b$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (-1.5,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
+        \draw[dashed] (a) -- (a-| Origin) node[right] {$a$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+
+\paragraph{Partial left overlap}
+$x \ge 0 \And x-a \le 0 \Equiv x \in [0, a]$.
+\begin{center}\begin{tikzpicture}
+    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$b$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (-0.5,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
+        \draw[dashed] (a) -- (a-| Origin) node[right] {$a$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
+        \draw (-0.1,0.7) -- +(0.2,0) node[right] {$x$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[
+    C_{a,b}(x) =
+    \int_0^x (x-t) \times t \times \D t =
+    \left[  \frac{xt^2}{2} - \frac{t^3}{3} \right]_0^x =
+    \frac{x^3}{6}
+\]
+
+\paragraph{Complete inclusion}
+$x-a \ge 0 \And x \le b \Equiv x \in [a, b]$.
+\begin{center}\begin{tikzpicture}
+    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$b$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
+        \draw[dashed] (0.4,0.4) -- (0,0.4) node[left] {$x-a$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (0.4,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
+        \draw[dashed] (a) -- (a-| Origin) node[left] {$a$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[ \begin{split}
+    C_{a,b}(x) & = \int_0^a (a-t) \times (t+x-a) \times \D t = \int_0^a (-t^2 +t(2a-x) +a(x-a)) \D t \\
+    & =  \left[  -\frac{t^3}{3} + \frac{t^2}{2}(2a-x) +ta(x-a) \right]_0^a = a^2 \left( -\frac{a}{3}+\frac{2a-x}{2}+x-a \right) \\
+    & = a^2 \frac{3x-2a}{6}
+\end{split} \]
+
+\paragraph{Partial right overlap}
+$x-a \le b \And x \ge b \Equiv x \in [b, a+b]$.
+\begin{center}\begin{tikzpicture}
+    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$b$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
+        \draw[dashed] (1.5,1.2) -- (1.5,1.5) -- (0,1.5) node[left] {$x-a$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (1.5,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
+        \draw[dashed] (a) -- (a-| Origin) node[left] {$a$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[ \begin{split}
+    C_{a,b}(x) & = \int_0^{a+b-x} (a-t) \times (t+x-a) \times \D t \\
+    & = \int_0^{a+b-x} (-t^2 +t(2a-x) +a(x-a)) \D t \\
+    & =  \left[  -\frac{t^3}{3} + \frac{t^2}{2}(2a-x) +ta(x-a) \right]_0^{a+b-x} \\
+    & =(a+b-x) \left( -\frac{(a+b-x)^2}{3}+\frac{1}{2}(2a-x)(a+b-x)+a(x-a) \right) \\
+    & = \frac{1}{6} (a+b-x) (x^2 + x(a+b) -2a^2-2b^2+2ab)
+\end{split} \]
+
+\paragraph{No overlap, right}
+$x-a \ge b \Equiv x \ge a+b$.
+$C_{a,b}(x) = 0$.
+\begin{center}\begin{tikzpicture}
+    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$b$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (2.2,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
+        \draw[dashed] (a) -- (a-| Origin) node[left] {$a$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+
+If we summarize, for $a \le b$:
+\[ C_{a,b}(x) = \begin{cases}
+    0 & x \le 0 \\
+    \frac{x^3}{6} & x \in [0, a] \\
+    a^2 \frac{3x-2a}{6} & x \in [a, b] \\
+    \frac{1}{6} (a+b-x) (x^2 + x(a+b) -2a^2-2b^2+2ab) & x \in [b, a+b] \\
+    0 & x \ge a+b
+\end{cases} \]
+
+For any $(a,b)$, using the commutativity of convolution, min/max identities and posing $A=\min(a,b)$ and $B=\max(a,b)$:
+\[ C_{a,b}(x) = \begin{cases}
+    0 & x \le 0 \\
+    \frac{x^3}{6} & x \in [0, A] \\
+    A^2 \frac{3x-2A}{6} & x \in [A, B] \\
+    \frac{1}{6} (a+b-x) (x^2 + x(a+b) -2a^2-2b^2+2ab) & x \in [B, a+b] \\
+    0 & x \ge a+b
+\end{cases} \]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \end{document}
