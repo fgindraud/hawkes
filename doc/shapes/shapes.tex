@@ -307,7 +307,6 @@ In the following pictures $\Indicator{a}$ is in red and $\Indicator{b}$ is in bl
 \paragraph{No overlap}
 $x - \frac{a}{2} \ge \frac{b}{2} \Equiv x \ge \frac{a+b}{2}$.
 $C_{a,b}(x) = 0$.
-
 \begin{center}\begin{tikzpicture}
     \SizedGridAxis{-3.5}{4.5}{-0.5}{1.7}
     \begin{scope}[color=blue] % B
@@ -386,7 +385,217 @@ By using $h = \min(a,b)$ and $l = |a-b|$, $a+b=2h+l$ and:
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Convolution of indicator with positive triangle}\label{proof_convolution_indicator_triangle}
+\[ \begin{split}
+    C_{l,c}(x) = \left[ \Indicator{l} \Convolution \PositiveTriangle{c} \right] (x) & = \ConvolutionInt{\Indicator{l}(x-t) \PositiveTriangle{c}(t)}{t} \\
+    & = \ConvolutionInt{\Indicator{l}(t-x) \PositiveTriangle{c}(t)}{t} \\
+    & = \ConvolutionInt{\Shifted{x}{\Indicator{l}}(t) \PositiveTriangle{c}(t)}{t}
+\end{split} \]
 
-%TODO proof
+\subsubsection{Rectangle is smaller than triangle}
+$l \le c$.
+
+\paragraph{Case 1: No overlap, left}
+$x+\frac{l}{2} \le 0 \Equiv x \le -\frac{l}{2}$.
+$C_{l,c}(x) = 0$.
+\begin{center}\begin{tikzpicture}
+    \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$c$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (-1.5,0) coordinate(a) -- +(0,1) -- +(1,1) -- +(1,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+
+\paragraph{Case 2: Partial left overlap}
+$x+\frac{l}{2} \ge 0 \And x-\frac{l}{2} \le 0 \Equiv x \in \left[ -\frac{l}{2}, \frac{l}{2} \right]$.
+\begin{center}\begin{tikzpicture}
+    \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$c$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (-0.5,0) coordinate(a) -- +(0,1) -- +(1,1) -- +(1,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[
+    C_{l,c}(x) =
+    \int_0^{x+\frac{l}{2}} 1 \times t \times \D t =
+    \left[  \frac{t^2}{2} \right]_0^{x+\frac{l}{2}} =
+    \frac{1}{2} (x+\frac{l}{2})^2
+\]
+
+\paragraph{Case 3: Complete inclusion}
+$x-\frac{l}{2} \ge 0 \And x+\frac{l}{2} \le c \Equiv x \in \left[ \frac{l}{2}, c-\frac{l}{2} \right]$.
+\begin{center}\begin{tikzpicture}
+    \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$c$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
+        \draw[dashed] (0.5,0.5) -- (0,0.5) node[left] {$x-\frac{l}{2}$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (0.5,0) coordinate(a) -- +(0,1) -- +(1,1) -- +(1,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[
+    C_{l,c}(x) =
+    \int_0^l 1 \times (t+x-\frac{l}{2}) \D t =
+    \left[  \frac{t^2}{2}+t(x-\frac{l}{2}) \right]_0^l =
+    xl
+\]
+
+\paragraph{Case 4: Partial right overlap}
+$x-\frac{l}{2} \le c \And x+\frac{l}{2} \ge c \Equiv x \in \left[ c-\frac{l}{2}, c+\frac{l}{2} \right]$.
+\begin{center}\begin{tikzpicture}
+    \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$c$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (1.4,0) coordinate(a) -- +(0,1) -- +(1,1) -- +(1,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[
+    C_{l,c}(x) =
+    \int_{x-\frac{l}{2}}^c 1 \times t \times \D t =
+    \left[  \frac{t^2}{2} \right]_{x-\frac{l}{2}}^c =
+    \frac{1}{2} (c^2 - (x-\frac{l}{2})^2)
+\]
+
+\paragraph{Case 5: No overlap, right}
+$x-\frac{l}{2} \ge c \Equiv x \ge c+\frac{l}{2}$.
+$C_{l,c}(x) = 0$.
+\begin{center}\begin{tikzpicture}
+    \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$c$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (2.1,0) coordinate(a) -- +(0,1) -- +(1,1) -- +(1,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+
+\subsubsection{Rectangle is bigger than triangle}
+$l \ge c$.
+
+\paragraph{Case 1: No overlap, left}
+$x+\frac{l}{2} \le 0 \Equiv x \le -\frac{l}{2}$.
+$C_{l,c}(x) = 0$.
+\begin{center}\begin{tikzpicture}
+    \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.5,1.5) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$c$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (-2.5,0) coordinate(a) -- +(0,1) -- +(2,1) -- +(2,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+
+\paragraph{Case 2: Partial left overlap}
+$x+\frac{l}{2} \ge 0 \And x+\frac{l}{2} \le c \Equiv x \in \left[ -\frac{l}{2}, c-\frac{l}{2} \right]$.
+\begin{center}\begin{tikzpicture}
+    \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.5,1.5) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$c$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (-1.5,0) coordinate(a) -- +(0,1) -- +(2,1) -- +(2,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[
+    C_{l,c}(x) =
+    \int_0^{x+\frac{l}{2}} 1 \times t \times \D t =
+    \left[  \frac{t^2}{2} \right]_0^{x+\frac{l}{2}} =
+    \frac{1}{2} (x+\frac{l}{2})^2
+\]
+
+\paragraph{Case 3: Complete inclusion}
+$x-\frac{l}{2} \le 0 \And x+\frac{l}{2} \ge c \Equiv x \in \left[ c-\frac{l}{2}, \frac{l}{2} \right]$.
+\begin{center}\begin{tikzpicture}
+    \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.5,1.5) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$c$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (-0.2,0) coordinate(a) -- +(0,1) -- +(2,1) -- +(2,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[
+    C_{l,c}(x) =
+    \int_0^c 1 \times t \times \D t =
+    \left[  \frac{t^2}{2} \right]_0^c =
+    \frac{c^2}{2}
+\]
+
+\paragraph{Case 4: Partial right overlap}
+$0 \le x-\frac{l}{2} \le c \Equiv x \in \left[ \frac{l}{2}, c+\frac{l}{2} \right]$.
+\begin{center}\begin{tikzpicture}
+    \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.5,1.5) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$c$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (0.5,0) coordinate(a) -- +(0,1) -- +(2,1) -- +(2,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[
+    C_{l,c}(x) =
+    \int_{x-\frac{l}{2}}^c 1 \times t \times \D t =
+    \left[  \frac{t^2}{2} \right]_{x-\frac{l}{2}}^c =
+    \frac{1}{2} (c^2 - (x-\frac{l}{2})^2)
+\]
+
+\paragraph{Case 5: No overlap, right}
+$x-\frac{l}{2} \ge c \Equiv x \ge c+\frac{l}{2}$.
+$C_{l,c}(x) = 0$.
+\begin{center}\begin{tikzpicture}
+    \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
+    \begin{scope}[color=blue] % B
+        \draw (FuncStart) -- (0,0) -- (1.5,1.5) coordinate(a) |- (FuncEnd);
+        \node[below] at (a |- Origin) {$c$};
+        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
+    \end{scope}
+    \begin{scope}[color=red] % A
+        \draw (FuncStart) -- (1.8,0) coordinate(a) -- +(0,1) -- +(2,1) -- +(2,0) coordinate(b) -- (FuncEnd);
+        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
+        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
+    \end{scope}
+\end{tikzpicture}\end{center}
 
 \end{document}
