@@ -282,37 +282,35 @@ inline auto convolution (const NegativeTriangle & lhs, const IntervalIndicator &
 	return convolution (rhs, lhs);
 }
 
-/* Convolution between PositiveTriangle(side=l) and PositiveTriangle(side=c).
+/* Convolution between PositiveTriangle(side=a) and PositiveTriangle(side=b).
  */
 struct ConvolutionPositiveTrianglePositiveTriangle {
-	int32_t l;
-	int32_t c;
-	// Precompute values
-	ClosedInterval<int32_t> central_section;
+	// Precompute values (definitions in the shape doc)
+	int32_t a_plus_b;
+	int32_t A;
+	int32_t B;
+	int64_t polynom_constant;
 
-	ConvolutionPositiveTrianglePositiveTriangle (int32_t l, int32_t c) : l (l), c (c) {
-		const auto p = std::minmax (0, c - l);
-		central_section = {p.first, p.second};
+	ConvolutionPositiveTrianglePositiveTriangle (int32_t a, int32_t b) {
+		a_plus_b = a + b;
+		std::tie (A, B) = std::minmax (a, b);
+		// Polynom constant used for cubic right part = -2a^2 -2b^2 + 2ab.
+		polynom_constant = 2 * (3 * int64_t (a) * int64_t (b) - square (a_plus_b));
 	}
 
-	ClosedInterval<Point> non_zero_domain () const { return {-l, c}; }
+	ClosedInterval<Point> non_zero_domain () const { return {0, a_plus_b}; }
 	double operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
-		if (x.value < central_section.from) {
+		if (x.value < A) {
 			// Cubic left part
-			return double(square (x.value + l)) * double(2 * l - x.value) / 6.;
-		} else if (x.value > central_section.to) {
+			return double(square (x.value)) * double(x.value) / 6.;
+		} else if (x.value > B) {
 			// Cubic right part
-			return double(square (c - x.value)) * double(2 * c + x.value) / 6.;
+			const int64_t polynom = int64_t (x.value) * int64_t (x.value + a_plus_b) + polynom_constant;
+			return double(a_plus_b - x.value) * double(polynom) / 6.;
 		} else {
-			// Central section has two behaviors depending on l <=> c
-			if (l < c) {
-				// Linear central part for [0, c - l].
-				return double(square (l)) * double(2 * l + 3 * x.value) / 6.;
-			} else {
-				// Linear central part for [c - l, 0].
-				return double(square (c)) * double(2 * c - 3 * x.value) / 6.;
-			}
+			// Central section has one formula using A=min(a,b)
+			return double(square (A)) * double(3 * x.value - 2 * A) / 6.;
 		}
 	}
 	double operator() (Point x) const {
@@ -328,42 +326,36 @@ inline auto convolution (const NegativeTriangle & lhs, const NegativeTriangle & 
 	return reversed (convolution (PositiveTriangle{lhs.side}, PositiveTriangle{rhs.side}));
 }
 
-/* Convolution between NegativeTriangle(side=l) and PositiveTriangle(side=c).
+/* Convolution between NegativeTriangle(side=a) and PositiveTriangle(side=b).
  */
 struct ConvolutionNegativeTrianglePositiveTriangle {
-	int32_t l;
-	int32_t c;
+	int32_t a;
+	int32_t b;
 	// Precompute values
-	int32_t c_plus_l;
-	ClosedInterval<int32_t> central_section;
-	int64_t polynom_constant;
+	int32_t A;
+	int32_t B;
 
-	ConvolutionNegativeTrianglePositiveTriangle (int32_t l, int32_t c) : l (l), c (c) {
-		c_plus_l = c + l;
-		const auto p = std::minmax (l, c);
-		central_section = {p.first, p.second};
-		// Polynom constant used for cubic right part = 2*(c*l - l^2 - c^2)
-		polynom_constant = 2 * (3 * int64_t (c) * int64_t (l) - square (c_plus_l));
+	ConvolutionNegativeTrianglePositiveTriangle (int32_t a, int32_t b) : a (a), b (b) {
+		std::tie (A, B) = std::minmax (0, b - a);
 	}
 
-	ClosedInterval<Point> non_zero_domain () const { return {0, c_plus_l}; }
+	ClosedInterval<Point> non_zero_domain () const { return {-a, b}; }
 	double operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
-		if (x.value < central_section.from) {
+		if (x.value < A) {
 			// Cubic left part
-			return double(square (x.value)) * double(x.value) / 6.;
-		} else if (x.value > central_section.to) {
+			return double(square (x.value + a)) * double(2 * a - x.value) / 6.;
+		} else if (x.value > B) {
 			// Cubic right part
-			const int64_t polynom = int64_t (x.value) * int64_t (x.value + c_plus_l) + polynom_constant;
-			return double(c_plus_l - x.value) * double(polynom) / 6.;
+			return double(square (b - x.value)) * double(2 * b + x.value) / 6.;
 		} else {
-			// Central section has two behaviors depending on l <=> c
-			if (l < c) {
-				// Linear central part for [l, c].
-				return double(square (l)) * double(3 * x.value - 2 * l) / 6.;
+			// Central section has two behaviors depending on a <=> b
+			if (a < b) {
+				// Linear central part for [0, b-a].
+				return double(square (a)) * double(2 * a + 3 * x.value) / 6.;
 			} else {
-				// Linear central part for [c, l].
-				return double(square (c)) * double(3 * x.value - 2 * c) / 6.;
+				// Linear central part for [b-a, 0].
+				return double(square (b)) * double(2 * b - 3 * x.value) / 6.;
 			}
 		}
 	}
@@ -378,6 +370,4 @@ inline auto convolution (const NegativeTriangle & lhs, const PositiveTriangle & 
 inline auto convolution (const PositiveTriangle & lhs, const NegativeTriangle & rhs) {
 	return convolution (rhs, lhs);
 }
-
-// FIXME Convolution* formula are likely to be wrong !
 } // namespace shape

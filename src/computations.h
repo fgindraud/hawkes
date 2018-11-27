@@ -322,8 +322,6 @@ inline auto to_shape (IntervalKernel kernel) {
 	return shape::IntervalIndicator::with_width (kernel.width);
 }
 
-template <typename T> struct DT;
-
 inline double compute_b_mlk_histogram (const SortedVec<Point> & m_process, const SortedVec<Point> & l_process,
                                        HistogramBase::Interval base_interval, IntervalKernel m_kernel,
                                        IntervalKernel l_kernel) {
@@ -337,12 +335,6 @@ inline double compute_b_mlk_histogram (const SortedVec<Point> & m_process, const
 	const auto a = convolution (component (trapezoid, shape::Trapezoid::LeftTriangle{}), phi_k);
 	const auto b = convolution (component (trapezoid, shape::Trapezoid::CentralBlock{}), phi_k);
 	const auto c = convolution (component (trapezoid, shape::Trapezoid::RightTriangle{}), phi_k);
-
-	/*
-	DT<decltype (a)> at;
-	DT<decltype (b)> bt;
-	DT<decltype (c)> ct;
-	*/
 
 	// b_mlk = sum_{x_m in N_m, x_l in N_l} convolution(w_m,w_l,phi_k)(x_m - x_l)
 	// Split the sum into separate sums for each component.
