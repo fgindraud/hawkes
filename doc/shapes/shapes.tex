@@ -7,31 +7,32 @@
 \usepackage{hyperref}
 
 \newcommand\Shifted[2]{\Delta_{#1}(#2)}
-\newcommand\Reversed[1]{\overline{#1}}
+\newcommand\Reversed[1]{\overline{#1}} %TODO find a nice way to replace the line with a leftrightarrow
 
-\newcommand\SymSquare{\begin{tikzpicture}%
+\newcommand\SymSquare{\begin{tikzpicture}[baseline=0.5ex]%
         \draw (0,0) -- (0,1em) -- (1em,1em) -- (1em,0) -- cycle;
 \end{tikzpicture}}
 \newcommand\Indicator[1]{\SymSquare(#1)}
 
-\newcommand\SymPositiveTriangle{\begin{tikzpicture}%
+\newcommand\SymPositiveTriangle{\begin{tikzpicture}[baseline=0.5ex]%
         \draw (0,0) -- (1em,0em) -- (1em,1em) -- cycle;
 \end{tikzpicture}}
 \newcommand\PositiveTriangle[1]{\SymPositiveTriangle(#1)}
 
-\newcommand\SymNegativeTriangle{\begin{tikzpicture}%
+\newcommand\SymNegativeTriangle{\begin{tikzpicture}[baseline=0.5ex]%
         \draw (0,0) -- (0,1em) -- (1em,0em) -- cycle;
 \end{tikzpicture}}
 \newcommand\NegativeTriangle[1]{\SymNegativeTriangle(#1)}
 
-\newcommand\SymTrapezoid{\begin{tikzpicture}%
+\newcommand\SymTrapezoid{\begin{tikzpicture}[baseline=0.5ex]%
         \draw (0,0) -- (3em,0) -- (2em,1em) -- (1em,1em) -- cycle;
 \end{tikzpicture}}
 \newcommand\Trapezoid[2]{\SymTrapezoid(#1,#2)}% Trapezoid(h,b)
 
 \newcommand\D{\mathrm{d}}
-\newcommand\Convolution{\star}
-\newcommand\ConvolutionInt[2]{\int_{-\infty}^{\infty}#1 \D#2}
+\newcommand\Convolution{\ast}
+\newcommand\Correlation{\star}
+\newcommand\IntR[2]{\int_{-\infty}^{\infty}#1 \D#2}
 \newcommand\Equiv{\Leftrightarrow}
 \newcommand\Then{\Rightarrow}
 \renewcommand\And{\wedge}
@@ -77,7 +78,7 @@ Cons:
 
 \paragraph{Convolution}
 Convolution is noted using the $\Convolution$ operator, with the usual definition:
-\[ \left[ f \Convolution g \right](x) = \ConvolutionInt{f(x - t) g(t)}{t} \]
+\[ \left[ f \Convolution g \right](x) = \IntR{f(x - t) g(t)}{t} \]
 Convolution is commutative and associative.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -92,7 +93,7 @@ Time shifts combine additively:
 Convolution of shifted functions is the shift of convolutions:
 \[
     \left[ \Shifted{h}{f} \Convolution g \right](x) =
-    \ConvolutionInt{ f((x - t) - h) g(t) }{t} =
+    \IntR{ f((x - t) - h) g(t) }{t} =
     \left[ f \Convolution g \right](x-h) =
     \Shifted{h}{f \Convolution g}(x)
 \]
@@ -115,7 +116,7 @@ Simplifications:
 \[ \Reversed{\Shifted{h}{f}}(x) = \Shifted{h}{f}(-x) = f(-x-h) = \Reversed{f}(x+h) = \Shifted{-h}{\Reversed{f}}(x) \]
 Convolution:
 \[
-    \Reversed{f \Convolution g}(x) = \ConvolutionInt{f(-x-t) g(t)}{t} = \ConvolutionInt{f(-x+T) g(-T)}{T} = \left[ \Reversed{f} \Convolution \Reversed{g} \right] (x)
+    \Reversed{f \Convolution g}(x) = \IntR{f(-x-t) g(t)}{t} = \IntR{f(-x+T) g(-T)}{T} = \left[ \Reversed{f} \Convolution \Reversed{g} \right] (x)
 \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -417,6 +418,80 @@ Convolution with of positive triangle with negative triangles is obtained using 
 \[ \PositiveTriangle{a} \Convolution \NegativeTriangle{b} = \NegativeTriangle {b} \Convolution \PositiveTriangle{a} \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Cross-correlation}
+The \emph{cross-correlation} of two functions is defined by:
+\[ \left[ f \Correlation g \right] (x) = \IntR{f(t-x) g(t)}{t} = \IntR{\Reversed{f}(x-t) g(t)}{t} = \left[ \Reversed{f} \Convolution g \right] (x) \]
+
+Not commutative:
+\[
+    g \Correlation f = \Reversed{g} \Convolution f = \Reversed{\Reversed{f}} \Convolution \Reversed{g} =
+    \Reversed{\Reversed{f} \Convolution g} = \Reversed{f \Correlation g}
+\]
+
+Relation with shifting is simple but not symmetric:
+\[
+    \Shifted{h}{f} \Correlation g = \Reversed{\Shifted{h}{f}} \Convolution g = \Shifted{-h}{\Reversed{f}} \Convolution g =
+    \Shifted{-h}{\Reversed{f} \Convolution g} = \Shifted{-h}{f \Correlation g}
+\]
+\[ f \Correlation \Shifted{h}{g} = \Reversed{f} \Convolution \Shifted{h}{g} = \Shifted{h}{\Reversed{f} \Convolution g} = \Shifted{h}{f \Correlation g} \]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Application to the Hawkes computations}
+
+\subsection{Histogram base with interval kernel}
+Histogram function base is almost a shifted and scaled indicator.
+The only difference is the open left bound, but this does not change anything if used in convolution or correlation.
+\[
+    \varphi_k =
+    \frac{1}{\sqrt{\delta}} \mathbbm{1}_{\left] (k-1)\delta, k\delta \right]} \simeq
+    \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\Indicator{\delta}}
+\]
+The interval kernel is a simple indicator function.
+\[ W_l =  \mathbbm{1}_{\left[ -\frac{\eta_l}{2}, \frac{\eta_l}{2} \right]} = \Indicator{\eta_l} \]
+
+\paragraph{B}
+From the hawkes paper:
+\[ b_{W,k,l}^m = \sum_{X_l \in N_l, X_m \in N_m} [W_l \Convolution W_m \Convolution \varphi_k] (X_m - X_l) \]
+The convolution of the kernels is a simple trapezoid
+\[ W_l \Convolution W_m = \Indicator{\eta_l} \Convolution \Indicator{\eta_m} = \Trapezoid{\min(\eta_l,\eta_m)}{|\eta_l-\eta_m|} \]
+with $h = \min(\eta_l,\eta_m)$ and $b = |\eta_l-\eta_m|$.
+Thus the complete convolution is:
+\[ \begin{split}
+    W_l \Convolution W_m \Convolution \varphi_k & = \Trapezoid{h}{b} \Convolution \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\Indicator{\delta}} \\
+    &= \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\Trapezoid{h}{b} \Convolution \Indicator{\delta}}
+\end{split} \]
+We can decompose the trapezoid to easily compute the convolution:
+\[ \begin{split}
+    C & = \Trapezoid{h}{b} \Convolution \Indicator{\delta} \\
+    & = \Shifted{-(h+\frac{b}{2})}{\PositiveTriangle{h}} \Convolution \Indicator{\delta}  + (h \times \Indicator{b}) \Convolution \Indicator{\delta} + \Shifted{h+\frac{b}{2}}{\NegativeTriangle{h}} \Convolution \Indicator{\delta} \\
+    & = \Shifted{-(h+\frac{b}{2})}{\Indicator{\delta} \Convolution \PositiveTriangle{h}} + h \times (\Indicator{b} \Convolution \Indicator{\delta}) + \Shifted{h+\frac{b}{2}}{\Reversed{\Indicator{\delta} \Convolution \PositiveTriangle{h}}}
+\end{split} \]
+Each single shape convolution in the formula has already been described as a function by part.
+
+\paragraph{G}
+\[ \begin{split}
+    \mathsf{G}_{W,l,l',k,k'} & = \IntR{\left( \sum_{X_l \in N_l} [W_l \Convolution \varphi_k](x-X_l) \right)\left( \sum_{X_{l'} \in N_{l'}} [W_{l'} \Convolution \varphi_{k'}](x-X_{l'}) \right)}{x} \\
+    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \IntR{ [W_l \Convolution \varphi_k](x-X_l) [W_{l'} \Convolution \varphi_{k'}](x-X_{l'}) }{x} \\
+    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \IntR{ [W_l \Convolution \varphi_k](x-(X_l-X_l')) [W_{l'} \Convolution \varphi_{k'}](x) }{x} \\
+    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} [(W_l \Convolution \varphi_k) \Correlation (W_{l'} \Convolution \varphi_{k'})] (X_l-X_l')
+\end{split} \]
+Each of the two convolutions is a trapezoid
+\[
+    W_l \Convolution \varphi_k =
+    \Indicator{\eta_l} \Convolution \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\Indicator{\delta}} =
+    \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\Trapezoid{h_l}{b_l}}
+\]
+with $h_l = \min(\eta_l,\delta)$ and $b_l = |\eta_l - \delta|$ (independent of $k$).
+\[ \begin{split}
+    (W_l \Convolution \varphi_k) \Correlation (W_{l'} \Convolution \varphi_{k'})
+    & = \frac{1}{\delta} \times \Shifted{(k'-\frac{1}{2})\delta - (k-\frac{1}{2})\delta}{\Trapezoid{h_l}{b_l} \Correlation \Trapezoid{h_{l'}}{b_{l'}}} \\
+    &= \frac{1}{\delta} \times \Shifted{(k'-k)\delta}{\Reversed{\Trapezoid{h_l}{b_l}} \Correlation \Trapezoid{h_{l'}}{b_{l'}}} \\
+    &= \frac{1}{\delta} \times \Shifted{(k'-k)\delta}{\Trapezoid{h_l}{b_l} \Convolution \Trapezoid{h_{l'}}{b_{l'}}}
+\end{split} \]
+This expression can be decomposed in the same way, giving a sum of convolutions of pairs of shapes from $\{\SymPositiveTriangle, \SymSquare, \SymNegativeTriangle \}$.
+Convolution for all pairs of shapes has been covered before, so we can compute $\mathsf{G}_{W,l,l',k,k'}$.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Proofs}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -424,9 +499,9 @@ Convolution with of positive triangle with negative triangles is obtained using 
 
 We want to compute the formula for:
 \[ \begin{split}
-    C_{a,b}(x) = \left[ \Indicator{a} \Convolution \Indicator{b} \right] (x) & = \ConvolutionInt{\Indicator{a}(x-t) \Indicator{b}(t)}{t} \\
-    & = \ConvolutionInt{\Indicator{a}(t-x) \Indicator{b}(t)}{t} \\
-    & = \ConvolutionInt{\Shifted{x}{\Indicator{a}}(t) \Indicator{b}(t)}{t}
+    C_{a,b}(x) = \left[ \Indicator{a} \Convolution \Indicator{b} \right] (x) & = \IntR{\Indicator{a}(x-t) \Indicator{b}(t)}{t} \\
+    & = \IntR{\Indicator{a}(t-x) \Indicator{b}(t)}{t} \\
+    & = \IntR{\Shifted{x}{\Indicator{a}}(t) \Indicator{b}(t)}{t}
 \end{split} \]
 $C_{a,b}(x)$ is symmetric:
 \[
@@ -521,9 +596,9 @@ By using $h = \min(a,b)$ and $l = |a-b|$, $a+b=2h+l$ and:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Convolution of indicator with positive triangle}\label{proof_convolution_indicator_triangle}
 \[ \begin{split}
-    C_{l,c}(x) = \left[ \Indicator{l} \Convolution \PositiveTriangle{c} \right] (x) & = \ConvolutionInt{\Indicator{l}(x-t) \PositiveTriangle{c}(t)}{t} \\
-    & = \ConvolutionInt{\Indicator{l}(t-x) \PositiveTriangle{c}(t)}{t} \\
-    & = \ConvolutionInt{\Shifted{x}{\Indicator{l}}(t) \PositiveTriangle{c}(t)}{t}
+    C_{l,c}(x) = \left[ \Indicator{l} \Convolution \PositiveTriangle{c} \right] (x) & = \IntR{\Indicator{l}(x-t) \PositiveTriangle{c}(t)}{t} \\
+    & = \IntR{\Indicator{l}(t-x) \PositiveTriangle{c}(t)}{t} \\
+    & = \IntR{\Shifted{x}{\Indicator{l}}(t) \PositiveTriangle{c}(t)}{t}
 \end{split} \]
 Thus the convolution value is the area of the product between a rectangle centered on $x$ and a positive triangle with origin $0$.
 In the following pictures $\Indicator{l}$ is in red and $\PositiveTriangle{c}$ is in blue.
@@ -738,9 +813,9 @@ $C_{l,c}(x) = 0$.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Convolution of positive triangle with positive triangle}\label{proof_convolution_triangle_pos_pos}
 \[ \begin{split}
-    C_{a,b}(x) = \left[ \PositiveTriangle{a} \Convolution \PositiveTriangle{b} \right] (x) & = \ConvolutionInt{\PositiveTriangle{a}(x-t) \PositiveTriangle{b}(t)}{t} \\
-    & = \ConvolutionInt{\NegativeTriangle{a}(t-x) \PositiveTriangle{b}(t)}{t} \\
-    & = \ConvolutionInt{\Shifted{x}{\NegativeTriangle{a}}(t) \PositiveTriangle{b}(t)}{t}
+    C_{a,b}(x) = \left[ \PositiveTriangle{a} \Convolution \PositiveTriangle{b} \right] (x) & = \IntR{\PositiveTriangle{a}(x-t) \PositiveTriangle{b}(t)}{t} \\
+    & = \IntR{\NegativeTriangle{a}(t-x) \PositiveTriangle{b}(t)}{t} \\
+    & = \IntR{\Shifted{x}{\NegativeTriangle{a}}(t) \PositiveTriangle{b}(t)}{t}
 \end{split} \]
 By using the commutativity of the convolution, $C_{a,b}(x) = C_{\min(a,b),\max(a,b)}(x)$.
 Thus we can compute $C_{a,b}(x)$ for only $a \le b$, and extend to the whole domain using symmetry.
@@ -876,9 +951,9 @@ For any $(a,b)$, using the commutativity of convolution, min/max identities and 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Convolution of negative triangle with positive triangle}\label{proof_convolution_triangle_neg_pos}
 \[ \begin{split}
-    C_{a,b}(x) = \left[ \NegativeTriangle{a} \Convolution \PositiveTriangle{b} \right] (x) & = \ConvolutionInt{\NegativeTriangle{a}(x-t) \PositiveTriangle{b}(t)}{t} \\
-    & = \ConvolutionInt{\PositiveTriangle{a}(t-x) \PositiveTriangle{b}(t)}{t} \\
-    & = \ConvolutionInt{\Shifted{x}{\PositiveTriangle{a}}(t) \PositiveTriangle{b}(t)}{t}
+    C_{a,b}(x) = \left[ \NegativeTriangle{a} \Convolution \PositiveTriangle{b} \right] (x) & = \IntR{\NegativeTriangle{a}(x-t) \PositiveTriangle{b}(t)}{t} \\
+    & = \IntR{\PositiveTriangle{a}(t-x) \PositiveTriangle{b}(t)}{t} \\
+    & = \IntR{\Shifted{x}{\PositiveTriangle{a}}(t) \PositiveTriangle{b}(t)}{t}
 \end{split} \]
 The convolution value is the area of the product between a positive triangle of origin $x$ and a positive triangle with origin $0$.
 In the following pictures $\PositiveTriangle{a}$ is in red and $\PositiveTriangle{b}$ is in blue.
