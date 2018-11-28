@@ -109,6 +109,10 @@ template <typename T, typename Inner, typename ComponentTag>
 inline auto component (const Scaled<T, Inner> & shape, ComponentTag tag) {
 	return scaled (shape.scale, component (shape.inner, tag));
 }
+template <typename Inner, typename ComponentTag>
+inline auto component (const Shifted<Inner> & shape, ComponentTag tag) {
+	return shifted (shape.shift, component (shape.inner, tag));
+}
 
 // Convolution simplifications: propagate combinators to the outer levels
 template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 2)>>
