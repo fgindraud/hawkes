@@ -446,19 +446,24 @@ The only difference is the open left bound, but this does not change anything if
     \frac{1}{\sqrt{\delta}} \mathbbm{1}_{\left] (k-1)\delta, k\delta \right]} \simeq
     \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\Indicator{\delta}}
 \]
-The interval kernel is a simple indicator function.
-\[ W_l =  \mathbbm{1}_{\left[ -\frac{\eta_l}{2}, \frac{\eta_l}{2} \right]} = \Indicator{\eta_l} \]
+The interval kernel is a scaled indicator function.
+\[ W_l = \frac{1}{\sqrt{\eta_l}} \mathbbm{1}_{\left[ -\frac{\eta_l}{2}, \frac{\eta_l}{2} \right]} = \frac{1}{\sqrt{\eta_l}} \Indicator{\eta_l} \]
 
 \paragraph{B}
 From the hawkes paper:
 \[ b_{W,k,l}^m = \sum_{X_l \in N_l, X_m \in N_m} [W_l \Convolution W_m \Convolution \varphi_k] (X_m - X_l) \]
 The convolution of the kernels is a simple trapezoid
-\[ W_l \Convolution W_m = \Indicator{\eta_l} \Convolution \Indicator{\eta_m} = \Trapezoid{\min(\eta_l,\eta_m)}{|\eta_l-\eta_m|} \]
+\[
+    W_l \Convolution W_m =
+    \frac{1}{\sqrt{\eta_l \eta_m}} \Indicator{\eta_l} \Convolution \Indicator{\eta_m} =
+    \frac{1}{\sqrt{\eta_l \eta_m}} \Trapezoid{\min(\eta_l,\eta_m)}{|\eta_l-\eta_m|}
+\]
 with $h = \min(\eta_l,\eta_m)$ and $b = |\eta_l-\eta_m|$.
 Thus the complete convolution is:
 \[ \begin{split}
-    W_l \Convolution W_m \Convolution \varphi_k & = \Trapezoid{h}{b} \Convolution \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\Indicator{\delta}} \\
-    &= \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\Trapezoid{h}{b} \Convolution \Indicator{\delta}}
+    W_l \Convolution W_m \Convolution \varphi_k
+    & = \frac{1}{\sqrt{\eta_l \eta_m}} \Trapezoid{h}{b} \Convolution \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\Indicator{\delta}} \\
+    &= \frac{1}{\sqrt{\delta \eta_l \eta_m}} \Shifted{(k-\frac{1}{2})\delta}{\Trapezoid{h}{b} \Convolution \Indicator{\delta}}
 \end{split} \]
 We can decompose the trapezoid to easily compute the convolution:
 \[ \begin{split}
@@ -478,15 +483,17 @@ Each single shape convolution in the formula has already been described as a fun
 Each of the two convolutions is a trapezoid
 \[
     W_l \Convolution \varphi_k =
-    \Indicator{\eta_l} \Convolution \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\Indicator{\delta}} =
-    \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\Trapezoid{h_l}{b_l}}
+    \frac{1}{\sqrt{\delta \eta_l}} \times \Indicator{\eta_l} \Convolution \Shifted{(k-\frac{1}{2})\delta}{\Indicator{\delta}} =
+    \frac{1}{\sqrt{\delta \eta_l}} \times \Shifted{(k-\frac{1}{2})\delta}{\Trapezoid{h_l}{b_l}}
 \]
 with $h_l = \min(\eta_l,\delta)$ and $b_l = |\eta_l - \delta|$ (independent of $k$).
 \[ \begin{split}
-    (W_l \Convolution \varphi_k) \Correlation (W_{l'} \Convolution \varphi_{k'})
-    & = \frac{1}{\delta} \times \Shifted{(k'-\frac{1}{2})\delta - (k-\frac{1}{2})\delta}{\Trapezoid{h_l}{b_l} \Correlation \Trapezoid{h_{l'}}{b_{l'}}} \\
-    &= \frac{1}{\delta} \times \Shifted{(k'-k)\delta}{\Reversed{\Trapezoid{h_l}{b_l}} \Correlation \Trapezoid{h_{l'}}{b_{l'}}} \\
-    &= \frac{1}{\delta} \times \Shifted{(k'-k)\delta}{\Trapezoid{h_l}{b_l} \Convolution \Trapezoid{h_{l'}}{b_{l'}}}
+    C
+    & = (W_l \Convolution \varphi_k) \Correlation (W_{l'} \Convolution \varphi_{k'}) \\
+    & = \frac{1}{\delta \sqrt{\eta_l \eta_{l'}}} \times \left( \Shifted{(k-\frac{1}{2})\delta}{\Trapezoid{h_l}{b_l}} \Correlation \Shifted{(k'-\frac{1}{2})\delta}{\Trapezoid{h_{l'}}{b_{l'}}} \right) \\
+    & = \frac{1}{\delta \sqrt{\eta_l \eta_{l'}}} \times \Shifted{(k'-\frac{1}{2})\delta - (k-\frac{1}{2})\delta}{\Trapezoid{h_l}{b_l} \Correlation \Trapezoid{h_{l'}}{b_{l'}}} \\
+    & = \frac{1}{\delta \sqrt{\eta_l \eta_{l'}}} \times \Shifted{(k'-k)\delta}{\Reversed{\Trapezoid{h_l}{b_l}} \Correlation \Trapezoid{h_{l'}}{b_{l'}}} \\
+    & = \frac{1}{\delta \sqrt{\eta_l \eta_{l'}}} \times \Shifted{(k'-k)\delta}{\Trapezoid{h_l}{b_l} \Convolution \Trapezoid{h_{l'}}{b_{l'}}}
 \end{split} \]
 This expression can be decomposed in the same way, giving a sum of convolutions of pairs of shapes from $\{\SymPositiveTriangle, \SymSquare, \SymNegativeTriangle \}$.
 Convolution for all pairs of shapes has been covered before, so we can compute $\mathsf{G}_{W,l,l',k,k'}$.
