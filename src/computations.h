@@ -318,8 +318,7 @@ inline auto to_shape (HistogramBase::Interval i) {
 	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
 }
 inline auto to_shape (IntervalKernel kernel) {
-	// TODO do we have scaling here ?
-	return shape::IntervalIndicator::with_width (kernel.width);
+	return shape::scaled (1. / std::sqrt (kernel.width), shape::IntervalIndicator::with_width (kernel.width));
 }
 
 inline double compute_b_mlk_histogram (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
@@ -329,33 +328,35 @@ inline double compute_b_mlk_histogram (const SortedVec<Point> & m_points, const 
 	const auto w_m = to_shape (m_kernel);
 	const auto w_l = to_shape (l_kernel);
 	const auto phi_k = to_shape (base_interval);
-
 	// To compute b_mlk, we need to compute convolution(w_m,w_l,phi_k)(x):
 	const auto trapezoid = convolution (w_m, w_l);
-	const auto conv_l = convolution (component (trapezoid, shape::Trapezoid::LeftTriangle{}), phi_k);
-	const auto conv_c = convolution (component (trapezoid, shape::Trapezoid::CentralBlock{}), phi_k);
-	const auto conv_r = convolution (component (trapezoid, shape::Trapezoid::RightTriangle{}), phi_k);
-
+	const auto trapezoid_l = component (trapezoid, shape::Trapezoid::LeftTriangle{});
+	const auto trapezoid_c = component (trapezoid, shape::Trapezoid::CentralBlock{});
+	const auto trapezoid_r = component (trapezoid, shape::Trapezoid::RightTriangle{});
 	// b_mlk = sum_{x_m in N_m, x_l in N_l} convolution(w_m,w_l,phi_k)(x_m - x_l)
 	// Split the sum into separate sums for each component.
-	return compute_sum_of_point_differences (m_points, l_points, conv_l) +
-	       compute_sum_of_point_differences (m_points, l_points, conv_c) +
-	       compute_sum_of_point_differences (m_points, l_points, conv_r);
+	const auto sum_value_for = [&m_points, &l_points](const auto & shape) {
+		return compute_sum_of_point_differences (m_points, l_points, shape);
+	};
+	return sum_value_for (convolution (trapezoid_l, phi_k)) + sum_value_for (convolution (trapezoid_c, phi_k)) +
+	       sum_value_for (convolution (trapezoid_r, phi_k));
 }
 
 inline double compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_points,
                                                    const SortedVec<Point> & l2_points, int32_t delta, FunctionBaseId k,
                                                    FunctionBaseId k2, IntervalKernel kernel, IntervalKernel kernel2) {
 	// V = sum_{x_l,x_l2} corr(conv(W_l,phi_k),conv(W_l2,phi_k2)) (x_l-x_l2)
-	// V = 1/delta sum_{x_l,x_l2} shifted((k2-k)*delta, conv(trapezoid(l), trapezoid(l2))) (x_l-x_l2)
+	// V = factorized_scaling * sum_{x_l,x_l2} shifted((k2-k)*delta, conv(trapezoid(l), trapezoid(l2))) (x_l-x_l2)
 
 	// prepare common scaling and shift
-	const auto delta_scaling = 1. / double(delta);
+	const auto factorized_scaling = 1. / (double(delta) * std::sqrt (kernel.width * kernel2.width));
 	const auto factorized_shift = delta * (k2.value - k.value);
 	// compute the two sub-convolutions shapes, shift one of them
 	const auto phi_indicator = shape::IntervalIndicator::with_width (delta);
-	const auto trapezoid = convolution (to_shape (kernel), phi_indicator);
-	const auto trapezoid2 = convolution (to_shape (kernel2), phi_indicator);
+	const auto kernel_indicator = shape::IntervalIndicator::with_width (kernel.width);
+	const auto kernel2_indicator = shape::IntervalIndicator::with_width (kernel2.width);
+	const auto trapezoid = convolution (kernel_indicator, phi_indicator);
+	const auto trapezoid2 = convolution (kernel2_indicator, phi_indicator);
 	const auto s_trapezoid = shape::shifted (factorized_shift, trapezoid);
 	// decompose
 	const auto trapezoid_l = component (s_trapezoid, shape::Trapezoid::LeftTriangle{});
@@ -368,16 +369,16 @@ inline double compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_po
 	const auto sum_value_for = [&l_points, &l2_points](const auto & shape) {
 		return compute_sum_of_point_differences (l_points, l2_points, shape);
 	};
-	const auto unscaled = sum_value_for (convolution (trapezoid_l, trapezoid2_l)) +
-	                      sum_value_for (convolution (trapezoid_l, trapezoid2_c)) +
-	                      sum_value_for (convolution (trapezoid_l, trapezoid2_r)) +
-	                      sum_value_for (convolution (trapezoid_c, trapezoid2_l)) +
-	                      sum_value_for (convolution (trapezoid_c, trapezoid2_c)) +
-	                      sum_value_for (convolution (trapezoid_c, trapezoid2_r)) +
-	                      sum_value_for (convolution (trapezoid_r, trapezoid2_l)) +
-	                      sum_value_for (convolution (trapezoid_r, trapezoid2_c)) +
-	                      sum_value_for (convolution (trapezoid_r, trapezoid2_r));
-	return delta_scaling * unscaled;
+	const auto unscaled_sum = sum_value_for (convolution (trapezoid_l, trapezoid2_l)) +
+	                          sum_value_for (convolution (trapezoid_l, trapezoid2_c)) +
+	                          sum_value_for (convolution (trapezoid_l, trapezoid2_r)) +
+	                          sum_value_for (convolution (trapezoid_c, trapezoid2_l)) +
+	                          sum_value_for (convolution (trapezoid_c, trapezoid2_c)) +
+	                          sum_value_for (convolution (trapezoid_c, trapezoid2_r)) +
+	                          sum_value_for (convolution (trapezoid_r, trapezoid2_l)) +
+	                          sum_value_for (convolution (trapezoid_r, trapezoid2_c)) +
+	                          sum_value_for (convolution (trapezoid_r, trapezoid2_r));
+	return factorized_scaling * unscaled_sum;
 }
 
 inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId region, HistogramBase base,
