@@ -393,7 +393,7 @@ inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId regio
 		const auto & m_kernel = kernels[m.value];
 
 		// b0
-		b.set_0 (m, double(int64_t (m_process.size ()) * int64_t (m_kernel.width)));
+		b.set_0 (m, double(m_process.size ()) * std::sqrt (m_kernel.width));
 
 		// b_lk
 		for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
@@ -422,7 +422,7 @@ inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId regio
 		/* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
 		 * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l sqrt(delta) = |N_m| eta_l sqrt(delta).
 		 */
-		const auto g_lk = processes.data (l, region).size () * double(kernels[l.value].width) * sqrt_delta;
+		const auto g_lk = double(processes.data (l, region).size ()) * std::sqrt (kernels[l.value].width) * sqrt_delta;
 		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
 			g.set_g (l, k, g_lk);
 		}

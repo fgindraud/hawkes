@@ -137,7 +137,15 @@ int main (int argc, char * argv[]) {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
 
-		do_test (point_processes);
+		// do_test (point_processes);
+		const auto base = HistogramBase{4, 10};
+		point_processes.add_process ("p1", {{"r1", SortedVec<Point>::from_sorted ({5, 15})}});
+		point_processes.add_process ("p2", {{"r1", SortedVec<Point>::from_sorted ({6, 18})}});
+		const std::vector kernels = {IntervalKernel{6}, IntervalKernel{6}};
+		const auto g_points = compute_g (point_processes, RegionId{0}, base);
+		const auto g_kernels = compute_g (point_processes, RegionId{0}, base, make_span (kernels));
+		std::cerr << "=== G with points ===\n" << g_points.inner << "\n";
+		std::cerr << "=== G with kernels ===\n" << g_kernels.inner << "\n";
 
 	} catch (const CommandLineParser::Exception & exc) {
 		fmt::print (stderr, "Error: {}. Use --help for a list of options.\n", exc.what ());
