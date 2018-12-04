@@ -6,6 +6,7 @@
 # '-fopenmp' for OpenMP multithreading
 # CXX_FLAGS_EXTRA can be used to pass additional flags for a custom compilation without modifying the script.
 CXX_FLAGS_COMMON = -std=c++17 -Wall -Wextra $(CXX_FLAGS_EXTRA)
+CXX_FLAGS_COMMON += -I /usr/include/eigen3 # Eigen uses a subdir
 CXX_FLAGS_RELEASE = $(CXX_FLAGS_COMMON) -O3 -DNDEBUG
 CXX_FLAGS_DEBUG = $(CXX_FLAGS_COMMON) -O2 -g
 

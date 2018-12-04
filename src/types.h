@@ -1,9 +1,9 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
-#include <eigen3/Eigen/Core>
 #include <limits>
 #include <stdexcept>
 #include <vector>
