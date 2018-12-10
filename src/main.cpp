@@ -77,7 +77,7 @@ template <typename DataType> static void do_test (const ProcessesData<DataType> 
 	for (int delta = 10; delta < 1000000; delta *= 10) {
 		fmt::print ("### Delta = {}\n", delta);
 		HistogramBase base{7, delta};
-		std::vector<MatrixB> matrix_b;
+		std::vector<Matrix_M_MK1> matrix_b;
 		std::vector<MatrixG> matrix_g;
 		{
 			const auto start = instant ();

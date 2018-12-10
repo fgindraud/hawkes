@@ -90,15 +90,16 @@ struct HistogramBase {
 /******************************************************************************
  * Computation matrices.
  */
-struct MatrixB {
-	// Stores values for b_m and estimated a_m for all m.
+
+struct Matrix_M_MK1 {
+	// Stores values for a_m_kl, b_m_kl, d_m_kl.
 	// Invariant: K > 0 && M > 0 && inner.size() == (1 + K * M, M).
 
 	int32_t nb_processes; // M
 	int32_t base_size;    // K
 	Eigen::MatrixXd inner;
 
-	MatrixB (int32_t nb_processes, int32_t base_size) : nb_processes (nb_processes), base_size (base_size) {
+	Matrix_M_MK1 (int32_t nb_processes, int32_t base_size) : nb_processes (nb_processes), base_size (base_size) {
 		assert (nb_processes > 0);
 		assert (base_size > 0);
 		const auto size = 1 + base_size * nb_processes;
@@ -130,7 +131,6 @@ struct MatrixB {
 		inner (lk_index (l, k), m.value) = v;
 	}
 };
-using MatrixA = MatrixB;
 
 struct MatrixG {
 	// Stores value of the G matrix (symmetric).

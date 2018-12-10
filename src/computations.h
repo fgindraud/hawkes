@@ -212,14 +212,14 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
 	return accumulated_area;
 }
 
-// TODO: B and G are average (or sums) of region-specific B and G, so compute the global one directly
+// TODO: B and G are sums of region-specific B and G !
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId region, HistogramBase base) {
+inline Matrix_M_MK1 compute_b (const ProcessesData<Point> & processes, RegionId region, HistogramBase base) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
 	const auto inv_sqrt_delta = 1. / std::sqrt (double(base.delta));
-	MatrixB b (nb_processes, base_size);
+	Matrix_M_MK1 b (nb_processes, base_size);
 
 	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
 		const auto & m_process = processes.data (m, region);
@@ -302,6 +302,11 @@ inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId regio
 	return g;
 }
 
+inline Matrix_M_MK1 compute_d (const Matrix_M_MK1 & b) {
+	Matrix_M_MK1 d (b.nb_processes, b.base_size);
+	return d;
+}
+
 /******************************************************************************
  * Histogram with interval convolution kernels.
  */
@@ -381,12 +386,12 @@ inline double compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_po
 	return factorized_scaling * unscaled_sum;
 }
 
-inline MatrixB compute_b (const ProcessesData<Point> & processes, RegionId region, HistogramBase base,
-                          span<const IntervalKernel> kernels) {
+inline Matrix_M_MK1 compute_b (const ProcessesData<Point> & processes, RegionId region, HistogramBase base,
+                               span<const IntervalKernel> kernels) {
 	assert (int32_t (kernels.size ()) == processes.nb_processes ());
 	const auto nb_processes = processes.nb_processes ();
 	const auto base_size = base.base_size;
-	MatrixB b (nb_processes, base_size);
+	Matrix_M_MK1 b (nb_processes, base_size);
 
 	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
 		const auto & m_process = processes.data (m, region);
