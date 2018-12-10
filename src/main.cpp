@@ -55,12 +55,11 @@ static std::chrono::high_resolution_clock::time_point instant () {
  */
 template <typename DataType>
 static void read_process_data_from (ProcessesData<DataType> & processes, string_view filename,
-                                    std::optional<span<const string_view>> selected_regions) {
+                                    span<const string_view> region_names) {
 	try {
 		const auto start = instant ();
 		auto file = open_file (filename, "r");
-		auto data = selected_regions ? read_selected_from_bed_file<DataType> (file.get (), *selected_regions)
-		                             : read_all_from_bed_file<DataType> (file.get ());
+		auto data = read_selected_from_bed_file<DataType> (file.get (), region_names);
 		const auto id = processes.add_process (filename, std::move (data));
 		const auto end = instant ();
 		fmt::print (stderr, "Process {} loaded from {}: regions = {} ; time = {}\n", id.value, filename,
@@ -126,9 +125,7 @@ int main (int argc, char * argv[]) {
 	});
 #endif
 
-	parser.option ({"f"}, "filename", "Add a process with all regions from the file",
-	               [&](string_view filename) { read_process_data_from (point_processes, filename, std::nullopt); });
-	parser.option2 ({"s"}, "filename", "r1[,r2,...]", "Add selected regions from process file",
+	parser.option2 ({"f"}, "filename", "r1[,r2,...]", "Add selected regions from process file",
 	                [&](string_view filename, string_view regions) {
 		                auto region_names = split (',', regions);
 		                read_process_data_from (point_processes, filename, make_span (region_names));
@@ -142,7 +139,7 @@ int main (int argc, char * argv[]) {
 		const auto base = HistogramBase{4, 10};
 		point_processes.add_process ("p1", {{"r1", SortedVec<Point>::from_sorted ({5, 15})}});
 		point_processes.add_process ("p2", {{"r1", SortedVec<Point>::from_sorted ({6, 18})}});
-		const std::vector kernels = {IntervalKernel{6}, IntervalKernel{6}};
+		const std::vector<IntervalKernel> kernels = {IntervalKernel{6}, IntervalKernel{6}};
 		const auto g_points = compute_g (point_processes, RegionId{0}, base);
 		const auto g_kernels = compute_g (point_processes, RegionId{0}, base, make_span (kernels));
 		std::cerr << "=== G with points ===\n" << g_points.inner << "\n";

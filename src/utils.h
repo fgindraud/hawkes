@@ -5,7 +5,6 @@
 #include <cassert>
 #include <cctype>
 #include <cstdlib>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -79,16 +78,6 @@ template <typename T> span<T> slice (span<T> s, std::size_t from, std::size_t si
 }
 template <typename T> span<T> slice_from (span<T> s, std::size_t from) {
 	return {s.begin () + from, s.end ()};
-}
-
-// Get index of an element in a span
-template <typename T, typename U> std::optional<std::size_t> index_of (const T & element, span<const U> slice) {
-	auto it = std::find (slice.begin (), slice.end (), element);
-	if (it != slice.end ()) {
-		return std::distance (slice.begin (), it);
-	} else {
-		return {};
-	}
 }
 
 /*******************************************************************************
