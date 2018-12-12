@@ -302,8 +302,25 @@ inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId regio
 	return g;
 }
 
-inline Matrix_M_MK1 compute_d (const Matrix_M_MK1 & b) {
-	Matrix_M_MK1 d (b.nb_processes, b.base_size);
+inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> & b_by_region) {
+	const auto nb_regions = int32_t (b_by_region.size ());
+	assert (nb_regions > 0);
+	const auto nb_processes = b_by_region[0].nb_processes;
+	const auto base_size = b_by_region[0].base_size;
+
+	// Compute V_hat_m_kl * R^2. Division by R^2 is done later.
+	Matrix_M_MK1 v_hat (nb_processes, base_size);
+	for (const auto & b : b_by_region) {
+		v_hat.m_lk_values ().array () += b.m_lk_values ().array ().square ();
+	}
+	const auto v_hat_factor = 1. / double(nb_regions * nb_regions) * 2 * gamma *
+	                          std::log (nb_processes + nb_processes * nb_processes * base_size);
+
+	// Compute B_hat_m_kl
+
+	Matrix_M_MK1 d (nb_processes, base_size);
+	d.m_0_values ().setZero (); // No penalty for constant component of estimators
+	d.m_lk_values () = (v_hat_factor * v_hat.m_lk_values ().array ()).sqrt ();
 	return d;
 }
 

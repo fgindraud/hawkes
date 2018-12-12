@@ -115,6 +115,8 @@ struct Matrix_M_MK1 {
 		assert (0 <= m.value && m.value < nb_processes);
 		inner (0, m.value) = v;
 	}
+	auto m_0_values () const { return inner.row (0); }
+	auto m_0_values () { return inner.row (0); }
 
 	// b_m,l,k
 	int32_t lk_index (ProcessId l, FunctionBaseId k) const {
@@ -130,6 +132,8 @@ struct Matrix_M_MK1 {
 		assert (0 <= m.value && m.value < nb_processes);
 		inner (lk_index (l, k), m.value) = v;
 	}
+	auto m_lk_values () const { return inner.bottomRows (nb_processes * base_size); }
+	auto m_lk_values () { return inner.bottomRows (nb_processes * base_size); }
 };
 
 struct MatrixG {
