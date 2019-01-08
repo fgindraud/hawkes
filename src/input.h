@@ -108,7 +108,7 @@ inline bool LineByLineReader::read_next_line () {
  * Parsing utils.
  */
 
-// Add process to table with checking of region number
+// Add process to table with checking of region number TODO rm
 template <typename DataType>
 inline ProcessId ProcessesData<DataType>::add_process (string_view name,
                                                        std::vector<ProcessRegionData<DataType>> && regions) {
@@ -129,19 +129,11 @@ inline ProcessId ProcessesData<DataType>::add_process (string_view name,
 /******************************************************************************
  * BED format parsing.
  */
-
-// Convert an interval to the data type used to represent marks.
-template <typename DataType> inline DataType bed_interval_to_data (long start, long end);
-template <> inline Point bed_interval_to_data<Point> (long start, long end) {
-	return (end - start) / 2;
-}
-
-template <typename DataType>
-inline std::vector<ProcessRegionData<DataType>> read_all_from_bed_file (not_null<FILE *> file) {
-	std::vector<ProcessRegionData<DataType>> regions;
+inline std::vector<RawRegionData> read_all_from_bed_file (not_null<FILE *> file) {
+	std::vector<RawRegionData> regions;
 	LineByLineReader reader (file);
 
-	std::vector<DataType> current_region_points;
+	std::vector<PointInterval> current_region_intervals;
 	std::string current_region_name;
 
 	try {
@@ -155,8 +147,8 @@ inline std::vector<ProcessRegionData<DataType>> read_all_from_bed_file (not_null
 					throw std::runtime_error ("Line must contain at least 3 fields: (region, start, end)");
 				}
 				const string_view region_name = fields[0];
-				const auto interval_start_position = parse_int (fields[1], "interval_position_start");
-				const auto interval_end_position = parse_int (fields[2], "interval_position_end");
+				const Point interval_start_position = parse_int (fields[1], "interval_position_start");
+				const Point interval_end_position = parse_int (fields[2], "interval_position_end");
 				if (!(interval_start_position <= interval_end_position)) {
 					throw std::runtime_error ("interval bounds are invalid");
 				}
@@ -167,14 +159,12 @@ inline std::vector<ProcessRegionData<DataType>> read_all_from_bed_file (not_null
 					}
 					if (!empty (current_region_name)) {
 						// End current region and store its data
-						regions.emplace_back (ProcessRegionData<DataType>{
-						    current_region_name, SortedVec<DataType>::from_unsorted (std::move (current_region_points))});
+						regions.emplace_back (RawRegionData{std::move (current_region_name), std::move (current_region_intervals)});
 					}
-					current_region_points.clear ();
+					current_region_intervals.clear ();
 					current_region_name = to_string (region_name);
 				}
-				current_region_points.emplace_back (
-				    bed_interval_to_data<DataType> (interval_start_position, interval_end_position));
+				current_region_intervals.emplace_back (PointInterval{interval_start_position, interval_end_position});
 			}
 		}
 		return regions;
@@ -185,17 +175,18 @@ inline std::vector<ProcessRegionData<DataType>> read_all_from_bed_file (not_null
 	}
 }
 
-template <typename DataType>
-inline std::vector<ProcessRegionData<DataType>> read_selected_from_bed_file (not_null<FILE *> file,
-                                                                             span<const string_view> region_names) {
-	std::vector<ProcessRegionData<DataType>> all_regions = read_all_from_bed_file<DataType> (file);
-	std::vector<ProcessRegionData<DataType>> selected_regions;
+inline std::vector<RawRegionData> read_selected_from_bed_file (not_null<FILE *> file,
+                                                               span<const string_view> region_names) {
+	// Read all regions data, then copy them in the right order
+	// We must copy in the case of duplicated region names in the list.
+	std::vector<RawRegionData> all_regions = read_all_from_bed_file (file);
+	std::vector<RawRegionData> selected_regions;
 	selected_regions.reserve (region_names.size ());
 	for (const string_view name : region_names) {
 		auto it = std::find_if (all_regions.begin (), all_regions.end (),
 		                        [name](const auto & element) { return element.name == name; });
 		if (it != all_regions.end ()) {
-			selected_regions.emplace_back (ProcessRegionData<DataType>{to_string (name), it->data});
+			selected_regions.emplace_back (*it);
 		} else {
 			throw std::runtime_error (fmt::format ("Selected region was not found: {}", name));
 		}

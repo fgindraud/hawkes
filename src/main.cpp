@@ -53,17 +53,15 @@ static std::chrono::high_resolution_clock::time_point instant () {
 /******************************************************************************
  * Reading process data.
  */
-template <typename DataType>
-static void read_process_data_from (ProcessesData<DataType> & processes, string_view filename,
-                                    span<const string_view> region_names) {
+static std::vector<RawRegionData> read_regions_from (string_view filename, span<const string_view> region_names) {
 	try {
 		const auto start = instant ();
 		auto file = open_file (filename, "r");
-		auto data = read_selected_from_bed_file<DataType> (file.get (), region_names);
-		const auto id = processes.add_process (filename, std::move (data));
+		auto regions = read_selected_from_bed_file (file.get (), region_names);
 		const auto end = instant ();
-		fmt::print (stderr, "Process {} loaded from {}: regions = {} ; time = {}\n", id.value, filename,
-		            processes.nb_regions (), duration_string (end - start));
+		fmt::print (stderr, "Process loaded from {}: regions = {} ; time = {}\n", filename, regions.size (),
+		            duration_string (end - start));
+		return regions;
 	} catch (const std::runtime_error & e) {
 		throw std::runtime_error (fmt::format ("Reading process data from {}: {}", filename, e.what ()));
 	}
@@ -102,25 +100,19 @@ template <typename DataType> static void do_test (const ProcessesData<DataType> 
 /******************************************************************************
  * Program entry point.
  */
-
-struct None {};
-
-enum class Kernel {
-	None,
-	Interval,
-};
-
 int main (int argc, char * argv[]) {
 	double gamma = 3.;
 
+	struct None {};
 	variant<None, HistogramBase> base = None{};
 
+	enum class Kernel { None, Interval };
 	Kernel use_kernel = Kernel::None;
 	Optional<std::vector<int32_t>> explicit_kernel_widths;
 
+	RawProcessData::Invert current_invert_flag = RawProcessData::Invert::No;
 	std::vector<string_view> current_region_names;
-
-	ProcessesData<Point> point_processes; // TODO two steps, first read intervals, then generate sorted points lists
+	std::vector<RawProcessData> raw_processes;
 
 	// Command line parsing setup
 	const auto command_line = CommandLineView (argc, argv);
@@ -170,21 +162,42 @@ int main (int argc, char * argv[]) {
 		               }
 		               explicit_kernel_widths = std::move (widths);
 	               });
-	// TODO deduce widths from interval data
 
 	parser.option ({"r", "regions"}, "r0[,r1,r2,...]", "Set region names extracted from next files",
-	               [&current_region_names](string_view regions) { current_region_names = split (',', regions); });
-
+	               [&current_region_names](string_view regions) {
+		               auto region_names = split (',', regions);
+		               if (region_names.empty ()) {
+			               throw std::runtime_error ("List of region names is empty");
+		               }
+		               if (!current_region_names.empty () && current_region_names.size () != region_names.size ()) {
+			               throw std::runtime_error ("New region name set must have the same length as all previous ones");
+		               }
+		               current_region_names = std::move (region_names);
+	               });
 	parser.option ({"f"}, "filename", "Add process from file", [&](string_view filename) {
-		read_process_data_from (point_processes, filename, make_span (current_region_names));
+		if (current_region_names.empty ()) {
+			throw std::runtime_error ("List of region names is empty: set region names before reading a file");
+		}
+		auto regions = read_regions_from (filename, make_span (current_region_names));
+		assert (regions.size () == current_region_names.size ());
+		raw_processes.emplace_back (RawProcessData{to_string (filename), std::move (regions), current_invert_flag});
+		// TODO add invert flag to name ?
+		// TODO overridable name ?
 	});
 
 	try {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
 
+		// TODO post process region data:
+		// Deduce kernel widths if not provided
+		// Generate points and sort them, applying invert flag if set (std::reverse, p->max-p).
+		// Put that in a simple Vec2d such that all process for a region fit a span.
+		// Generate merged point list for B_hat ?
+
 		// do_test (point_processes);
 		const auto base = HistogramBase{4, 10};
+		ProcessesData<Point> point_processes;
 		point_processes.add_process ("p1", {{"r1", SortedVec<Point>::from_sorted ({5, 15})}});
 		point_processes.add_process ("p2", {{"r1", SortedVec<Point>::from_sorted ({6, 18})}});
 		const std::vector<IntervalKernel> kernels = {IntervalKernel{6}, IntervalKernel{6}};

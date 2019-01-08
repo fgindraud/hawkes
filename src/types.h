@@ -39,6 +39,17 @@ struct PointInterval {
 	Point end;
 };
 
+// Raw process data, read from a file
+struct RawRegionData {
+	std::string name;
+	std::vector<PointInterval> unsorted_intervals;
+};
+struct RawProcessData {
+	std::string name;
+	std::vector<RawRegionData> regions;
+	enum class Invert { No, Yes } invert;
+};
+
 // Store a process region data: its name and list of data elements, sorted.
 template <typename DataType> struct ProcessRegionData {
 	std::string name;
@@ -47,6 +58,7 @@ template <typename DataType> struct ProcessRegionData {
 
 // Store the data for multiple processes and regions.
 // All processes must have the same number of regions.
+// TODO simplify or retire.
 template <typename DataType> class ProcessesData {
 private:
 	std::vector<std::string> process_names_;
