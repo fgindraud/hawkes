@@ -33,6 +33,11 @@ struct RegionId {
 // Single coordinate for a process represented by points.
 using Point = int32_t;
 
+// Interval for a point with uncertainty
+struct PointInterval {
+	Point start;
+	Point end;
+};
 
 // Store a process region data: its name and list of data elements, sorted.
 template <typename DataType> struct ProcessRegionData {

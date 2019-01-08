@@ -31,8 +31,36 @@
 //#define FMT_HEADER_ONLY 1 // In header only mode
 #include "external/fmt/format.h"
 
+/* Use external standalone implementation of std::variant.
+ * std::variant is only available from C++17 onwards.
+ */
+#include "external/variant.hpp"
+using mpark::variant;
+
 // Used to indicate that a raw pointer should not be null (interface info).
 template <typename T> using not_null = T;
+
+/*******************************************************************************
+ * Optionally stores a value.
+ * Simpler but less capable version of C++17 std::optional<T>.
+ * T must be default constructible.
+ */
+template <typename T> struct Optional {
+	T value{};
+	bool has_value{false};
+
+	constexpr Optional () = default; // No value
+	constexpr Optional (T t) : value (t), has_value (true) {}
+
+	constexpr Optional & operator= (T t) {
+		value = t;
+		has_value = true;
+		return *this;
+	}
+
+	// Test if we have a value
+	constexpr operator bool () const noexcept { return has_value; }
+};
 
 /*******************************************************************************
  * span<T> represents a reference to a segment of a T array.

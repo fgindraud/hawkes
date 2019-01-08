@@ -103,16 +103,24 @@ template <typename DataType> static void do_test (const ProcessesData<DataType> 
  * Program entry point.
  */
 
-enum Base {
-	Histogram,
+struct None {};
+
+enum class Kernel {
+	None,
+	Interval,
 };
 
 int main (int argc, char * argv[]) {
-	ProcessesData<Point> point_processes;
 	double gamma = 3.;
 
-	Base base = Base::Histogram;
-	HistogramBase histogram_config{10, 10};
+	variant<None, HistogramBase> base = None{};
+
+	Kernel use_kernel = Kernel::None;
+	Optional<std::vector<int32_t>> explicit_kernel_widths;
+
+	std::vector<string_view> current_region_names;
+
+	ProcessesData<Point> point_processes; // TODO two steps, first read intervals, then generate sorted points lists
 
 	// Command line parsing setup
 	const auto command_line = CommandLineView (argc, argv);
@@ -134,21 +142,42 @@ int main (int argc, char * argv[]) {
 	});
 #endif
 
-	parser.option ({"g", "gamma"}, "value", "Set gamma value (double, positive)",
-	               [&gamma](string_view value) { gamma = parse_strict_positive_double (value, "gamma"); });
+	parser.option ({"g", "gamma"}, "value", "Set gamma value (double, positive)", [&gamma](string_view value) { //
+		gamma = parse_strict_positive_double (value, "gamma");
+	});
 
 	parser.option2 ({"histogram"}, "K", "delta", "Use an histogram base (k > 0, delta > 0)",
-	                [&](string_view k_value, string_view delta_value) {
-		                base = Base::Histogram;
-		                histogram_config.base_size = parse_strict_positive_int (k_value, "histogram K");
-		                histogram_config.delta = parse_strict_positive_int (delta_value, "histogram delta");
+	                [&base](string_view k_value, string_view delta_value) {
+		                int32_t base_size = parse_strict_positive_int (k_value, "histogram K");
+		                int32_t delta = parse_strict_positive_int (delta_value, "histogram delta");
+		                base = HistogramBase{base_size, delta};
 	                });
 
-	parser.option2 ({"f"}, "filename", "r1[,r2,...]", "Add selected regions from process file",
-	                [&](string_view filename, string_view regions) {
-		                auto region_names = split (',', regions);
-		                read_process_data_from (point_processes, filename, make_span (region_names));
-	                });
+	parser.option ({"kernel"}, "none|interval", "Use a kernel type (default=none)", [&use_kernel](string_view value) {
+		if (value == "none") {
+			use_kernel = Kernel::None;
+		} else if (value == "interval") {
+			use_kernel = Kernel::Interval;
+		} else {
+			throw std::runtime_error (fmt::format ("Unknown kernel type option: '{}'", value));
+		}
+	});
+	parser.option ({"kernel-widths"}, "w0[:w1:w2:...]", "Use explicit kernel widths (default=deduced)",
+	               [&explicit_kernel_widths](string_view values) {
+		               std::vector<int32_t> widths;
+		               for (string_view value : split (':', values)) {
+			               widths.emplace_back (parse_strict_positive_int (value, "kernel width"));
+		               }
+		               explicit_kernel_widths = std::move (widths);
+	               });
+	// TODO deduce widths from interval data
+
+	parser.option ({"r", "regions"}, "r0[,r1,r2,...]", "Set region names extracted from next files",
+	               [&current_region_names](string_view regions) { current_region_names = split (',', regions); });
+
+	parser.option ({"f"}, "filename", "Add process from file", [&](string_view filename) {
+		read_process_data_from (point_processes, filename, make_span (current_region_names));
+	});
 
 	try {
 		// Parse command line arguments. All actions declared to the parser will be called here.
