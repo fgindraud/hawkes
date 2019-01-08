@@ -102,8 +102,17 @@ template <typename DataType> static void do_test (const ProcessesData<DataType> 
 /******************************************************************************
  * Program entry point.
  */
+
+enum Base {
+	Histogram,
+};
+
 int main (int argc, char * argv[]) {
 	ProcessesData<Point> point_processes;
+	double gamma = 3.;
+
+	Base base = Base::Histogram;
+	HistogramBase histogram_config{10, 10};
 
 	// Command line parsing setup
 	const auto command_line = CommandLineView (argc, argv);
@@ -116,14 +125,24 @@ int main (int argc, char * argv[]) {
 
 #if defined(_OPENMP)
 	parser.option ({"n", "nb-threads"}, "n", "Number of computation threads (default=max)", [&](string_view n) {
-		const auto nb_threads = parse_positive_int (n, "nb threads");
+		const auto nb_threads = parse_strict_positive_int (n, "nb threads");
 		const auto nb_proc = std::size_t (omp_get_num_procs ());
-		if (!(0 < nb_threads && nb_threads <= nb_proc)) {
+		if (!(nb_threads <= nb_proc)) {
 			throw std::runtime_error (fmt::format ("Number of threads must be in [1, {}]", nb_proc));
 		}
 		omp_set_num_threads (int(nb_threads));
 	});
 #endif
+
+	parser.option ({"g", "gamma"}, "value", "Set gamma value (double, positive)",
+	               [&gamma](string_view value) { gamma = parse_strict_positive_double (value, "gamma"); });
+
+	parser.option2 ({"histogram"}, "K", "delta", "Use an histogram base (k > 0, delta > 0)",
+	                [&](string_view k_value, string_view delta_value) {
+		                base = Base::Histogram;
+		                histogram_config.base_size = parse_strict_positive_int (k_value, "histogram K");
+		                histogram_config.delta = parse_strict_positive_int (delta_value, "histogram delta");
+	                });
 
 	parser.option2 ({"f"}, "filename", "r1[,r2,...]", "Add selected regions from process file",
 	                [&](string_view filename, string_view regions) {

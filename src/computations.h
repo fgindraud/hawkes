@@ -224,7 +224,7 @@ inline Matrix_M_MK1 compute_b (const ProcessesData<Point> & processes, RegionId 
 	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
 		const auto & m_process = processes.data (m, region);
 
-		// b0
+		// b_0
 		b.set_0 (m, double(m_process.size ()));
 
 		// b_lk
@@ -302,7 +302,7 @@ inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId regio
 	return g;
 }
 
-inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> & b_by_region) {
+inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> b_by_region) {
 	const auto nb_regions = int32_t (b_by_region.size ());
 	assert (nb_regions > 0);
 	const auto nb_processes = b_by_region[0].nb_processes;

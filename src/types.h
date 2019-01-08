@@ -33,6 +33,7 @@ struct RegionId {
 // Single coordinate for a process represented by points.
 using Point = int32_t;
 
+
 // Store a process region data: its name and list of data elements, sorted.
 template <typename DataType> struct ProcessRegionData {
 	std::string name;

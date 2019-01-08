@@ -157,15 +157,19 @@ inline std::vector<string_view> split (char separator, string_view text) {
 }
 
 // Parse numbers
-inline double parse_double_0_1 (string_view str, string_view what) {
+inline double parse_double (string_view str, string_view what) {
 	const auto null_terminated = to_string (str);
 	char * end = nullptr;
 	const double d = std::strtod (null_terminated.data (), &end);
 	if (end == null_terminated.data ()) {
 		throw std::runtime_error (fmt::format ("Unable to parse value for {} from '{}'", what, str));
 	}
-	if (!(0 <= d && d <= 1)) {
-		throw std::runtime_error (fmt::format ("Value for {} is not in [0, 1]: {:#.15g}", what, d));
+	return d;
+}
+inline double parse_strict_positive_double (string_view str, string_view what) {
+	double d = parse_double (str, what);
+	if (!(0 < d)) {
+		throw std::runtime_error (fmt::format ("Value for {} is not > 0: {:#.15g}", what, d));
 	}
 	return d;
 }
@@ -178,12 +182,10 @@ inline long parse_int (string_view str, string_view what) {
 	}
 	return n;
 }
-inline std::size_t parse_positive_int (string_view str, string_view what) {
-	const auto null_terminated = to_string (str);
-	char * end = nullptr;
-	const long n = std::strtol (null_terminated.data (), &end, 0);
-	if (end == null_terminated.data () || n < 0) {
-		throw std::runtime_error (fmt::format ("Unable to parse positive value for {} from '{}'", what, str));
+inline std::size_t parse_strict_positive_int (string_view str, string_view what) {
+	auto n = parse_int (str, what);
+	if (!(n > 0)) {
+		throw std::runtime_error (fmt::format ("Value for {} is not > 0: {}", what, n));
 	}
 	return std::size_t (n);
 }
