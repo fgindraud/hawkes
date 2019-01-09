@@ -177,18 +177,25 @@ inline std::vector<RawRegionData> read_all_from_bed_file (not_null<FILE *> file)
 
 inline std::vector<RawRegionData> read_selected_from_bed_file (not_null<FILE *> file,
                                                                span<const string_view> region_names) {
-	// Read all regions data, then copy them in the right order
-	// We must copy in the case of duplicated region names in the list.
+	// Read all regions data, then copy them in the right order to the final vector of regions
 	std::vector<RawRegionData> all_regions = read_all_from_bed_file (file);
 	std::vector<RawRegionData> selected_regions;
 	selected_regions.reserve (region_names.size ());
-	for (const string_view name : region_names) {
+	for (auto name_it = region_names.begin (); name_it != region_names.end (); ++name_it) {
+		const auto wanted_name = *name_it;
 		auto it = std::find_if (all_regions.begin (), all_regions.end (),
-		                        [name](const auto & element) { return element.name == name; });
+		                        [wanted_name](const auto & region) { return region.name == wanted_name; });
 		if (it != all_regions.end ()) {
-			selected_regions.emplace_back (*it);
+			const bool is_wanted_name_required_afterward =
+			    std::any_of (name_it + 1, region_names.end (),
+			                 [wanted_name](const string_view other_region_name) { return wanted_name == other_region_name; });
+			if (!is_wanted_name_required_afterward) {
+				selected_regions.emplace_back (std::move (*it)); // We can move data (avoid a copy).
+			} else {
+				selected_regions.emplace_back (*it);
+			}
 		} else {
-			throw std::runtime_error (fmt::format ("Selected region was not found: {}", name));
+			throw std::runtime_error (fmt::format ("Required region was not found: {}", wanted_name));
 		}
 	}
 	return selected_regions;
