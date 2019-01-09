@@ -110,7 +110,6 @@ int main (int argc, char * argv[]) {
 	Kernel use_kernel = Kernel::None;
 	Optional<std::vector<int32_t>> explicit_kernel_widths;
 
-	RawProcessData::Invert current_invert_flag = RawProcessData::Invert::No;
 	std::vector<string_view> current_region_names;
 	std::vector<RawProcessData> raw_processes;
 
@@ -124,7 +123,7 @@ int main (int argc, char * argv[]) {
 	});
 
 #if defined(_OPENMP)
-	parser.option ({"n", "nb-threads"}, "n", "Number of computation threads (default=max)", [&](string_view n) {
+	parser.option ({"n", "nb-threads"}, "n", "Number of computation threads (default=max)", [](string_view n) {
 		const auto nb_threads = parse_strict_positive_int (n, "nb threads");
 		const auto nb_proc = std::size_t (omp_get_num_procs ());
 		if (!(nb_threads <= nb_proc)) {
@@ -174,16 +173,23 @@ int main (int argc, char * argv[]) {
 		               }
 		               current_region_names = std::move (region_names);
 	               });
-	parser.option ({"f"}, "filename", "Add process from file", [&](string_view filename) {
+	auto add_process_from_file = [&current_region_names, &raw_processes](string_view filename,
+	                                                                     RawProcessData::Direction direction) {
 		if (current_region_names.empty ()) {
 			throw std::runtime_error ("List of region names is empty: set region names before reading a file");
 		}
 		auto regions = read_regions_from (filename, make_span (current_region_names));
 		assert (regions.size () == current_region_names.size ());
-		raw_processes.emplace_back (RawProcessData{to_string (filename), std::move (regions), current_invert_flag});
-		// TODO add invert flag to name ?
-		// TODO overridable name ?
-	});
+		raw_processes.emplace_back (RawProcessData{to_string (filename), std::move (regions), direction});
+	};
+	parser.option ({"f", "file-forward"}, "filename", "Add process regions from file",
+	               [add_process_from_file](string_view filename) {
+		               add_process_from_file (filename, RawProcessData::Direction::Forward);
+	               });
+	parser.option ({"b", "file-backward"}, "filename", "Add process regions (reversed) from file",
+	               [add_process_from_file](string_view filename) {
+		               add_process_from_file (filename, RawProcessData::Direction::Backward);
+	               });
 
 	try {
 		// Parse command line arguments. All actions declared to the parser will be called here.

@@ -47,7 +47,7 @@ struct RawRegionData {
 struct RawProcessData {
 	std::string name;
 	std::vector<RawRegionData> regions;
-	enum class Invert { No, Yes } invert;
+	enum class Direction { Forward, Backward } direction;
 };
 
 // Store a process region data: its name and list of data elements, sorted.
