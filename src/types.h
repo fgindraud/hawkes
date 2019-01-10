@@ -15,6 +15,8 @@ using std::int64_t;
 
 /******************************************************************************
  * Index types.
+ * TODO homogeneize, use size_t for indexes (IndexType base typedef)
+ * TODO use typedef for PointSpaceType = int32_t
  */
 struct ProcessId {
 	int32_t value; // [0; nb_processes[
@@ -50,40 +52,62 @@ struct RawProcessData {
 	enum class Direction { Forward, Backward } direction;
 };
 
-// Store a process region data: its name and list of data elements, sorted.
-template <typename DataType> struct ProcessRegionData {
-	std::string name;
-	SortedVec<DataType> data;
-};
-
 // Store the data for multiple processes and regions.
 // All processes must have the same number of regions.
-// TODO simplify or retire.
-template <typename DataType> class ProcessesData {
+// Number of regions and process must be non zero.
+class ProcessesRegionData {
 private:
-	std::vector<std::string> process_names_;
-	Vector2d<ProcessRegionData<DataType>> process_regions_; // Rows = processes, Cols = regions
+	Vector2d<SortedVec<Point>> points_;
+
+	ProcessesRegionData (std::size_t nb_processes, std::size_t nb_regions) : points_ (nb_regions, nb_processes) {
+		assert (nb_processes > 0);
+		assert (nb_regions > 0);
+	}
 
 public:
-	ProcessesData () = default;
+	std::size_t nb_regions () const { return points_.nb_rows (); }
+	std::size_t nb_processes () const { return points_.nb_cols (); }
 
-	int32_t nb_processes () const { return int32_t (process_regions_.nb_rows ()); }
-	int32_t nb_regions () const { return int32_t (process_regions_.nb_cols ()); }
+	const SortedVec<Point> & process_data (ProcessId m, RegionId r) const { return points_ (r.value, m.value); }
+	span<const SortedVec<Point>> processes_data_for_region (RegionId r) const { return points_.row (r.value); }
 
-	const ProcessRegionData<DataType> & process_region (ProcessId m, RegionId r) const {
-		assert (0 <= m.value && m.value < nb_processes ());
-		assert (0 <= r.value && r.value < nb_regions ());
-		return process_regions_ (std::size_t (m.value), std::size_t (r.value));
+	static ProcessesRegionData from_raw (const std::vector<RawProcessData> & raw_processes) {
+		const auto nb_processes = raw_processes.size ();
+		if (raw_processes.empty ()) {
+			throw std::runtime_error ("ProcessesRegionData::from_raw: Empty process list");
+		}
+		const auto nb_regions = raw_processes[0].regions.size ();
+		ProcessesRegionData data (nb_processes, nb_regions);
+		for (ProcessId m{0}; m.value < nb_processes; m.value++) {
+			const auto & raw_process = raw_processes[m.value];
+			if (raw_process.regions.size () != nb_regions) {
+				throw std::runtime_error (
+				    fmt::format ("ProcessesRegionData::from_raw: process {} has wrong region number: got {}, expected {}",
+				                 m.value, raw_process.regions.size (), nb_regions));
+			}
+			for (RegionId r{0}; r.value < nb_regions; ++r.value) {
+				// Intervals are represented by their middle points
+				std::vector<Point> points;
+				points.reserve (raw_process.regions[r.value].unsorted_intervals.size ());
+				for (const auto & interval : raw_process.regions[r.value].unsorted_intervals) {
+					const auto point = (interval.start + interval.end) / 2;
+					points.emplace_back (point);
+				}
+				// Apply reversing if requested before sorting them in increasing order
+				if (raw_process.direction == RawProcessData::Direction::Backward && !points.empty ()) {
+					// Reverse point values, and add the max to have positive positions starting with 0.
+					// The shift with max is not necessary as algorithms do no require positive positions in general.
+					// TODO remove shifting ?
+					const auto max = *std::max_element (points.begin (), points.end ());
+					for (auto & point : points) {
+						point = max - point;
+					}
+				}
+				data.points_ (r.value, m.value) = SortedVec<Point>::from_unsorted (std::move (points));
+			}
+		}
+		return data;
 	}
-	const SortedVec<DataType> & data (ProcessId m, RegionId r) const { return process_region (m, r).data; }
-	const std::string & region_name (ProcessId m, RegionId r) const { return process_region (m, r).name; }
-	const std::string & process_name (ProcessId m) const {
-		assert (0 <= m.value && m.value < nb_processes ());
-		return process_names_[std::size_t (m.value)];
-	}
-
-	// Returns new process id. Defined in input.h
-	ProcessId add_process (string_view name, std::vector<ProcessRegionData<DataType>> && regions);
 };
 
 /******************************************************************************

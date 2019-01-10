@@ -70,32 +70,32 @@ static std::vector<RawRegionData> read_regions_from (string_view filename, span<
 /******************************************************************************
  * Tests
  */
-#include <iostream>
-template <typename DataType> static void do_test (const ProcessesData<DataType> & processes) {
-	for (int delta = 10; delta < 1000000; delta *= 10) {
-		fmt::print ("### Delta = {}\n", delta);
-		HistogramBase base{7, delta};
-		std::vector<Matrix_M_MK1> matrix_b;
-		std::vector<MatrixG> matrix_g;
-		{
-			const auto start = instant ();
-			for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
-				matrix_b.emplace_back (compute_b (processes, r, base));
-			}
-			const auto end = instant ();
-			fmt::print (stderr, "matrix_b: time = {}\n", duration_string (end - start));
-		}
-		{
-			const auto start = instant ();
-			for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
-				matrix_g.emplace_back (compute_g (processes, r, base));
-			}
-			const auto end = instant ();
-			fmt::print (stderr, "matrix_g: time = {}\n", duration_string (end - start));
-		}
-		std::cerr << matrix_g[0].inner << "\n";
-	}
-}
+//#include <iostream>
+// template <typename DataType> static void do_test (const ProcessesData<DataType> & processes) {
+//	for (int delta = 10; delta < 1000000; delta *= 10) {
+//		fmt::print ("### Delta = {}\n", delta);
+//		HistogramBase base{7, delta};
+//		std::vector<Matrix_M_MK1> matrix_b;
+//		std::vector<MatrixG> matrix_g;
+//		{
+//			const auto start = instant ();
+//			for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
+//				matrix_b.emplace_back (compute_b (processes, r, base));
+//			}
+//			const auto end = instant ();
+//			fmt::print (stderr, "matrix_b: time = {}\n", duration_string (end - start));
+//		}
+//		{
+//			const auto start = instant ();
+//			for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
+//				matrix_g.emplace_back (compute_g (processes, r, base));
+//			}
+//			const auto end = instant ();
+//			fmt::print (stderr, "matrix_g: time = {}\n", duration_string (end - start));
+//		}
+//		std::cerr << matrix_g[0].inner << "\n";
+//	}
+//}
 
 /******************************************************************************
  * Program entry point.
@@ -195,22 +195,20 @@ int main (int argc, char * argv[]) {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
 
-		// TODO post process region data:
-		// Deduce kernel widths if not provided
-		// Generate points and sort them, applying invert flag if set (std::reverse, p->max-p).
-		// Put that in a simple Vec2d such that all process for a region fit a span.
-		// Generate merged point list for B_hat ?
+		// TODO Deduce kernel widths if not provided
+
+		const auto point_processes = ProcessesRegionData::from_raw (raw_processes);
 
 		// do_test (point_processes);
-		const auto base = HistogramBase{4, 10};
-		ProcessesData<Point> point_processes;
-		point_processes.add_process ("p1", {{"r1", SortedVec<Point>::from_sorted ({5, 15})}});
-		point_processes.add_process ("p2", {{"r1", SortedVec<Point>::from_sorted ({6, 18})}});
-		const std::vector<IntervalKernel> kernels = {IntervalKernel{6}, IntervalKernel{6}};
-		const auto g_points = compute_g (point_processes, RegionId{0}, base);
-		const auto g_kernels = compute_g (point_processes, RegionId{0}, base, make_span (kernels));
-		std::cerr << "=== G with points ===\n" << g_points.inner << "\n";
-		std::cerr << "=== G with kernels ===\n" << g_kernels.inner << "\n";
+		// const auto base = HistogramBase{4, 10};
+		// ProcessesData<Point> point_processes;
+		// point_processes.add_process ("p1", {{"r1", SortedVec<Point>::from_sorted ({5, 15})}});
+		// point_processes.add_process ("p2", {{"r1", SortedVec<Point>::from_sorted ({6, 18})}});
+		// const std::vector<IntervalKernel> kernels = {IntervalKernel{6}, IntervalKernel{6}};
+		// const auto g_points = compute_g (point_processes, RegionId{0}, base);
+		// const auto g_kernels = compute_g (point_processes, RegionId{0}, base, make_span (kernels));
+		// std::cerr << "=== G with points ===\n" << g_points.inner << "\n";
+		// std::cerr << "=== G with kernels ===\n" << g_kernels.inner << "\n";
 
 	} catch (const CommandLineParser::Exception & exc) {
 		fmt::print (stderr, "Error: {}. Use --help for a list of options.\n", exc.what ());

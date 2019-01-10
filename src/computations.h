@@ -70,12 +70,11 @@ inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points,
 
 /* Compute Tmax (used in G).
  */
-inline int64_t tmax_for_region (const ProcessesData<Point> & processes, RegionId region) {
+inline int64_t tmax (span<const SortedVec<Point>> processes) {
 	int64_t min = std::numeric_limits<int64_t>::max ();
 	int64_t max = std::numeric_limits<int64_t>::min ();
 
-	for (ProcessId m{0}; m.value < processes.nb_processes (); ++m.value) {
-		const auto & points = processes.data (m, region);
+	for (const auto & points : processes) {
 		if (points.size () > 0) {
 			min = std::min (min, int64_t (points[0]));
 			max = std::max (max, int64_t (points[points.size () - 1]));
@@ -118,7 +117,7 @@ inline std::vector<int64_t> compute_b_ml_histogram_counts_for_all_k (const Sorte
 		// This can be done by searching m points starting at the previous positions (x_l increased).
 		for (int32_t k = 0; k < base.base_size + 1; ++k) {
 			const int32_t shift = k * base.delta;
-			int32_t i = sliding_interval_bounds[k];
+			auto i = sliding_interval_bounds[k];
 			while (i < n_m && !(m_points[i] - x_l > shift)) {
 				i += 1;
 			}
@@ -215,21 +214,21 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
 // TODO: B and G are sums of region-specific B and G !
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline Matrix_M_MK1 compute_b (const ProcessesData<Point> & processes, RegionId region, HistogramBase base) {
-	const auto nb_processes = processes.nb_processes ();
+inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base) {
+	const auto nb_processes = int32_t (processes.size ());
 	const auto base_size = base.base_size;
 	const auto inv_sqrt_delta = 1. / std::sqrt (double(base.delta));
 	Matrix_M_MK1 b (nb_processes, base_size);
 
 	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
-		const auto & m_process = processes.data (m, region);
+		const auto & m_process = processes[m.value];
 
 		// b_0
 		b.set_0 (m, double(m_process.size ()));
 
 		// b_lk
 		for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
-			auto counts = compute_b_ml_histogram_counts_for_all_k (m_process, processes.data (l, region), base);
+			auto counts = compute_b_ml_histogram_counts_for_all_k (m_process, processes[l.value], base);
 			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
 				b.set_lk (m, l, k, double(counts[k.value]) * inv_sqrt_delta);
 			}
@@ -239,24 +238,24 @@ inline Matrix_M_MK1 compute_b (const ProcessesData<Point> & processes, RegionId 
 }
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId region, HistogramBase base) {
-	const auto nb_processes = processes.nb_processes ();
+inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase base) {
+	const auto nb_processes = int32_t (processes.size ());
 	const auto base_size = base.base_size;
 	const auto sqrt_delta = std::sqrt (double(base.delta));
 	const auto inv_delta = 1 / double(base.delta);
 	MatrixG g (nb_processes, base_size);
 
-	g.set_tmax (tmax_for_region (processes, region));
+	g.set_tmax (tmax (processes));
 
 	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
-		const auto g_lk = processes.data (l, region).size () * sqrt_delta;
+		const auto g_lk = processes[l.value].size () * sqrt_delta;
 		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
 			g.set_g (l, k, g_lk);
 		}
 	}
 
 	auto G_value = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
-		const auto integral = compute_g_ll2kk2_histogram_integral (processes.data (l, region), processes.data (l2, region),
+		const auto integral = compute_g_ll2kk2_histogram_integral (processes[l.value], processes[l2.value],
 		                                                           base.interval (k), base.interval (k2));
 		return double(integral) * inv_delta;
 	};
@@ -403,15 +402,15 @@ inline double compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_po
 	return factorized_scaling * unscaled_sum;
 }
 
-inline Matrix_M_MK1 compute_b (const ProcessesData<Point> & processes, RegionId region, HistogramBase base,
+inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base,
                                span<const IntervalKernel> kernels) {
-	assert (int32_t (kernels.size ()) == processes.nb_processes ());
-	const auto nb_processes = processes.nb_processes ();
+	assert (kernels.size () == processes.size ());
+	const auto nb_processes = int32_t (processes.size ());
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b (nb_processes, base_size);
 
 	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
-		const auto & m_process = processes.data (m, region);
+		const auto & m_process = processes[m.value];
 		const auto & m_kernel = kernels[m.value];
 
 		// b0
@@ -421,8 +420,7 @@ inline Matrix_M_MK1 compute_b (const ProcessesData<Point> & processes, RegionId 
 		for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
 			const auto & l_kernel = kernels[l.value];
 			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
-				const auto v =
-				    compute_b_mlk_histogram (m_process, processes.data (l, region), base.interval (k), m_kernel, l_kernel);
+				const auto v = compute_b_mlk_histogram (m_process, processes[l.value], base.interval (k), m_kernel, l_kernel);
 				b.set_lk (m, l, k, v);
 			}
 		}
@@ -430,29 +428,29 @@ inline Matrix_M_MK1 compute_b (const ProcessesData<Point> & processes, RegionId 
 	return b;
 }
 
-inline MatrixG compute_g (const ProcessesData<Point> & processes, RegionId region, HistogramBase base,
+inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase base,
                           span<const IntervalKernel> kernels) {
-	assert (int32_t (kernels.size ()) == processes.nb_processes ());
-	const auto nb_processes = processes.nb_processes ();
+	assert (kernels.size () == processes.size ());
+	const auto nb_processes = int32_t (processes.size ());
 	const auto base_size = base.base_size;
 	const auto sqrt_delta = std::sqrt (double(base.delta));
 	MatrixG g (nb_processes, base_size);
 
-	g.set_tmax (tmax_for_region (processes, region));
+	g.set_tmax (tmax (processes));
 
 	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
 		/* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
 		 * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l sqrt(delta) = |N_m| eta_l sqrt(delta).
 		 */
-		const auto g_lk = double(processes.data (l, region).size ()) * std::sqrt (kernels[l.value].width) * sqrt_delta;
+		const auto g_lk = double(processes[l.value].size ()) * std::sqrt (kernels[l.value].width) * sqrt_delta;
 		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
 			g.set_g (l, k, g_lk);
 		}
 	}
 
 	auto G_value = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
-		return compute_g_ll2kk2_histogram_integral (processes.data (l, region), processes.data (l2, region), base.delta, k,
-		                                            k2, kernels[l.value], kernels[l2.value]);
+		return compute_g_ll2kk2_histogram_integral (processes[l.value], processes[l2.value], base.delta, k, k2,
+		                                            kernels[l.value], kernels[l2.value]);
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
 	 *

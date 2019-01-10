@@ -105,28 +105,6 @@ inline bool LineByLineReader::read_next_line () {
 }
 
 /******************************************************************************
- * Parsing utils.
- */
-
-// Add process to table with checking of region number TODO rm
-template <typename DataType>
-inline ProcessId ProcessesData<DataType>::add_process (string_view name,
-                                                       std::vector<ProcessRegionData<DataType>> && regions) {
-	if (nb_processes () == 0) {
-		// First process defines the number of regions
-		process_regions_ = Vector2d<ProcessRegionData<DataType>> (0, regions.size ());
-	}
-	if (int(regions.size ()) != nb_regions ()) {
-		throw std::runtime_error (
-		    fmt::format ("Adding process data: expected {} regions, got {}", nb_regions (), regions.size ()));
-	}
-	const auto new_process_id = ProcessId{nb_processes ()};
-	process_regions_.append_row (std::move (regions));
-	process_names_.emplace_back (to_string (name));
-	return new_process_id;
-}
-
-/******************************************************************************
  * BED format parsing.
  */
 inline std::vector<RawRegionData> read_all_from_bed_file (not_null<FILE *> file) {
