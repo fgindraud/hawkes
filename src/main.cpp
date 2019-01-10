@@ -108,7 +108,7 @@ int main (int argc, char * argv[]) {
 
 	enum class Kernel { None, Interval };
 	Kernel use_kernel = Kernel::None;
-	Optional<std::vector<int32_t>> explicit_kernel_widths;
+	Optional<std::vector<PointSpace>> explicit_kernel_widths;
 
 	std::vector<string_view> current_region_names;
 	std::vector<RawProcessData> raw_processes;
@@ -139,8 +139,8 @@ int main (int argc, char * argv[]) {
 
 	parser.option2 ({"histogram"}, "K", "delta", "Use an histogram base (k > 0, delta > 0)",
 	                [&base](string_view k_value, string_view delta_value) {
-		                int32_t base_size = parse_strict_positive_int (k_value, "histogram K");
-		                int32_t delta = parse_strict_positive_int (delta_value, "histogram delta");
+		                const auto base_size = size_t (parse_strict_positive_int (k_value, "histogram K"));
+		                const auto delta = PointSpace (parse_strict_positive_int (delta_value, "histogram delta"));
 		                base = HistogramBase{base_size, delta};
 	                });
 
@@ -155,9 +155,9 @@ int main (int argc, char * argv[]) {
 	});
 	parser.option ({"kernel-widths"}, "w0[:w1:w2:...]", "Use explicit kernel widths (default=deduced)",
 	               [&explicit_kernel_widths](string_view values) {
-		               std::vector<int32_t> widths;
+		               std::vector<PointSpace> widths;
 		               for (string_view value : split (':', values)) {
-			               widths.emplace_back (parse_strict_positive_int (value, "kernel width"));
+			               widths.emplace_back (PointSpace (parse_strict_positive_int (value, "kernel width")));
 		               }
 		               explicit_kernel_widths = std::move (widths);
 	               });

@@ -307,10 +307,10 @@ public:
 		return SortedVec (std::move (data));
 	}
 
-	std::int32_t size () const { return std::int32_t (inner.size ()); }
-	const T & operator[] (std::int32_t i) const {
-		assert (0 <= i && i < size ());
-		return inner[std::size_t (i)];
+	std::size_t size () const { return inner.size (); }
+	const T & operator[] (std::size_t i) const {
+		assert (i < size ());
+		return inner[i];
 	}
 
 	using const_iterator = typename std::vector<T>::const_iterator;

@@ -28,7 +28,7 @@ inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points,
 	// Thus sum_{x_m,x_l} shape(x_m - x_l) = sum_{(x_m, x_l), x_m - x_l in non_zero_domain} shape(x_m - x_l).
 	const auto non_zero_domain = shape.non_zero_domain ();
 
-	int32_t starting_i_m = 0;
+	size_t starting_i_m = 0;
 	for (const Point x_l : l_points) {
 		// x_l = N_l[i_l], with N_l[x] a strictly increasing function of x.
 		// Compute shape(x_m - x_l) for all x_m in (x_l + non_zero_domain) interval.
@@ -53,7 +53,7 @@ inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points,
 		// starting_i_m defined => for each i_m < starting_i_m, shape(N_m[i_m] - x_l) == 0.
 		// Thus we only scan from starting_i_m to the last i_m in interval.
 		// N_m[x] is strictly increasing so we only need to check the right bound of the interval.
-		for (int32_t i_m = starting_i_m; i_m < m_points.size () && m_points[i_m] <= interval_i_l.to; i_m += 1) {
+		for (size_t i_m = starting_i_m; i_m < m_points.size () && m_points[i_m] <= interval_i_l.to; i_m += 1) {
 			sum += shape (shape::PointInNonZeroDomain{m_points[i_m] - x_l});
 		}
 	}
@@ -109,15 +109,15 @@ inline std::vector<int64_t> compute_b_ml_histogram_counts_for_all_k (const Sorte
 	std::vector<int64_t> counts (base.base_size, 0);
 	// Invariant: for x_l last visited point of process l:
 	// sib[k] = index of first x_m with x_m - x_l > k*delta
-	std::vector<int32_t> sliding_interval_bounds (base.base_size + 1, 0);
+	std::vector<size_t> sliding_interval_bounds (base.base_size + 1, 0);
 
 	const auto n_m = m_points.size ();
 	for (const Point x_l : l_points) {
 		// Compute indexes of all k interval boundaries, shifted from the current x_l.
 		// This can be done by searching m points starting at the previous positions (x_l increased).
-		for (int32_t k = 0; k < base.base_size + 1; ++k) {
-			const int32_t shift = k * base.delta;
-			auto i = sliding_interval_bounds[k];
+		for (size_t k = 0; k < base.base_size + 1; ++k) {
+			const PointSpace shift = PointSpace (k) * base.delta;
+			size_t i = sliding_interval_bounds[k];
 			while (i < n_m && !(m_points[i] - x_l > shift)) {
 				i += 1;
 			}
@@ -125,7 +125,7 @@ inline std::vector<int64_t> compute_b_ml_histogram_counts_for_all_k (const Sorte
 		}
 		// Accumulate the number of points in each shifted interval for the current x_l.
 		// Number of points = difference between indexes of interval boundaries.
-		for (int32_t k = 0; k < base.base_size; ++k) {
+		for (size_t k = 0; k < base.base_size; ++k) {
 			counts[k] += sliding_interval_bounds[k + 1] - sliding_interval_bounds[k];
 		}
 	}
@@ -155,8 +155,8 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
 
 		int64_t current_points_inside = 0;
 		// Indexes of next points to enter/exit interval
-		int32_t next_i_entering = 0;
-		int32_t next_i_exiting = 0;
+		size_t next_i_entering = 0;
+		size_t next_i_exiting = 0;
 		// Value of next points to enter/exit interval, or inf if no more points
 		Point next_x_entering = 0;
 		Point next_x_exiting = 0;
@@ -166,7 +166,7 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
 			next_x_entering = get_shifted_point (0, shifts.from);
 			next_x_exiting = get_shifted_point (0, shifts.to);
 		}
-		Point get_shifted_point (int32_t i, int32_t shift) const {
+		Point get_shifted_point (size_t i, PointSpace shift) const {
 			if (i < points.size ()) {
 				return points[i] + shift;
 			} else {
@@ -215,22 +215,22 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
 inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base) {
-	const auto nb_processes = int32_t (processes.size ());
+	const auto nb_processes = processes.size ();
 	const auto base_size = base.base_size;
 	const auto inv_sqrt_delta = 1. / std::sqrt (double(base.delta));
 	Matrix_M_MK1 b (nb_processes, base_size);
 
-	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
-		const auto & m_process = processes[m.value];
+	for (ProcessId m = 0; m < nb_processes; ++m) {
+		const auto & m_process = processes[m];
 
 		// b_0
 		b.set_0 (m, double(m_process.size ()));
 
 		// b_lk
-		for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
-			auto counts = compute_b_ml_histogram_counts_for_all_k (m_process, processes[l.value], base);
-			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
-				b.set_lk (m, l, k, double(counts[k.value]) * inv_sqrt_delta);
+		for (ProcessId l = 0; l < nb_processes; ++l) {
+			auto counts = compute_b_ml_histogram_counts_for_all_k (m_process, processes[l], base);
+			for (FunctionBaseId k = 0; k < base_size; ++k) {
+				b.set_lk (m, l, k, double(counts[k]) * inv_sqrt_delta);
 			}
 		}
 	}
@@ -239,7 +239,7 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
 inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase base) {
-	const auto nb_processes = int32_t (processes.size ());
+	const auto nb_processes = processes.size ();
 	const auto base_size = base.base_size;
 	const auto sqrt_delta = std::sqrt (double(base.delta));
 	const auto inv_delta = 1 / double(base.delta);
@@ -247,16 +247,16 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 
 	g.set_tmax (tmax (processes));
 
-	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
-		const auto g_lk = processes[l.value].size () * sqrt_delta;
-		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
+	for (ProcessId l = 0; l < nb_processes; ++l) {
+		const auto g_lk = double(processes[l].size ()) * sqrt_delta;
+		for (FunctionBaseId k = 0; k < base_size; ++k) {
 			g.set_g (l, k, g_lk);
 		}
 	}
 
 	auto G_value = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
-		const auto integral = compute_g_ll2kk2_histogram_integral (processes[l.value], processes[l2.value],
-		                                                           base.interval (k), base.interval (k2));
+		const auto integral =
+		    compute_g_ll2kk2_histogram_integral (processes[l], processes[l2], base.interval (k), base.interval (k2));
 		return double(integral) * inv_delta;
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
@@ -266,21 +266,21 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 	 * Thus for each block of G for (l,l2), we only need to compute 2K+1 values of G.
 	 * We compute the values on two borders, and copy the values for all inner cells.
 	 */
-	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
+	for (ProcessId l = 0; l < nb_processes; ++l) {
 		// Case l2 == l: compute for k2 >= k:
-		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
+		for (FunctionBaseId k = 0; k < base_size; ++k) {
 			// Compute G_{l,l,0,k} and copy to G_{l,l,c,k+c} for k in [0,K[.
 			const auto v = G_value (l, l, FunctionBaseId{0}, k);
-			for (int32_t c = 0; k.value + c < base_size; ++c) {
-				g.set_G (l, l, FunctionBaseId{c}, FunctionBaseId{k.value + c}, v);
+			for (size_t c = 0; k + c < base_size; ++c) {
+				g.set_G (l, l, FunctionBaseId{c}, FunctionBaseId{k + c}, v);
 			}
 		}
 		// Case l2 > l: compute for all (k,k2):
-		for (ProcessId l2{l.value}; l2.value < nb_processes; ++l2.value) {
+		for (ProcessId l2 = l; l2 < nb_processes; ++l2) {
 			// Compute G_{l,l2,0,0} and copy to G_{l,l2,c,c}.
 			{
 				const auto v = G_value (l, l2, FunctionBaseId{0}, FunctionBaseId{0});
-				for (int32_t c = 0; c < base_size; ++c) {
+				for (size_t c = 0; c < base_size; ++c) {
 					g.set_G (l, l2, FunctionBaseId{c}, FunctionBaseId{c}, v);
 				}
 			}
@@ -288,12 +288,12 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 			 * Compute G_{l,l2,0,k} and copy to G_{l,l2,c,k+c}.
 			 * Compute G_{l,l2,k,0} and copy to G_{l,l2,k+c,c}.
 			 */
-			for (FunctionBaseId k{1}; k.value < base_size; ++k.value) {
+			for (FunctionBaseId k = 1; k < base_size; ++k) {
 				const auto v_0k = G_value (l, l2, FunctionBaseId{0}, k);
 				const auto v_k0 = G_value (l, l2, k, FunctionBaseId{0});
-				for (int32_t c = 0; k.value + c < base_size; ++c) {
-					g.set_G (l, l2, FunctionBaseId{c}, FunctionBaseId{k.value + c}, v_0k);
-					g.set_G (l, l2, FunctionBaseId{k.value + c}, FunctionBaseId{c}, v_k0);
+				for (size_t c = 0; k + c < base_size; ++c) {
+					g.set_G (l, l2, FunctionBaseId{c}, FunctionBaseId{k + c}, v_0k);
+					g.set_G (l, l2, FunctionBaseId{k + c}, FunctionBaseId{c}, v_k0);
 				}
 			}
 		}
@@ -302,7 +302,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 }
 
 inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> b_by_region) {
-	const auto nb_regions = int32_t (b_by_region.size ());
+	const auto nb_regions = b_by_region.size ();
 	assert (nb_regions > 0);
 	const auto nb_processes = b_by_region[0].nb_processes;
 	const auto base_size = b_by_region[0].base_size;
@@ -329,7 +329,7 @@ inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> b_by_regio
 
 // W_width
 struct IntervalKernel {
-	int32_t width;
+	PointSpace width;
 };
 
 inline auto to_shape (HistogramBase::Interval i) {
@@ -364,14 +364,15 @@ inline double compute_b_mlk_histogram (const SortedVec<Point> & m_points, const 
 }
 
 inline double compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_points,
-                                                   const SortedVec<Point> & l2_points, int32_t delta, FunctionBaseId k,
-                                                   FunctionBaseId k2, IntervalKernel kernel, IntervalKernel kernel2) {
+                                                   const SortedVec<Point> & l2_points, PointSpace delta,
+                                                   FunctionBaseId k, FunctionBaseId k2, IntervalKernel kernel,
+                                                   IntervalKernel kernel2) {
 	// V = sum_{x_l,x_l2} corr(conv(W_l,phi_k),conv(W_l2,phi_k2)) (x_l-x_l2)
 	// V = factorized_scaling * sum_{x_l,x_l2} shifted((k2-k)*delta, conv(trapezoid(l), trapezoid(l2))) (x_l-x_l2)
 
 	// prepare common scaling and shift
 	const auto factorized_scaling = 1. / (double(delta) * std::sqrt (kernel.width * kernel2.width));
-	const auto factorized_shift = delta * (k2.value - k.value);
+	const auto factorized_shift = delta * (PointSpace (k2) - PointSpace (k));
 	// compute the two sub-convolutions shapes, shift one of them
 	const auto phi_indicator = shape::IntervalIndicator::with_width (delta);
 	const auto kernel_indicator = shape::IntervalIndicator::with_width (kernel.width);
@@ -405,22 +406,22 @@ inline double compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_po
 inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base,
                                span<const IntervalKernel> kernels) {
 	assert (kernels.size () == processes.size ());
-	const auto nb_processes = int32_t (processes.size ());
+	const auto nb_processes = processes.size ();
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b (nb_processes, base_size);
 
-	for (ProcessId m{0}; m.value < nb_processes; ++m.value) {
-		const auto & m_process = processes[m.value];
-		const auto & m_kernel = kernels[m.value];
+	for (ProcessId m = 0; m < nb_processes; ++m) {
+		const auto & m_process = processes[m];
+		const auto & m_kernel = kernels[m];
 
 		// b0
 		b.set_0 (m, double(m_process.size ()) * std::sqrt (m_kernel.width));
 
 		// b_lk
-		for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
-			const auto & l_kernel = kernels[l.value];
-			for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
-				const auto v = compute_b_mlk_histogram (m_process, processes[l.value], base.interval (k), m_kernel, l_kernel);
+		for (ProcessId l = 0; l < nb_processes; ++l) {
+			const auto & l_kernel = kernels[l];
+			for (FunctionBaseId k = 0; k < base_size; ++k) {
+				const auto v = compute_b_mlk_histogram (m_process, processes[l], base.interval (k), m_kernel, l_kernel);
 				b.set_lk (m, l, k, v);
 			}
 		}
@@ -431,26 +432,26 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase base,
                           span<const IntervalKernel> kernels) {
 	assert (kernels.size () == processes.size ());
-	const auto nb_processes = int32_t (processes.size ());
+	const auto nb_processes = processes.size ();
 	const auto base_size = base.base_size;
 	const auto sqrt_delta = std::sqrt (double(base.delta));
 	MatrixG g (nb_processes, base_size);
 
 	g.set_tmax (tmax (processes));
 
-	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
+	for (ProcessId l = 0; l < nb_processes; ++l) {
 		/* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
 		 * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l sqrt(delta) = |N_m| eta_l sqrt(delta).
 		 */
-		const auto g_lk = double(processes[l.value].size ()) * std::sqrt (kernels[l.value].width) * sqrt_delta;
-		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
+		const auto g_lk = double(processes[l].size ()) * std::sqrt (kernels[l].width) * sqrt_delta;
+		for (FunctionBaseId k = 0; k < base_size; ++k) {
 			g.set_g (l, k, g_lk);
 		}
 	}
 
 	auto G_value = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
-		return compute_g_ll2kk2_histogram_integral (processes[l.value], processes[l2.value], base.delta, k, k2,
-		                                            kernels[l.value], kernels[l2.value]);
+		return compute_g_ll2kk2_histogram_integral (processes[l], processes[l2], base.delta, k, k2, kernels[l],
+		                                            kernels[l2]);
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
 	 *
@@ -459,21 +460,21 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 	 * Thus for each block of G for (l,l2), we only need to compute 2K+1 values of G.
 	 * We compute the values on two borders, and copy the values for all inner cells.
 	 */
-	for (ProcessId l{0}; l.value < nb_processes; ++l.value) {
+	for (ProcessId l = 0; l < nb_processes; ++l) {
 		// Case l2 == l: compute for k2 >= k:
-		for (FunctionBaseId k{0}; k.value < base_size; ++k.value) {
+		for (FunctionBaseId k = 0; k < base_size; ++k) {
 			// Compute G_{l,l,0,k} and copy to G_{l,l,c,k+c} for k in [0,K[.
 			const auto v = G_value (l, l, FunctionBaseId{0}, k);
-			for (int32_t c = 0; k.value + c < base_size; ++c) {
-				g.set_G (l, l, FunctionBaseId{c}, FunctionBaseId{k.value + c}, v);
+			for (size_t c = 0; k + c < base_size; ++c) {
+				g.set_G (l, l, FunctionBaseId{c}, FunctionBaseId{k + c}, v);
 			}
 		}
 		// Case l2 > l: compute for all (k,k2):
-		for (ProcessId l2{l.value}; l2.value < nb_processes; ++l2.value) {
+		for (ProcessId l2 = l; l2 < nb_processes; ++l2) {
 			// Compute G_{l,l2,0,0} and copy to G_{l,l2,c,c}.
 			{
 				const auto v = G_value (l, l2, FunctionBaseId{0}, FunctionBaseId{0});
-				for (int32_t c = 0; c < base_size; ++c) {
+				for (size_t c = 0; c < base_size; ++c) {
 					g.set_G (l, l2, FunctionBaseId{c}, FunctionBaseId{c}, v);
 				}
 			}
@@ -481,12 +482,12 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 			 * Compute G_{l,l2,0,k} and copy to G_{l,l2,c,k+c}.
 			 * Compute G_{l,l2,k,0} and copy to G_{l,l2,k+c,c}.
 			 */
-			for (FunctionBaseId k{1}; k.value < base_size; ++k.value) {
+			for (FunctionBaseId k = 1; k < base_size; ++k) {
 				const auto v_0k = G_value (l, l2, FunctionBaseId{0}, k);
 				const auto v_k0 = G_value (l, l2, k, FunctionBaseId{0});
-				for (int32_t c = 0; k.value + c < base_size; ++c) {
-					g.set_G (l, l2, FunctionBaseId{c}, FunctionBaseId{k.value + c}, v_0k);
-					g.set_G (l, l2, FunctionBaseId{k.value + c}, FunctionBaseId{c}, v_k0);
+				for (size_t c = 0; k + c < base_size; ++c) {
+					g.set_G (l, l2, FunctionBaseId{c}, FunctionBaseId{k + c}, v_0k);
+					g.set_G (l, l2, FunctionBaseId{k + c}, FunctionBaseId{c}, v_k0);
 				}
 			}
 		}
