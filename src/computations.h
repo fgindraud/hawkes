@@ -3,7 +3,7 @@
 #include <cmath>
 #include <limits>
 
-#include "convolution.h"
+#include "shape.h"
 #include "types.h"
 
 /******************************************************************************
@@ -88,7 +88,12 @@ inline int64_t tmax (span<const SortedVec<Point>> processes) {
 	}
 }
 
-// Conversion of objects to shapes (convolution.h)
+/* Compute sup_{x} sum_{x_l in N_l} interval(x - x_l).
+ * This is a building block for computation of B_hat, used in the computation of lasso penalties (d).
+ */
+// TODO
+
+// Conversion of objects to shapes (shape.h)
 inline auto to_shape (HistogramBase::Interval i) {
 	// TODO Histo::Interval is ]from; to], but shape::Interval is [from; to].
 	const auto delta = i.to - i.from;
@@ -97,6 +102,32 @@ inline auto to_shape (HistogramBase::Interval i) {
 }
 inline auto to_shape (IntervalKernel kernel) {
 	return shape::scaled (1. / std::sqrt (kernel.width), shape::IntervalIndicator::with_width (kernel.width));
+}
+
+/******************************************************************************
+ * Penalty values for lassoshooting.
+ */
+
+inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> b_by_region) {
+	const auto nb_regions = b_by_region.size ();
+	assert (nb_regions > 0);
+	const auto nb_processes = b_by_region[0].nb_processes;
+	const auto base_size = b_by_region[0].base_size;
+
+	// Compute V_hat_m_kl * R^2. Division by R^2 is done later.
+	Matrix_M_MK1 v_hat (nb_processes, base_size);
+	for (const auto & b : b_by_region) {
+		v_hat.m_lk_values ().array () += b.m_lk_values ().array ().square ();
+	}
+	const auto v_hat_factor = 1. / double(nb_regions * nb_regions) * 2 * gamma *
+	                          std::log (nb_processes + nb_processes * nb_processes * base_size);
+
+	// Compute B_hat_m_kl
+
+	Matrix_M_MK1 d (nb_processes, base_size);
+	d.m_0_values ().setZero (); // No penalty for constant component of estimators
+	d.m_lk_values () = (v_hat_factor * v_hat.m_lk_values ().array ()).sqrt ();
+	return d;
 }
 
 /******************************************************************************
@@ -312,32 +343,9 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 	return g;
 }
 
-inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> b_by_region) {
-	const auto nb_regions = b_by_region.size ();
-	assert (nb_regions > 0);
-	const auto nb_processes = b_by_region[0].nb_processes;
-	const auto base_size = b_by_region[0].base_size;
-
-	// Compute V_hat_m_kl * R^2. Division by R^2 is done later.
-	Matrix_M_MK1 v_hat (nb_processes, base_size);
-	for (const auto & b : b_by_region) {
-		v_hat.m_lk_values ().array () += b.m_lk_values ().array ().square ();
-	}
-	const auto v_hat_factor = 1. / double(nb_regions * nb_regions) * 2 * gamma *
-	                          std::log (nb_processes + nb_processes * nb_processes * base_size);
-
-	// Compute B_hat_m_kl
-
-	Matrix_M_MK1 d (nb_processes, base_size);
-	d.m_0_values ().setZero (); // No penalty for constant component of estimators
-	d.m_lk_values () = (v_hat_factor * v_hat.m_lk_values ().array ()).sqrt ();
-	return d;
-}
-
 /******************************************************************************
  * Histogram with interval convolution kernels.
  */
-
 inline double compute_b_mlk_histogram (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
                                        HistogramBase::Interval base_interval, IntervalKernel m_kernel,
                                        IntervalKernel l_kernel) {
