@@ -88,6 +88,17 @@ inline int64_t tmax (span<const SortedVec<Point>> processes) {
 	}
 }
 
+// Conversion of objects to shapes (convolution.h)
+inline auto to_shape (HistogramBase::Interval i) {
+	// TODO Histo::Interval is ]from; to], but shape::Interval is [from; to].
+	const auto delta = i.to - i.from;
+	const auto center = (i.from + i.to) / 2;
+	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
+}
+inline auto to_shape (IntervalKernel kernel) {
+	return shape::scaled (1. / std::sqrt (kernel.width), shape::IntervalIndicator::with_width (kernel.width));
+}
+
 /******************************************************************************
  * Basic histogram case.
  */
@@ -326,21 +337,6 @@ inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> b_by_regio
 /******************************************************************************
  * Histogram with interval convolution kernels.
  */
-
-// W_width
-struct IntervalKernel {
-	PointSpace width;
-};
-
-inline auto to_shape (HistogramBase::Interval i) {
-	// TODO Histo::Interval is ]from; to], but shape::Interval is [from; to].
-	const auto delta = i.to - i.from;
-	const auto center = (i.from + i.to) / 2;
-	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
-}
-inline auto to_shape (IntervalKernel kernel) {
-	return shape::scaled (1. / std::sqrt (kernel.width), shape::IntervalIndicator::with_width (kernel.width));
-}
 
 inline double compute_b_mlk_histogram (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
                                        HistogramBase::Interval base_interval, IntervalKernel m_kernel,

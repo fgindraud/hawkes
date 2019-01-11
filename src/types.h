@@ -133,6 +133,15 @@ struct HistogramBase {
 };
 
 /******************************************************************************
+ * Kernels.
+ */
+
+// 1_[-width/2, width/2] (x) * 1/sqrt(width)
+struct IntervalKernel {
+	PointSpace width;
+};
+
+/******************************************************************************
  * Computation matrices.
  */
 
