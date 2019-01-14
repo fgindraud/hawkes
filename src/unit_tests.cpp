@@ -7,6 +7,7 @@
 #include <cstdio>
 
 #include "command_line.h"
+#include "computations.h"
 #include "input.h"
 #include "utils.h"
 
@@ -31,6 +32,37 @@ template <> struct StringMaker<string_view> {
 	}
 };
 } // namespace doctest
+
+/******************************************************************************
+ * Computations tests.
+ */
+TEST_SUITE ("computations") {
+	TEST_CASE ("sup_of_sum_of_differences_to_points") {
+		const auto interval = shape::IntervalIndicator::with_half_width (1);
+
+		SUBCASE ("no points") {
+			const auto vec = SortedVec<Point>::from_sorted ({});
+			const auto minus_inf = std::numeric_limits<int32_t>::min ();
+			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == minus_inf);
+		}
+		SUBCASE ("non overlapping") {
+			const auto vec = SortedVec<Point>::from_sorted ({0, 3});
+			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 1);
+		}
+		SUBCASE ("overlapping: inner") {
+			const auto vec = SortedVec<Point>::from_sorted ({0, 1, 4, 5});
+			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 2);
+		}
+		SUBCASE ("overlapping: edge") {
+			const auto vec = SortedVec<Point>::from_sorted ({0, 2, 4});
+			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 2);
+		}
+		SUBCASE ("overlapping: edge and inner") {
+			const auto vec = SortedVec<Point>::from_sorted ({0, 1, 2, 3, 4});
+			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 3);
+		}
+	}
+}
 
 /******************************************************************************
  * Command line tests.

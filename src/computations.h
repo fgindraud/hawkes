@@ -68,16 +68,15 @@ inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points,
 	return shape.scale * compute_sum_of_point_differences (m_points, l_points, shape.inner);
 }
 
-/* Compute Tmax (used in G).
- */
-inline int64_t tmax (span<const SortedVec<Point>> processes) {
-	int64_t min = std::numeric_limits<int64_t>::max ();
-	int64_t max = std::numeric_limits<int64_t>::min ();
+// Compute Tmax (used in G).
+inline PointSpace tmax (span<const SortedVec<Point>> processes) {
+	PointSpace min = std::numeric_limits<PointSpace>::max ();
+	PointSpace max = std::numeric_limits<PointSpace>::min ();
 
 	for (const auto & points : processes) {
 		if (points.size () > 0) {
-			min = std::min (min, int64_t (points[0]));
-			max = std::max (max, int64_t (points[points.size () - 1]));
+			min = std::min (min, points[0]);
+			max = std::max (max, points[points.size () - 1]);
 		}
 	}
 
@@ -88,10 +87,67 @@ inline int64_t tmax (span<const SortedVec<Point>> processes) {
 	}
 }
 
+// A sliding cursor is an iterator over the coordinates of points, all shifted by the given shift.
+struct SlidingCursor {
+	const SortedVec<Point> & points; // Points to slide on
+	const PointSpace shift;          // Shifting from points
+
+	static constexpr PointSpace inf = std::numeric_limits<PointSpace>::max ();
+
+	// Indexes of next point to be visited, and shifted value (or inf)
+	size_t current_i = 0;
+	Point current_x;
+
+	SlidingCursor (const SortedVec<Point> & points, PointSpace shift) : points (points), shift (shift) {
+		current_x = get_shifted_point (0);
+	}
+	Point get_shifted_point (size_t i) const {
+		if (i < points.size ()) {
+			return points[i] + shift;
+		} else {
+			return inf;
+		}
+	}
+	void advance_if_equal (Point new_x) {
+		if (new_x == current_x) {
+			current_i += 1;
+			current_x = get_shifted_point (current_i);
+		}
+	}
+};
+
 /* Compute sup_{x} sum_{x_l in N_l} interval(x - x_l).
  * This is a building block for computation of B_hat, used in the computation of lasso penalties (d).
+ *
+ * For an indicator interval, the sum is a piecewise constant function of x.
+ * This function has at maximum 2*|N_l| points of change, so the number of different values is finite.
+ * Thus the sup over x is a max over all these possible values.
  */
-// TODO
+inline int32_t sup_of_sum_of_differences_to_points (const SortedVec<Point> & points,
+                                                    shape::IntervalIndicator indicator) {
+	int32_t max = std::numeric_limits<int32_t>::min ();
+
+	// These structs represent the sets of left and right interval bounds coordinates.
+	SlidingCursor left_interval_bounds (points, -indicator.half_width);
+	SlidingCursor right_interval_bounds (points, indicator.half_width);
+
+	while (true) {
+		// Loop over all interval boundaries: x is a {left, right, both} interval bound.
+		const Point x = std::min (left_interval_bounds.current_x, right_interval_bounds.current_x);
+		if (x == SlidingCursor::inf) {
+			break; // No more points to process.
+		}
+		// The sum of intervals at x is the number of entered intervals minus the number of exited intervals.
+		// Thus the sum is the difference between the indexes of the left bound iterator and the right one.
+		// Because the interval is a closed one, we advance the entering bound before computing the sum.
+		left_interval_bounds.advance_if_equal (x);
+		assert (left_interval_bounds.current_i >= right_interval_bounds.current_i);
+		const auto sum_value_for_x = PointSpace (left_interval_bounds.current_i - right_interval_bounds.current_i);
+		max = std::max (max, sum_value_for_x);
+		right_interval_bounds.advance_if_equal (x);
+	}
+	return max;
+}
 
 // Conversion of objects to shapes (shape.h)
 inline auto to_shape (HistogramBase::Interval i) {
@@ -188,9 +244,9 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
                                                     const SortedVec<Point> & l2_points,
                                                     HistogramBase::Interval interval,
                                                     HistogramBase::Interval interval2) {
-	// TODO replace Point by int64_t to avoid overflows ?
 	constexpr Point inf = std::numeric_limits<Point>::max ();
 
+	// TODO Replace with sliding cursor ?
 	struct SlidingInterval {
 		const SortedVec<Point> & points; // Points to slide on
 		HistogramBase::Interval shifts;  // Shifting of interval bounds
@@ -200,8 +256,8 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
 		size_t next_i_entering = 0;
 		size_t next_i_exiting = 0;
 		// Value of next points to enter/exit interval, or inf if no more points
-		Point next_x_entering = 0;
-		Point next_x_exiting = 0;
+		Point next_x_entering;
+		Point next_x_exiting;
 
 		SlidingInterval (const SortedVec<Point> & points, HistogramBase::Interval shifts)
 		    : points (points), shifts (shifts) {
@@ -252,8 +308,6 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
 	}
 	return accumulated_area;
 }
-
-// TODO: B and G are sums of region-specific B and G !
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
 inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base) {

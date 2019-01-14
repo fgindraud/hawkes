@@ -137,7 +137,7 @@ inline auto convolution (const L & lhs, const Scaled<T, R> & rhs) {
  * Base shapes.
  */
 
-/* Indicator function for an interval.
+/* Indicator function for a closed interval.
  * Not normalized, returns 1. in the interval.
  */
 struct IntervalIndicator {
