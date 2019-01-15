@@ -37,7 +37,7 @@ template <> struct StringMaker<string_view> {
  * Computations tests.
  */
 TEST_SUITE ("computations") {
-	TEST_CASE ("sup_of_sum_of_differences_to_points") {
+	TEST_CASE ("sup_of_sum_of_differences_to_points: IntervalIndicator") {
 		const auto interval = shape::IntervalIndicator::with_half_width (1);
 
 		SUBCASE ("no points") {
@@ -59,6 +59,27 @@ TEST_SUITE ("computations") {
 		}
 		SUBCASE ("overlapping: edge and inner") {
 			const auto vec = SortedVec<Point>::from_sorted ({0, 1, 2, 3, 4});
+			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 3);
+		}
+	}
+	TEST_CASE ("sup_of_sum_of_differences_to_points: HistogramBase::Interval") {
+		const auto interval = HistogramBase::Interval{0, 3}; // ]0,3]
+
+		SUBCASE ("no points") {
+			const auto vec = SortedVec<Point>::from_sorted ({});
+			const auto minus_inf = std::numeric_limits<int32_t>::min ();
+			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == minus_inf);
+		}
+		SUBCASE ("non overlapping") {
+			const auto vec = SortedVec<Point>::from_sorted ({0, 3, 6});
+			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 1);
+		}
+		SUBCASE ("overlapping") {
+			const auto vec = SortedVec<Point>::from_sorted ({0, 2});
+			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 2);
+		}
+		SUBCASE ("multiple overlapping") {
+			const auto vec = SortedVec<Point>::from_sorted ({0, 1, 2});
 			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 3);
 		}
 	}

@@ -129,12 +129,11 @@ inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points,
  */
 inline int32_t sup_of_sum_of_differences_to_points (const SortedVec<Point> & points,
                                                     shape::IntervalIndicator indicator) {
-	int32_t max = std::numeric_limits<int32_t>::min ();
-
 	// These structs represent the sets of left and right interval bounds coordinates.
 	SlidingCursor left_interval_bounds (points, -indicator.half_width);
 	SlidingCursor right_interval_bounds (points, indicator.half_width);
 
+	int32_t max = std::numeric_limits<int32_t>::min ();
 	while (true) {
 		// Loop over all interval boundaries: x is a {left, right, both} interval bound.
 		const Point x = std::min (left_interval_bounds.current_x, right_interval_bounds.current_x);
@@ -148,6 +147,24 @@ inline int32_t sup_of_sum_of_differences_to_points (const SortedVec<Point> & poi
 		assert (left_interval_bounds.current_i >= right_interval_bounds.current_i);
 		const auto sum_value_for_x = PointSpace (left_interval_bounds.current_i - right_interval_bounds.current_i);
 		max = std::max (max, sum_value_for_x);
+		right_interval_bounds.advance_if_equal (x);
+	}
+	return max;
+}
+inline int32_t sup_of_sum_of_differences_to_points (const SortedVec<Point> & points, HistogramBase::Interval interval) {
+	// Same algorithm, but left bound is advanced after computing the sum due to the open left bound.
+	SlidingCursor left_interval_bounds (points, interval.left);
+	SlidingCursor right_interval_bounds (points, interval.right);
+	int32_t max = std::numeric_limits<int32_t>::min ();
+	while (true) {
+		const Point x = std::min (left_interval_bounds.current_x, right_interval_bounds.current_x);
+		if (x == SlidingCursor::inf) {
+			break;
+		}
+		assert (left_interval_bounds.current_i >= right_interval_bounds.current_i);
+		const auto sum_value_for_x = PointSpace (left_interval_bounds.current_i - right_interval_bounds.current_i);
+		max = std::max (max, sum_value_for_x);
+		left_interval_bounds.advance_if_equal (x);
 		right_interval_bounds.advance_if_equal (x);
 	}
 	return max;
@@ -173,7 +190,7 @@ inline auto to_shape (HistogramBase::Interval i) {
 	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
 }
 inline auto to_shape (IntervalKernel kernel) {
-	return shape::scaled (1. / std::sqrt (kernel.width), shape::IntervalIndicator::with_width (kernel.width));
+	return shape::scaled (normalization_factor (kernel), shape::IntervalIndicator::with_width (kernel.width));
 }
 
 /******************************************************************************
@@ -290,7 +307,6 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
 
 	int64_t accumulated_area = 0;
 	Point previous_x = std::numeric_limits<Point>::min (); // Start at -inf
-
 	while (true) {
 		// Process the next interesting coordinate
 		const Point x = std::min (si1.min_interesting_x (), si2.min_interesting_x ());
@@ -319,10 +335,8 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 
 	for (ProcessId m = 0; m < nb_processes; ++m) {
 		const auto & m_process = processes[m];
-
 		// b_0
 		b.set_0 (m, double(m_process.size ()));
-
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
 			auto counts = compute_b_ml_histogram_counts_for_all_k (m_process, processes[l], base);
@@ -398,12 +412,42 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 	return g;
 }
 
+// Complexity: O( M^2 * K + M * max(|N_m|) )
+// Computation is exact (sup can be evaluated perfectly).
 inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, HistogramBase base) {
-	// TODO
+	const auto nb_processes = processes.nb_processes ();
+	const auto nb_regions = processes.nb_regions ();
+	const auto base_size = base.base_size;
+	Matrix_M_MK1 b_hat (nb_processes, base_size);
+
+	b_hat.m_0_values ().setConstant (std::numeric_limits<double>::quiet_NaN ()); // Undefined values.
+
+	// B_hat_{m,l,k} = sum_region sup_x sum_{x_l in N_l_region} phi_k (x - x_l)
+	// sup_x sum_{x_l in N_l_region} phi_k (x - x_l) is not affected by shifting, thus does not depend on k.
+	// Thus B_hat_{m,l,k} = B_hat_l, as the expression is independent of m and k.
+	const auto phi_normalization_factor = normalization_factor (base);
+	const auto phi_0_interval = base.interval (FunctionBaseId{0}); // Representative for all k.
+
+	for (ProcessId l = 0; l < nb_processes; ++l) {
+		int64_t sum_of_region_sups = 0;
+		for (RegionId r = 0; r < nb_regions; ++r) {
+			sum_of_region_sups += sup_of_sum_of_differences_to_points (processes.process_data (l, r), phi_0_interval);
+		}
+		const auto b_hat_l = double(sum_of_region_sups) * phi_normalization_factor;
+
+		for (ProcessId m = 0; m < nb_processes; ++m) {
+			for (FunctionBaseId k = 0; k < base_size; ++k) {
+				b_hat.set_lk (m, l, k, b_hat_l);
+			}
+		}
+	}
+	return b_hat;
 }
 
 /******************************************************************************
  * Histogram with interval convolution kernels.
+ * TODO improve, use normalization factor stuff
+ * TODO add b_hat
  */
 inline double compute_b_mlk_histogram (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
                                        HistogramBase::Interval base_interval, IntervalKernel m_kernel,

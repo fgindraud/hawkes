@@ -131,15 +131,21 @@ struct HistogramBase {
 		return {PointSpace (k) * delta, (PointSpace (k) + 1) * delta};
 	}
 };
+inline double normalization_factor (HistogramBase base) {
+	return 1. / std::sqrt (base.delta);
+}
 
 /******************************************************************************
  * Kernels.
  */
 
-// 1_[-width/2, width/2] (x) * 1/sqrt(width)
+// 1_[-width/2, width/2]
 struct IntervalKernel {
 	PointSpace width;
 };
+inline double normalization_factor (IntervalKernel kernel) {
+	return 1. / std::sqrt (kernel.width);
+}
 
 /******************************************************************************
  * Computation matrices.
