@@ -10,6 +10,58 @@
  * Generic functions useful for all cases.
  */
 
+/* Compute Tmax (used in G).
+ * Tmax is the maximum width covered by points of all processes for a specific region.
+ */
+inline PointSpace tmax (span<const SortedVec<Point>> processes) {
+	PointSpace min = std::numeric_limits<PointSpace>::max ();
+	PointSpace max = std::numeric_limits<PointSpace>::min ();
+
+	for (const auto & points : processes) {
+		if (points.size () > 0) {
+			min = std::min (min, points[0]);
+			max = std::max (max, points[points.size () - 1]);
+		}
+	}
+
+	if (min <= max) {
+		return max - min;
+	} else {
+		return 0; // If there are no points at all, return 0
+	}
+}
+
+/* A sliding cursor is an iterator over the coordinates of points, all shifted by the given shift.
+ * This is a tool used in some computations below.
+ */
+struct SlidingCursor {
+	const SortedVec<Point> & points; // Points to slide on
+	const PointSpace shift;          // Shifting from points
+
+	static constexpr PointSpace inf = std::numeric_limits<PointSpace>::max ();
+
+	// Indexes of next point to be visited, and shifted value (or inf)
+	size_t current_i = 0;
+	Point current_x;
+
+	SlidingCursor (const SortedVec<Point> & points, PointSpace shift) : points (points), shift (shift) {
+		current_x = get_shifted_point (0);
+	}
+	Point get_shifted_point (size_t i) const {
+		if (i < points.size ()) {
+			return points[i] + shift;
+		} else {
+			return inf;
+		}
+	}
+	void advance_if_equal (Point new_x) {
+		if (new_x == current_x) {
+			current_i += 1;
+			current_x = get_shifted_point (current_i);
+		}
+	}
+};
+
 /* Compute sum_{x_m in N_m, x_l in N_l} shape(x_m - x_l).
  * Shape must be any shape from the shape namespace:
  * - with a method non_zero_domain() returning the interval where the shape is non zero.
@@ -68,54 +120,6 @@ inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points,
 	return shape.scale * compute_sum_of_point_differences (m_points, l_points, shape.inner);
 }
 
-// Compute Tmax (used in G).
-inline PointSpace tmax (span<const SortedVec<Point>> processes) {
-	PointSpace min = std::numeric_limits<PointSpace>::max ();
-	PointSpace max = std::numeric_limits<PointSpace>::min ();
-
-	for (const auto & points : processes) {
-		if (points.size () > 0) {
-			min = std::min (min, points[0]);
-			max = std::max (max, points[points.size () - 1]);
-		}
-	}
-
-	if (min <= max) {
-		return max - min;
-	} else {
-		return 0; // If there are no points at all, return 0
-	}
-}
-
-// A sliding cursor is an iterator over the coordinates of points, all shifted by the given shift.
-struct SlidingCursor {
-	const SortedVec<Point> & points; // Points to slide on
-	const PointSpace shift;          // Shifting from points
-
-	static constexpr PointSpace inf = std::numeric_limits<PointSpace>::max ();
-
-	// Indexes of next point to be visited, and shifted value (or inf)
-	size_t current_i = 0;
-	Point current_x;
-
-	SlidingCursor (const SortedVec<Point> & points, PointSpace shift) : points (points), shift (shift) {
-		current_x = get_shifted_point (0);
-	}
-	Point get_shifted_point (size_t i) const {
-		if (i < points.size ()) {
-			return points[i] + shift;
-		} else {
-			return inf;
-		}
-	}
-	void advance_if_equal (Point new_x) {
-		if (new_x == current_x) {
-			current_i += 1;
-			current_x = get_shifted_point (current_i);
-		}
-	}
-};
-
 /* Compute sup_{x} sum_{x_l in N_l} interval(x - x_l).
  * This is a building block for computation of B_hat, used in the computation of lasso penalties (d).
  *
@@ -149,6 +153,18 @@ inline int32_t sup_of_sum_of_differences_to_points (const SortedVec<Point> & poi
 	return max;
 }
 
+// Scaling can be moved out
+template <typename T, typename Inner>
+inline auto sup_of_sum_of_differences_to_points (const SortedVec<Point> & points,
+                                                 const shape::Scaled<T, Inner> & shape) {
+	return shape.scale * sup_of_sum_of_differences_to_points (points, shape.inner);
+}
+// Shifting has no effect on the sup value.
+template <typename Inner>
+inline auto sup_of_sum_of_differences_to_points (const SortedVec<Point> & points, const shape::Shifted<Inner> & shape) {
+	return sup_of_sum_of_differences_to_points (points, shape.inner);
+}
+
 // Conversion of objects to shapes (shape.h)
 inline auto to_shape (HistogramBase::Interval i) {
 	// TODO Histo::Interval is ]from; to], but shape::Interval is [from; to].
@@ -163,26 +179,28 @@ inline auto to_shape (IntervalKernel kernel) {
 /******************************************************************************
  * Penalty values for lassoshooting.
  */
-
-inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> b_by_region) {
+inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> b_by_region, const Matrix_M_MK1 & b_hat) {
 	const auto nb_regions = b_by_region.size ();
 	assert (nb_regions > 0);
 	const auto nb_processes = b_by_region[0].nb_processes;
 	const auto base_size = b_by_region[0].base_size;
+
+	const auto log_factor = std::log (nb_processes + nb_processes * nb_processes * base_size);
 
 	// Compute V_hat_m_kl * R^2. Division by R^2 is done later.
 	Matrix_M_MK1 v_hat (nb_processes, base_size);
 	for (const auto & b : b_by_region) {
 		v_hat.m_lk_values ().array () += b.m_lk_values ().array ().square ();
 	}
-	const auto v_hat_factor = 1. / double(nb_regions * nb_regions) * 2 * gamma *
-	                          std::log (nb_processes + nb_processes * nb_processes * base_size);
+	const auto v_hat_factor = (1. / double(nb_regions * nb_regions)) * 2. * gamma * log_factor;
 
-	// Compute B_hat_m_kl
+	// B_hat_mkl is computed externally
+	const auto b_hat_factor = gamma * log_factor / 3.;
 
 	Matrix_M_MK1 d (nb_processes, base_size);
 	d.m_0_values ().setZero (); // No penalty for constant component of estimators
-	d.m_lk_values () = (v_hat_factor * v_hat.m_lk_values ().array ()).sqrt ();
+	d.m_lk_values () =
+	    (v_hat_factor * v_hat.m_lk_values ().array ()).sqrt () + b_hat_factor * b_hat.m_lk_values ().array ();
 	return d;
 }
 
@@ -395,6 +413,10 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 		}
 	}
 	return g;
+}
+
+inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, HistogramBase base) {
+	// TODO
 }
 
 /******************************************************************************
