@@ -255,74 +255,57 @@ inline std::vector<int64_t> compute_b_ml_histogram_counts_for_all_k (const Sorte
  * G_{l,l2,k,k2}*delta = integral_x N_l(]x - (k+1)*delta, x - k*delta]) N_l2(]x - (k2+1)*delta, x - k2*delta]) dx.
  * With N_l(I) = sum_{x_l in N_l / x_l in I} 1 = number of points of N_l in interval I.
  * This product of counts is constant by chunks.
- * The strategy is to compute the integral by splitting R in the constant parts of N_l(..) * N_l2(..).
+ * The strategy is to compute the integral by splitting the point space in the constant parts of N_l(..) * N_l2(..).
  * Thus we loop over all points of changes of this product.
  */
 inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_points,
                                                     const SortedVec<Point> & l2_points,
                                                     HistogramBase::Interval interval,
                                                     HistogramBase::Interval interval2) {
-	constexpr Point inf = std::numeric_limits<Point>::max ();
-
-	// TODO Replace with sliding cursor ?
 	struct SlidingInterval {
-		const SortedVec<Point> & points; // Points to slide on
-		HistogramBase::Interval shifts;  // Shifting of interval bounds
+		// Iterators over coordinates where points enter of exit the sliding interval
+		SlidingCursor entering;
+		SlidingCursor exiting;
 
-		int64_t current_points_inside = 0;
-		// Indexes of next points to enter/exit interval
-		size_t next_i_entering = 0;
-		size_t next_i_exiting = 0;
-		// Value of next points to enter/exit interval, or inf if no more points
-		Point next_x_entering;
-		Point next_x_exiting;
+		/* For a point p, and an interval ]x - (k+1)*delta, x - k*delta], moving the interval from left to right:
+		 * p enters when x - k*delta = p <=> x = p+k*delta <=> x = p + interval.from.
+		 * p exits when x - (k+1)*delta = p <=> x = p + (k+1)*delta <=> x = p + interval.to.
+		 * Thus the coordinate iterators are points shifted by i.from / i.to.
+		 */
+		SlidingInterval (const SortedVec<Point> & points, HistogramBase::Interval i)
+		    : entering (points, i.from), exiting (points, i.to) {}
 
-		SlidingInterval (const SortedVec<Point> & points, HistogramBase::Interval shifts)
-		    : points (points), shifts (shifts) {
-			next_x_entering = get_shifted_point (0, shifts.from);
-			next_x_exiting = get_shifted_point (0, shifts.to);
+		Point min_interesting_x () const { return std::min (entering.current_x, exiting.current_x); }
+		size_t current_points_inside () const {
+			assert (entering.current_i >= exiting.current_i);
+			return entering.current_i - exiting.current_i;
 		}
-		Point get_shifted_point (size_t i, PointSpace shift) const {
-			if (i < points.size ()) {
-				return points[i] + shift;
-			} else {
-				return inf;
-			}
-		}
-		void advance_to (Point new_x) {
-			if (new_x == next_x_entering) {
-				current_points_inside += 1;
-				next_i_entering += 1;
-				next_x_entering = get_shifted_point (next_i_entering, shifts.from);
-			}
-			if (new_x == next_x_exiting) {
-				current_points_inside -= 1;
-				next_i_exiting += 1;
-				next_x_exiting = get_shifted_point (next_i_exiting, shifts.to);
-			}
+		void point_processed (Point x) {
+			entering.advance_if_equal (x);
+			exiting.advance_if_equal (x);
 		}
 	};
-
-	int64_t accumulated_area = 0;
-	Point current_x = 0;
 	SlidingInterval si1 (l_points, interval);
 	SlidingInterval si2 (l2_points, interval2);
 
+	int64_t accumulated_area = 0;
+	Point previous_x = std::numeric_limits<Point>::min (); // Start at -inf
+
 	while (true) {
-		const Point next_x = std::min ({si1.next_x_entering, si1.next_x_exiting, si2.next_x_entering, si2.next_x_exiting});
-		if (next_x == inf) {
+		// Process the next interesting coordinate
+		const Point x = std::min (si1.min_interesting_x (), si2.min_interesting_x ());
+		if (x == SlidingCursor::inf) {
 			// No more points to process, all next points are inf.
-			assert (si1.current_points_inside == 0);
-			assert (si2.current_points_inside == 0);
+			assert (si1.current_points_inside () == 0);
+			assert (si2.current_points_inside () == 0);
 			break;
 		}
-		// Integrate the constant between current and next x.
-		accumulated_area += si1.current_points_inside * si2.current_points_inside * (next_x - current_x);
-		// Move reference to next_x
-		current_x = next_x;
-		si1.advance_to (next_x);
-		si2.advance_to (next_x);
-		// TODO improvement: when one of SI.current_points_inside is 0, advance to next entering of this SI
+		// Integrate the constant between current and previous x.
+		accumulated_area += int64_t (si1.current_points_inside () * si2.current_points_inside ()) * (x - previous_x);
+		// Point x has been processed, move to next one
+		previous_x = x;
+		si1.point_processed (x);
+		si2.point_processed (x);
 	}
 	return accumulated_area;
 }
