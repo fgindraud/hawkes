@@ -86,18 +86,18 @@ inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points,
 		// Compute shape(x_m - x_l) for all x_m in (x_l + non_zero_domain) interval.
 		const auto interval_i_l = x_l + non_zero_domain;
 
-		// starting_i_m = min{i_m, N_m[i_m] - N_l[i_l] >= non_zero_domain.from}.
+		// starting_i_m = min{i_m, N_m[i_m] - N_l[i_l] >= non_zero_domain.left}.
 		// We can restrict the search by starting from:
-		// last_starting_i_m = min{i_m, N_m[i_m] - N_l[i_l - 1] >= non_zero_domain.from or i_m == 0}.
-		// We have: N_m[starting_i_m] >= N_l[i_l] + nzd.from > N_l[i_l - 1] + nzd.from.
+		// last_starting_i_m = min{i_m, N_m[i_m] - N_l[i_l - 1] >= non_zero_domain.left or i_m == 0}.
+		// We have: N_m[starting_i_m] >= N_l[i_l] + nzd.left > N_l[i_l - 1] + nzd.left.
 		// Because N_m is increasing and properties of the min, starting_i_m >= last_starting_i_m.
-		while (starting_i_m < m_points.size () && !(interval_i_l.from <= m_points[starting_i_m])) {
+		while (starting_i_m < m_points.size () && !(interval_i_l.left <= m_points[starting_i_m])) {
 			starting_i_m += 1;
 		}
 		if (starting_i_m == m_points.size ()) {
-			// starting_i_m is undefined because last(N_m) < N_l[i_l] + non_zero_domain.from.
+			// starting_i_m is undefined because last(N_m) < N_l[i_l] + non_zero_domain.left.
 			// last(N_m) == max(x_m in N_m) because N_m[x] is strictly increasing.
-			// So for each j > i_l , max(x_m) < N[j] + non_zero_domain.from, and shape (x_m - N_l[j]) == 0.
+			// So for each j > i_l , max(x_m) < N[j] + non_zero_domain.left, and shape (x_m - N_l[j]) == 0.
 			// We can stop there as the sum is already complete.
 			break;
 		}
@@ -105,7 +105,7 @@ inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points,
 		// starting_i_m defined => for each i_m < starting_i_m, shape(N_m[i_m] - x_l) == 0.
 		// Thus we only scan from starting_i_m to the last i_m in interval.
 		// N_m[x] is strictly increasing so we only need to check the right bound of the interval.
-		for (size_t i_m = starting_i_m; i_m < m_points.size () && m_points[i_m] <= interval_i_l.to; i_m += 1) {
+		for (size_t i_m = starting_i_m; i_m < m_points.size () && m_points[i_m] <= interval_i_l.right; i_m += 1) {
 			sum += shape (shape::PointInNonZeroDomain{m_points[i_m] - x_l});
 		}
 	}
@@ -167,9 +167,9 @@ inline auto sup_of_sum_of_differences_to_points (const SortedVec<Point> & points
 
 // Conversion of objects to shapes (shape.h)
 inline auto to_shape (HistogramBase::Interval i) {
-	// TODO Histo::Interval is ]from; to], but shape::Interval is [from; to].
-	const auto delta = i.to - i.from;
-	const auto center = (i.from + i.to) / 2;
+	// TODO Histo::Interval is ]left; right], but shape::Interval is [left; right].
+	const auto delta = i.right - i.left;
+	const auto center = (i.left + i.right) / 2;
 	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
 }
 inline auto to_shape (IntervalKernel kernel) {
@@ -268,12 +268,12 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
 		SlidingCursor exiting;
 
 		/* For a point p, and an interval ]x - (k+1)*delta, x - k*delta], moving the interval from left to right:
-		 * p enters when x - k*delta = p <=> x = p+k*delta <=> x = p + interval.from.
-		 * p exits when x - (k+1)*delta = p <=> x = p + (k+1)*delta <=> x = p + interval.to.
-		 * Thus the coordinate iterators are points shifted by i.from / i.to.
+		 * p enters when x - k*delta = p <=> x = p+k*delta <=> x = p + interval.left.
+		 * p exits when x - (k+1)*delta = p <=> x = p + (k+1)*delta <=> x = p + interval.right.
+		 * Thus the coordinate iterators are points shifted by i.left / i.right.
 		 */
 		SlidingInterval (const SortedVec<Point> & points, HistogramBase::Interval i)
-		    : entering (points, i.from), exiting (points, i.to) {}
+		    : entering (points, i.left), exiting (points, i.right) {}
 
 		Point min_interesting_x () const { return std::min (entering.current_x, exiting.current_x); }
 		size_t current_points_inside () const {

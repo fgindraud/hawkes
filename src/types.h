@@ -40,8 +40,8 @@ using PointSpace = int32_t;
 
 // Interval for a point with uncertainty
 struct PointInterval {
-	Point start;
-	Point end;
+	Point left;
+	Point right;
 };
 
 // Raw process data, read from a file
@@ -93,7 +93,7 @@ public:
 				std::vector<Point> points;
 				points.reserve (raw_process.regions[r].unsorted_intervals.size ());
 				for (const auto & interval : raw_process.regions[r].unsorted_intervals) {
-					const auto point = (interval.start + interval.end) / 2;
+					const auto point = (interval.left + interval.right) / 2;
 					points.emplace_back (point);
 				}
 				// Apply reversing if requested before sorting them in increasing order
@@ -120,10 +120,10 @@ struct HistogramBase {
 	size_t base_size; // [1, inf[
 	PointSpace delta; // [1, inf[
 
-	// ]from; to]
+	// ]left; right]
 	struct Interval {
-		PointSpace from;
-		PointSpace to;
+		PointSpace left;
+		PointSpace right;
 	};
 
 	Interval interval (FunctionBaseId k) const {

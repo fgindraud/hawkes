@@ -18,19 +18,19 @@ inline int64_t square (int32_t x) {
 	return int64_t (x) * int64_t (x); // Cannot overflow
 }
 
-// [from, to]
+// [left, right]
 template <typename T> struct ClosedInterval {
-	T from;
-	T to;
+	T left;
+	T right;
 };
 template <typename T> inline ClosedInterval<T> operator+ (const T & offset, const ClosedInterval<T> & i) {
-	return {offset + i.from, offset + i.to};
+	return {offset + i.left, offset + i.right};
 }
 template <typename T> inline ClosedInterval<T> operator- (const ClosedInterval<T> & i) {
-	return {-i.to, -i.from};
+	return {-i.right, -i.left};
 }
 template <typename T> inline bool contains (const ClosedInterval<T> & i, const T & value) {
-	return i.from <= value && value <= i.to;
+	return i.left <= value && value <= i.right;
 }
 
 // Type tag to indicate that a value is supposed to be in the non zero domain.
@@ -254,10 +254,10 @@ struct ConvolutionIntervalPositiveTriangle {
 	ClosedInterval<Point> non_zero_domain () const { return {-half_l, c + half_l}; }
 	double operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
-		if (x.value < central_section.from) {
+		if (x.value < central_section.left) {
 			// Quadratic left part
 			return double(square (x.value + half_l)) * 0.5;
-		} else if (x.value > central_section.to) {
+		} else if (x.value > central_section.right) {
 			// Quadratic right part
 			return double(square (c) - square (x.value - half_l)) / 2.;
 		} else {
