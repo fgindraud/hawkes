@@ -68,36 +68,6 @@ static std::vector<RawRegionData> read_regions_from (string_view filename, span<
 }
 
 /******************************************************************************
- * Tests
- */
-//#include <iostream>
-// template <typename DataType> static void do_test (const ProcessesData<DataType> & processes) {
-//	for (int delta = 10; delta < 1000000; delta *= 10) {
-//		fmt::print ("### Delta = {}\n", delta);
-//		HistogramBase base{7, delta};
-//		std::vector<Matrix_M_MK1> matrix_b;
-//		std::vector<MatrixG> matrix_g;
-//		{
-//			const auto start = instant ();
-//			for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
-//				matrix_b.emplace_back (compute_b (processes, r, base));
-//			}
-//			const auto end = instant ();
-//			fmt::print (stderr, "matrix_b: time = {}\n", duration_string (end - start));
-//		}
-//		{
-//			const auto start = instant ();
-//			for (RegionId r{0}; r.value < processes.nb_regions (); ++r.value) {
-//				matrix_g.emplace_back (compute_g (processes, r, base));
-//			}
-//			const auto end = instant ();
-//			fmt::print (stderr, "matrix_g: time = {}\n", duration_string (end - start));
-//		}
-//		std::cerr << matrix_g[0].inner << "\n";
-//	}
-//}
-
-/******************************************************************************
  * Program entry point.
  */
 int main (int argc, char * argv[]) {
@@ -195,9 +165,51 @@ int main (int argc, char * argv[]) {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
 
-		// TODO Deduce kernel widths if not provided
+		// TODO Check that base is correctly defined.
 
 		const auto point_processes = ProcessesRegionData::from_raw (raw_processes);
+
+		// TODO Deduce kernel widths if not provided
+		// Check kernel numbers if provided.
+
+		// TEST
+		auto histogram = get<HistogramBase> (base);
+
+		std::vector<Matrix_M_MK1> b_by_region;
+		std::vector<MatrixG> g_by_region;
+		Matrix_M_MK1 sum_of_b (point_processes.nb_processes (), histogram.base_size);
+		MatrixG sum_of_g (point_processes.nb_processes (), histogram.base_size);
+
+		b_by_region.reserve (point_processes.nb_regions ());
+		g_by_region.reserve (point_processes.nb_regions ());
+		sum_of_b.inner.setZero ();
+		sum_of_g.inner.setZero ();
+		for (RegionId r = 0; r < point_processes.nb_regions (); ++r) {
+			auto b = compute_b (point_processes.processes_data_for_region (r), histogram);
+			auto g = compute_g (point_processes.processes_data_for_region (r), histogram);
+			sum_of_b.inner += b.inner;
+			sum_of_g.inner += g.inner;
+			b_by_region.emplace_back (std::move (b));
+			g_by_region.emplace_back (std::move (g));
+		}
+
+		auto b_hat = compute_b_hat (point_processes, histogram);
+		auto d = compute_d (gamma, make_span (b_by_region), b_hat);
+
+		assert (sum_of_b.inner.allFinite ());
+		assert (sum_of_g.inner.allFinite ());
+		assert (d.inner.allFinite ());
+
+		Matrix_M_MK1 estimated_a (point_processes.nb_processes (), histogram.base_size);
+		for (ProcessId m = 0; m < point_processes.nb_processes (); ++m) {
+			try {
+				estimated_a.values_for_m (m) =
+				    lassoshooting (sum_of_g.inner, sum_of_b.values_for_m (m), d.values_for_m (m), 1.);
+			} catch (const std::exception & exc) {
+				fmt::print (stderr, "Lassoshooting failed for m={}: {}\n", m, exc.what ());
+				//
+			}
+		}
 
 		// do_test (point_processes);
 		// const auto base = HistogramBase{4, 10};

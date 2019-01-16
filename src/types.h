@@ -151,11 +151,14 @@ inline double normalization_factor (IntervalKernel kernel) {
  * Computation matrices.
  */
 
+/* Stores values for a_m_kl, b_m_kl, d_m_kl.
+ *
+ * Columns contains data for a process (m dimension).
+ * Rows represent the {0}U{(l,k)} dimension, in the order: 0,(0,0),..,(0,K-1),(1,0),..,(1,K-1),...,(M-1,K-1).
+ * Invariant: K > 0 && M > 0 && inner.size() == (1 + K * M, M).
+ * Handles conversions of indexes to Eigen indexes (int).
+ */
 struct Matrix_M_MK1 {
-	// Stores values for a_m_kl, b_m_kl, d_m_kl.
-	// Invariant: K > 0 && M > 0 && inner.size() == (1 + K * M, M).
-	// Handles conversions of indexes to Eigen indexes (int).
-
 	size_t nb_processes; // M
 	size_t base_size;    // K
 	Eigen::MatrixXd inner;
@@ -176,8 +179,6 @@ struct Matrix_M_MK1 {
 		assert (m < nb_processes);
 		inner (0, int(m)) = v;
 	}
-	auto m_0_values () const { return inner.row (0); }
-	auto m_0_values () { return inner.row (0); }
 
 	// b_m,l,k
 	int lk_index (ProcessId l, FunctionBaseId k) const {
@@ -193,14 +194,25 @@ struct Matrix_M_MK1 {
 		assert (m < nb_processes);
 		inner (lk_index (l, k), int(m)) = v;
 	}
+
+	// Access vector (m,0) for all m.
+	auto m_0_values () const { return inner.row (0); }
+	auto m_0_values () { return inner.row (0); }
+	// Access sub-matrix (m,{(l,k)}) for all m,l,k
 	auto m_lk_values () const { return inner.bottomRows (nb_processes * base_size); }
 	auto m_lk_values () { return inner.bottomRows (nb_processes * base_size); }
+	// Access vector of (m,{0}U{(l,k)}) for a given m.
+	auto values_for_m (ProcessId m) const { return inner.col (m); }
+	auto values_for_m (ProcessId m) { return inner.col (m); }
 };
 
+/* Stores value of the G matrix (symmetric).
+ *
+ * Rows and columns use the {0}U{(l,k)} dimension with the same order as Matrix_M_MK1.
+ * Invariant: K > 0 && M > 0 && inner.size() == (1 + K * M, 1 + K * M)
+ * Handles conversions of indexes to Eigen indexes (int).
+ */
 struct MatrixG {
-	// Stores value of the G matrix (symmetric).
-	// Invariant: K > 0 && M > 0 && inner.size() == (1 + K * M, 1 + K * M)
-	// Handles conversions of indexes to Eigen indexes (int).
 
 	size_t nb_processes; // M
 	size_t base_size;    // K

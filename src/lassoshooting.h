@@ -9,7 +9,7 @@
  * result = argmin_{x} (-2*t(x)*b + t(x)*G*x + lambda*t(weights)*|x|).
  * Code is a rewrite of the lassoshooting R module C source code, using Eigen.
  */
-inline Eigen::VectorXd lassoshooting (const Eigen::MatrixXd & xtx, const Eigen::VectorXd & xty,
+inline Eigen::VectorXd lassoshooting (const Eigen::MatrixXd & xtx, Eigen::VectorXd xty,
                                       const Eigen::VectorXd & penaltyweights, const double lambda) {
 	// xtx is matrix G
 	// xty is vector b
@@ -56,7 +56,7 @@ inline Eigen::VectorXd lassoshooting (const Eigen::MatrixXd & xtx, const Eigen::
 		throw std::runtime_error ("lasso: lambda > xty_infinity_norm");
 	}
 
-	Eigen::VectorXd s = xty;         // beta is initially unset so compensation is a daxpy(alpha=0) == noop.
+	auto & s = xty;                  // beta is initially unset so compensation is a daxpy(alpha=0) == noop.
 	const auto & w = penaltyweights; // nopenalize is unset, no modifications of w
 
 	for (int nb_iteration = 0; nb_iteration < max_iteration_count; ++nb_iteration) {

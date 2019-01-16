@@ -71,8 +71,8 @@ struct SlidingCursor {
  * Average complexity: O(|N| * density(N) * width(shape)) = O(|N|^2 * width(shape) / Tmax).
  */
 template <typename Shape>
-inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
-                                              const Shape & shape) {
+inline auto sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
+                                      const Shape & shape) {
 	using ReturnType = decltype (shape (Point{}));
 	ReturnType sum{};
 
@@ -115,9 +115,9 @@ inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points,
 
 // Scaling can be moved out of computation.
 template <typename T, typename Inner>
-inline auto compute_sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
-                                              const shape::Scaled<T, Inner> & shape) {
-	return shape.scale * compute_sum_of_point_differences (m_points, l_points, shape.inner);
+inline auto sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
+                                      const shape::Scaled<T, Inner> & shape) {
+	return shape.scale * sum_of_point_differences (m_points, l_points, shape.inner);
 }
 
 /* Compute sup_{x} sum_{x_l in N_l} interval(x - x_l).
@@ -206,6 +206,7 @@ inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> b_by_regio
 
 	// Compute V_hat_m_kl * R^2. Division by R^2 is done later.
 	Matrix_M_MK1 v_hat (nb_processes, base_size);
+	v_hat.m_lk_values ().setZero ();
 	for (const auto & b : b_by_region) {
 		v_hat.m_lk_values ().array () += b.m_lk_values ().array ().square ();
 	}
@@ -223,21 +224,22 @@ inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> b_by_regio
 
 /******************************************************************************
  * Basic histogram case.
+ * Due to the simplicity of the functions involved, the computations can used efficient specialized algorithms.
  */
 
 /* Compute b_{m,l,k} * sqrt(delta) for all k, for the histogram base.
  * Return a vector with the k values.
  * Complexity is O( |N_l| + (K+1) * |N_m| ).
  *
- * In the histogram case, b_{m,l,k} = sum_{(x_l,x_m) in (N_l,N_m) / k*delta < x_m - x_l <= (k+1)*delta} 1/sqrt(delta).
+ * In the histogram case, b_{m,l,k} = sum_{(x_l,x_m) in (N_l,N_m), k*delta < x_m - x_l <= (k+1)*delta} 1/sqrt(delta).
  * The strategy is to count points of N_l in the interval ] k*delta + x_l, (k+1)*delta + x_l ] for each x_l.
  * This specific functions does it for all k at once.
  * This is more efficient because the upper bound of the k-th interval is the lower bound of the (k+1)-th.
  * Thus we compute the bounds only once.
  */
-inline std::vector<int64_t> compute_b_ml_histogram_counts_for_all_k (const SortedVec<Point> & m_points,
-                                                                     const SortedVec<Point> & l_points,
-                                                                     const HistogramBase & base) {
+inline std::vector<int64_t> b_ml_histogram_counts_for_all_k_denormalized (const SortedVec<Point> & m_points,
+                                                                          const SortedVec<Point> & l_points,
+                                                                          const HistogramBase & base) {
 	// Accumulator for sum_{x_l} count ({x_m, (x_m - x_l) in ] k*delta, (k+1)*delta ]})
 	std::vector<int64_t> counts (base.base_size, 0);
 	// Invariant: for x_l last visited point of process l:
@@ -275,10 +277,10 @@ inline std::vector<int64_t> compute_b_ml_histogram_counts_for_all_k (const Sorte
  * The strategy is to compute the integral by splitting the point space in the constant parts of N_l(..) * N_l2(..).
  * Thus we loop over all points of changes of this product.
  */
-inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_points,
-                                                    const SortedVec<Point> & l2_points,
-                                                    HistogramBase::Interval interval,
-                                                    HistogramBase::Interval interval2) {
+inline int64_t g_ll2kk2_histogram_integral_denormalized (const SortedVec<Point> & l_points,
+                                                         const SortedVec<Point> & l2_points,
+                                                         HistogramBase::Interval interval,
+                                                         HistogramBase::Interval interval2) {
 	struct SlidingInterval {
 		// Iterators over coordinates where points enter of exit the sliding interval
 		SlidingCursor entering;
@@ -330,7 +332,7 @@ inline int64_t compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_p
 inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base) {
 	const auto nb_processes = processes.size ();
 	const auto base_size = base.base_size;
-	const auto inv_sqrt_delta = 1. / std::sqrt (double(base.delta));
+	const auto phi_normalization_factor = normalization_factor (base);
 	Matrix_M_MK1 b (nb_processes, base_size);
 
 	for (ProcessId m = 0; m < nb_processes; ++m) {
@@ -339,9 +341,9 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 		b.set_0 (m, double(m_process.size ()));
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
-			auto counts = compute_b_ml_histogram_counts_for_all_k (m_process, processes[l], base);
+			const auto counts = b_ml_histogram_counts_for_all_k_denormalized (m_process, processes[l], base);
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
-				b.set_lk (m, l, k, double(counts[k]) * inv_sqrt_delta);
+				b.set_lk (m, l, k, double(counts[k]) * phi_normalization_factor);
 			}
 		}
 	}
@@ -367,7 +369,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 
 	auto G_value = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
 		const auto integral =
-		    compute_g_ll2kk2_histogram_integral (processes[l], processes[l2], base.interval (k), base.interval (k2));
+		    g_ll2kk2_histogram_integral_denormalized (processes[l], processes[l2], base.interval (k), base.interval (k2));
 		return double(integral) * inv_delta;
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
@@ -446,12 +448,13 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 
 /******************************************************************************
  * Histogram with interval convolution kernels.
- * TODO improve, use normalization factor stuff
+ * TODO improve, clean normalization factors
  * TODO add b_hat
+ * TODO doc
  */
-inline double compute_b_mlk_histogram (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
-                                       HistogramBase::Interval base_interval, IntervalKernel m_kernel,
-                                       IntervalKernel l_kernel) {
+inline double b_mlk_histogram (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
+                               HistogramBase::Interval base_interval, IntervalKernel m_kernel,
+                               IntervalKernel l_kernel) {
 	// Base shapes
 	const auto w_m = to_shape (m_kernel);
 	const auto w_l = to_shape (l_kernel);
@@ -464,16 +467,15 @@ inline double compute_b_mlk_histogram (const SortedVec<Point> & m_points, const 
 	// b_mlk = sum_{x_m in N_m, x_l in N_l} convolution(w_m,w_l,phi_k)(x_m - x_l)
 	// Split the sum into separate sums for each component.
 	const auto sum_value_for = [&m_points, &l_points](const auto & shape) {
-		return compute_sum_of_point_differences (m_points, l_points, shape);
+		return sum_of_point_differences (m_points, l_points, shape);
 	};
 	return sum_value_for (convolution (trapezoid_l, phi_k)) + sum_value_for (convolution (trapezoid_c, phi_k)) +
 	       sum_value_for (convolution (trapezoid_r, phi_k));
 }
 
-inline double compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_points,
-                                                   const SortedVec<Point> & l2_points, PointSpace delta,
-                                                   FunctionBaseId k, FunctionBaseId k2, IntervalKernel kernel,
-                                                   IntervalKernel kernel2) {
+inline double g_ll2kk2_histogram_integral (const SortedVec<Point> & l_points, const SortedVec<Point> & l2_points,
+                                           PointSpace delta, FunctionBaseId k, FunctionBaseId k2, IntervalKernel kernel,
+                                           IntervalKernel kernel2) {
 	// V = sum_{x_l,x_l2} corr(conv(W_l,phi_k),conv(W_l2,phi_k2)) (x_l-x_l2)
 	// V = factorized_scaling * sum_{x_l,x_l2} shifted((k2-k)*delta, conv(trapezoid(l), trapezoid(l2))) (x_l-x_l2)
 
@@ -496,7 +498,7 @@ inline double compute_g_ll2kk2_histogram_integral (const SortedVec<Point> & l_po
 	const auto trapezoid2_r = component (trapezoid2, shape::Trapezoid::RightTriangle{});
 	// compute values for each individual convolution shape
 	const auto sum_value_for = [&l_points, &l2_points](const auto & shape) {
-		return compute_sum_of_point_differences (l_points, l2_points, shape);
+		return sum_of_point_differences (l_points, l2_points, shape);
 	};
 	const auto unscaled_sum = sum_value_for (convolution (trapezoid_l, trapezoid2_l)) +
 	                          sum_value_for (convolution (trapezoid_l, trapezoid2_c)) +
@@ -528,7 +530,7 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 		for (ProcessId l = 0; l < nb_processes; ++l) {
 			const auto & l_kernel = kernels[l];
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
-				const auto v = compute_b_mlk_histogram (m_process, processes[l], base.interval (k), m_kernel, l_kernel);
+				const auto v = b_mlk_histogram (m_process, processes[l], base.interval (k), m_kernel, l_kernel);
 				b.set_lk (m, l, k, v);
 			}
 		}
@@ -557,8 +559,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 	}
 
 	auto G_value = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
-		return compute_g_ll2kk2_histogram_integral (processes[l], processes[l2], base.delta, k, k2, kernels[l],
-		                                            kernels[l2]);
+		return g_ll2kk2_histogram_integral (processes[l], processes[l2], base.delta, k, k2, kernels[l], kernels[l2]);
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
 	 *

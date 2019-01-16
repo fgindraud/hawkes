@@ -35,6 +35,7 @@
  * std::variant is only available from C++17 onwards.
  */
 #include "external/variant.hpp"
+using mpark::get;
 using mpark::variant;
 
 // Used to indicate that a raw pointer should not be null (interface info).
