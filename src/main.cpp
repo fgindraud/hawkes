@@ -70,6 +70,9 @@ static std::vector<RawRegionData> read_regions_from (string_view filename, span<
 /******************************************************************************
  * Program entry point.
  */
+
+#include <iostream> //FIXME debug output
+
 int main (int argc, char * argv[]) {
 	double gamma = 3.;
 
@@ -202,25 +205,10 @@ int main (int argc, char * argv[]) {
 
 		Matrix_M_MK1 estimated_a (point_processes.nb_processes (), histogram.base_size);
 		for (ProcessId m = 0; m < point_processes.nb_processes (); ++m) {
-			try {
-				estimated_a.values_for_m (m) =
-				    lassoshooting (sum_of_g.inner, sum_of_b.values_for_m (m), d.values_for_m (m), 1.);
-			} catch (const std::exception & exc) {
-				fmt::print (stderr, "Lassoshooting failed for m={}: {}\n", m, exc.what ());
-				//
-			}
+			estimated_a.values_for_m (m) = lassoshooting (sum_of_g.inner, sum_of_b.values_for_m (m), d.values_for_m (m), 1.);
 		}
 
-		// do_test (point_processes);
-		// const auto base = HistogramBase{4, 10};
-		// ProcessesData<Point> point_processes;
-		// point_processes.add_process ("p1", {{"r1", SortedVec<Point>::from_sorted ({5, 15})}});
-		// point_processes.add_process ("p2", {{"r1", SortedVec<Point>::from_sorted ({6, 18})}});
-		// const std::vector<IntervalKernel> kernels = {IntervalKernel{6}, IntervalKernel{6}};
-		// const auto g_points = compute_g (point_processes, RegionId{0}, base);
-		// const auto g_kernels = compute_g (point_processes, RegionId{0}, base, make_span (kernels));
-		// std::cerr << "=== G with points ===\n" << g_points.inner << "\n";
-		// std::cerr << "=== G with kernels ===\n" << g_kernels.inner << "\n";
+		std::cout << estimated_a.inner << "\n";
 
 	} catch (const CommandLineParser::Exception & exc) {
 		fmt::print (stderr, "Error: {}. Use --help for a list of options.\n", exc.what ());

@@ -5,6 +5,8 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "utils.h"
+
 /* For x,b vectors of size n, G matrix of size (n,n):
  * result = argmin_{x} (-2*t(x)*b + t(x)*G*x + lambda*t(weights)*|x|).
  * Code is a rewrite of the lassoshooting R module C source code, using Eigen.
@@ -70,7 +72,7 @@ inline Eigen::VectorXd lassoshooting (const Eigen::MatrixXd & xtx, Eigen::Vector
 
 			const auto beta_j_star = s[j] + xtx_jj * beta[j];
 			if (std::isnan (beta_j_star) || std::isinf (beta_j_star)) {
-				throw std::runtime_error ("lasso: bad beta_j_star");
+				throw std::runtime_error (fmt::format ("lasso: bad beta_j_star: {} ; iteration={}", beta_j_star, nb_iteration));
 			}
 
 			const auto new_beta_j = soft_threshold (beta_j_star, w[j] * lambda) / xtx_jj;
@@ -78,7 +80,7 @@ inline Eigen::VectorXd lassoshooting (const Eigen::MatrixXd & xtx, Eigen::Vector
 			delta = std::max (delta, std::abs (delta_beta_j));
 			beta[j] = new_beta_j;
 
-			s -= -delta_beta_j * xtx.col (j);
+			s -= delta_beta_j * xtx.col (j);
 		}
 
 		if (delta <= convergence_threshold) {
