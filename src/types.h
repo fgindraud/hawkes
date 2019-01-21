@@ -10,6 +10,9 @@
 
 #include "utils.h"
 
+// Type tag for "no value"
+struct None {};
+
 /******************************************************************************
  * Index types.
  *

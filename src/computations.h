@@ -196,7 +196,7 @@ inline auto to_shape (IntervalKernel kernel) {
 
 /******************************************************************************
  * Basic histogram case.
- * Due to the simplicity of the functions involved, the computations can used efficient specialized algorithms.
+ * Due to the simplicity of the functions involved, the computations can use efficient specialized algorithms.
  */
 
 /* Compute b_{m,l,k} * sqrt(delta) for all k, for the histogram base.
@@ -301,7 +301,7 @@ inline int64_t g_ll2kk2_histogram_integral_denormalized (const SortedVec<Point> 
 }
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base) {
+inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base, None /*kernels*/) {
 	const auto nb_processes = processes.size ();
 	const auto base_size = base.base_size;
 	const auto phi_normalization_factor = normalization_factor (base);
@@ -323,7 +323,7 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 }
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase base) {
+inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase base, None /*kernels*/) {
 	const auto nb_processes = processes.size ();
 	const auto base_size = base.base_size;
 	const auto sqrt_delta = std::sqrt (double(base.delta));
@@ -388,13 +388,11 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 
 // Complexity: O( M^2 * K + M * max(|N_m|) )
 // Computation is exact (sup can be evaluated perfectly).
-inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, HistogramBase base) {
+inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, HistogramBase base, None /*kernels*/) {
 	const auto nb_processes = processes.nb_processes ();
 	const auto nb_regions = processes.nb_regions ();
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b_hat (nb_processes, base_size);
-
-	b_hat.m_0_values ().setConstant (std::numeric_limits<double>::quiet_NaN ()); // Undefined values.
 
 	// B_hat_{m,l,k} = sum_region sup_x sum_{x_l in N_l_region} phi_k (x - x_l)
 	// sup_x sum_{x_l in N_l_region} phi_k (x - x_l) is not affected by shifting, thus does not depend on k.
@@ -575,6 +573,30 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 	return g;
 }
 
+inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, HistogramBase base,
+                                   span<const IntervalKernel> kernels) {
+	const auto nb_processes = processes.nb_processes ();
+	const auto nb_regions = processes.nb_regions ();
+	const auto base_size = base.base_size;
+	Matrix_M_MK1 b_hat (nb_processes, base_size);
+
+	for (ProcessId l = 0; l < nb_processes; ++l) {
+		for (ProcessId m = 0; m < nb_processes; ++m) {
+			for (FunctionBaseId k = 0; k < base_size; ++k) {
+				const auto approx = shape::IntervalIndicator::with_half_width (1); // FIXME approx
+				// TODO replace spans of kernels with ref to std vector
+
+				double sum_of_region_sups = 0;
+				for (RegionId r = 0; r < nb_regions; ++r) {
+					sum_of_region_sups += sup_of_sum_of_differences_to_points (processes.process_data (l, r), approx);
+				}
+				b_hat.set_lk (m, l, k, sum_of_region_sups);
+			}
+		}
+	}
+	return b_hat;
+}
+
 /******************************************************************************
  * Computations common to all cases.
  */
@@ -586,18 +608,25 @@ struct CommonIntermediateValues {
 	Matrix_M_MK1 b_hat;
 };
 
-inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegionData & processes,
-                                                             HistogramBase base) {
+template <typename Kernels>
+inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegionData &, None /*base*/,
+                                                             const Kernels &) {
+	throw std::runtime_error ("Function base is not defined");
+}
+
+template <typename Base, typename Kernels>
+inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegionData & processes, const Base & base,
+                                                             const Kernels & kernels) {
 	const auto nb_regions = processes.nb_regions ();
 	std::vector<Matrix_M_MK1> b_by_region;
 	std::vector<MatrixG> g_by_region;
 	b_by_region.reserve (nb_regions);
 	g_by_region.reserve (nb_regions);
 	for (RegionId r = 0; r < nb_regions; ++r) {
-		b_by_region.emplace_back (compute_b (processes.processes_data_for_region (r), base));
-		g_by_region.emplace_back (compute_g (processes.processes_data_for_region (r), base));
+		b_by_region.emplace_back (compute_b (processes.processes_data_for_region (r), base, kernels));
+		g_by_region.emplace_back (compute_g (processes.processes_data_for_region (r), base, kernels));
 	}
-	return {std::move (b_by_region), std::move (g_by_region), compute_b_hat (processes, base)};
+	return {std::move (b_by_region), std::move (g_by_region), compute_b_hat (processes, base, kernels)};
 }
 
 struct LassoParameters {

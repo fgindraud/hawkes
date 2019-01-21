@@ -74,12 +74,11 @@ int main (int argc, char * argv[]) {
 	bool verbose = false;
 	double gamma = 3.;
 
-	struct None {};
 	variant<None, HistogramBase> base = None{};
 
 	enum class Kernel { None, Interval };
 	Kernel use_kernel = Kernel::None;
-	Optional<std::vector<PointSpace>> explicit_kernel_widths;
+	Optional<std::vector<PointSpace>> kernel_widths;
 
 	std::vector<string_view> current_region_names;
 	std::vector<RawProcessData> raw_processes;
@@ -116,12 +115,12 @@ int main (int argc, char * argv[]) {
 		}
 	});
 	parser.option ({"kernel-widths"}, "w0[:w1:w2:...]", "Use explicit kernel widths (default=deduced)",
-	               [&explicit_kernel_widths](string_view values) {
+	               [&kernel_widths](string_view values) {
 		               std::vector<PointSpace> widths;
 		               for (string_view value : split (':', values)) {
 			               widths.emplace_back (PointSpace (parse_strict_positive_int (value, "kernel width")));
 		               }
-		               explicit_kernel_widths = std::move (widths);
+		               kernel_widths = std::move (widths);
 	               });
 
 	parser.option ({"r", "regions"}, "r0[,r1,r2,...]", "Set region names extracted from next files",
@@ -157,17 +156,20 @@ int main (int argc, char * argv[]) {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
 
-		// TODO Check that base is correctly defined.
-
 		const auto point_processes = ProcessesRegionData::from_raw (raw_processes);
 
 		// TODO Deduce kernel widths if not provided
 		// Check kernel numbers if provided.
+		// TODO generate variant<None, vector<IntervalKernel>>
 
-		// TEST
-		auto histogram = get<HistogramBase> (base);
+		auto values = visit (
+		    [&](const auto & base) {
+			    // Code to compute intermediate values for each combination of base and kernels.
+			    // TODO support kernels sets
+			    return compute_intermediate_values (point_processes, base, None{});
+		    },
+		    base);
 
-		auto values = compute_intermediate_values (point_processes, histogram);
 		auto parameters = compute_lasso_parameters (values, gamma);
 		auto estimated_a = compute_estimated_a_with_lasso (parameters);
 
@@ -180,6 +182,7 @@ int main (int argc, char * argv[]) {
 				fmt::print ("#  [{}] {}{}\n", i, p.name, suffix);
 			}
 			fmt::print ("# }}\n");
+
 			struct PrintBaseLine {
 				void operator() (None) const {}
 				void operator() (HistogramBase b) const {
@@ -187,8 +190,10 @@ int main (int argc, char * argv[]) {
 				}
 			};
 			visit (PrintBaseLine{}, base);
+
 			fmt::print ("# kernels = None\n"); // FIXME kernel support
 			fmt::print ("# gamma = {}\n", gamma);
+
 			fmt::print ("# Rows = {{0}} U {{(l,k)}} (order = 0,(0,0),..,(0,K-1),(1,0),..,(1,K-1),...,(M-1,K-1))\n");
 			fmt::print ("# Columns = {{m}}\n");
 		}
