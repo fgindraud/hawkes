@@ -7,7 +7,7 @@
 #include "types.h"
 
 /******************************************************************************
- * Generic functions useful for all cases.
+ * Generic building blocks useful for all cases.
  */
 
 /* Compute Tmax (used in G).
@@ -191,35 +191,6 @@ inline auto to_shape (HistogramBase::Interval i) {
 }
 inline auto to_shape (IntervalKernel kernel) {
 	return shape::scaled (normalization_factor (kernel), shape::IntervalIndicator::with_width (kernel.width));
-}
-
-/******************************************************************************
- * Penalty values for lassoshooting.
- */
-inline Matrix_M_MK1 compute_d (double gamma, span<const Matrix_M_MK1> b_by_region, const Matrix_M_MK1 & b_hat) {
-	const auto nb_regions = b_by_region.size ();
-	assert (nb_regions > 0);
-	const auto nb_processes = b_by_region[0].nb_processes;
-	const auto base_size = b_by_region[0].base_size;
-
-	const auto log_factor = std::log (nb_processes + nb_processes * nb_processes * base_size);
-
-	// Compute V_hat_m_kl * R^2. Division by R^2 is done later.
-	Matrix_M_MK1 v_hat (nb_processes, base_size);
-	v_hat.m_lk_values ().setZero ();
-	for (const auto & b : b_by_region) {
-		v_hat.m_lk_values ().array () += b.m_lk_values ().array ().square ();
-	}
-	const auto v_hat_factor = (1. / double(nb_regions * nb_regions)) * 2. * gamma * log_factor;
-
-	// B_hat_mkl is computed externally
-	const auto b_hat_factor = gamma * log_factor / 3.;
-
-	Matrix_M_MK1 d (nb_processes, base_size);
-	d.m_0_values ().setZero (); // No penalty for constant component of estimators
-	d.m_lk_values () =
-	    (v_hat_factor * v_hat.m_lk_values ().array ()).sqrt () + b_hat_factor * b_hat.m_lk_values ().array ();
-	return d;
 }
 
 /******************************************************************************
@@ -601,4 +572,74 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 		}
 	}
 	return g;
+}
+
+/******************************************************************************
+ * Computations common to all cases.
+ */
+
+// This struct contains computed values specific to the chosen base and kernel.
+struct CommonIntermediateValues {
+	std::vector<Matrix_M_MK1> b_by_region;
+	std::vector<MatrixG> g_by_region;
+	Matrix_M_MK1 b_hat;
+};
+
+inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegionData & processes, HistogramBase base) {
+	const auto nb_regions = processes.nb_regions ();
+	std::vector<Matrix_M_MK1> b_by_region;
+	std::vector<MatrixG> g_by_region;
+	b_by_region.reserve (nb_regions);
+	g_by_region.reserve (nb_regions);
+	for (RegionId r = 0; r < nb_regions; ++r) {
+		b_by_region.emplace_back (compute_b (processes.processes_data_for_region (r), base));
+		g_by_region.emplace_back (compute_g (processes.processes_data_for_region (r), base));
+	}
+	return {std::move (b_by_region), std::move (g_by_region), compute_b_hat (processes, base)};
+}
+
+struct LassoParameters {
+	Matrix_M_MK1 sum_of_b;
+	MatrixG sum_of_g;
+	Matrix_M_MK1 d;
+};
+
+inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues & values, double gamma) {
+	const auto nb_regions = values.b_by_region.size ();
+	const auto nb_processes = values.b_hat.nb_processes;
+	const auto base_size = values.b_hat.base_size;
+
+	/* Generate values combining all regions:
+	 * - sums of B and G.
+	 * - V_hat = 1/R^2 * sum_r B[r]^2 (component-wise)
+	 */
+	Matrix_M_MK1 sum_of_b (nb_processes, base_size);
+	MatrixG sum_of_g (nb_processes, base_size);
+	Matrix_M_MK1 v_hat_r2 (nb_processes, base_size); // V_hat * R^2
+
+	sum_of_b.inner.setZero ();
+	sum_of_g.inner.setZero ();
+	v_hat_r2.m_lk_values ().setZero ();
+
+	for (RegionId r = 0; r < nb_regions; ++r) {
+		sum_of_b.inner += values.b_by_region[r].inner;
+		v_hat_r2.m_lk_values ().array () += values.b_by_region[r].m_lk_values ().array ().square ();
+		sum_of_g.inner += values.g_by_region[r].inner;
+	}
+
+	//TODO compare v_hat / b_hat
+
+	/* Compute D, the penalty for the lassoshooting.
+	 * V_hat_mkl is computed without dividing by R^2 so add the division to factor.
+	 */
+	const auto log_factor = std::log (nb_processes + nb_processes * nb_processes * base_size);
+	const auto v_hat_factor = (1. / double(nb_regions * nb_regions)) * 2. * gamma * log_factor;
+	const auto b_hat_factor = gamma * log_factor / 3.;
+
+	Matrix_M_MK1 d (nb_processes, base_size);
+	d.m_0_values ().setZero (); // No penalty for constant component of estimators
+	d.m_lk_values () =
+	    (v_hat_factor * v_hat_r2.m_lk_values ().array ()).sqrt () + b_hat_factor * values.b_hat.m_lk_values ().array ();
+
+	return {std::move (sum_of_b), std::move (sum_of_g), std::move (d)};
 }

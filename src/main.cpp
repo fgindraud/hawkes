@@ -70,7 +70,6 @@ static std::vector<RawRegionData> read_regions_from (string_view filename, span<
 /******************************************************************************
  * Program entry point.
  */
-
 #include <iostream> //FIXME debug output
 
 int main (int argc, char * argv[]) {
@@ -167,34 +166,17 @@ int main (int argc, char * argv[]) {
 		// TEST
 		auto histogram = get<HistogramBase> (base);
 
-		std::vector<Matrix_M_MK1> b_by_region;
-		std::vector<MatrixG> g_by_region;
-		Matrix_M_MK1 sum_of_b (point_processes.nb_processes (), histogram.base_size);
-		MatrixG sum_of_g (point_processes.nb_processes (), histogram.base_size);
+		auto values = compute_intermediate_values (point_processes, histogram);
+		auto parameters = compute_lasso_parameters (values, gamma);
 
-		b_by_region.reserve (point_processes.nb_regions ());
-		g_by_region.reserve (point_processes.nb_regions ());
-		sum_of_b.inner.setZero ();
-		sum_of_g.inner.setZero ();
-		for (RegionId r = 0; r < point_processes.nb_regions (); ++r) {
-			auto b = compute_b (point_processes.processes_data_for_region (r), histogram);
-			auto g = compute_g (point_processes.processes_data_for_region (r), histogram);
-			sum_of_b.inner += b.inner;
-			sum_of_g.inner += g.inner;
-			b_by_region.emplace_back (std::move (b));
-			g_by_region.emplace_back (std::move (g));
-		}
-
-		auto b_hat = compute_b_hat (point_processes, histogram);
-		auto d = compute_d (gamma, make_span (b_by_region), b_hat);
-
-		assert (sum_of_b.inner.allFinite ());
-		assert (sum_of_g.inner.allFinite ());
-		assert (d.inner.allFinite ());
+		assert (parameters.sum_of_b.inner.allFinite ());
+		assert (parameters.sum_of_g.inner.allFinite ());
+		assert (parameters.d.inner.allFinite ());
 
 		Matrix_M_MK1 estimated_a (point_processes.nb_processes (), histogram.base_size);
 		for (ProcessId m = 0; m < point_processes.nb_processes (); ++m) {
-			estimated_a.values_for_m (m) = lassoshooting (sum_of_g.inner, sum_of_b.values_for_m (m), d.values_for_m (m), 1.);
+			estimated_a.values_for_m (m) = lassoshooting (parameters.sum_of_g.inner, parameters.sum_of_b.values_for_m (m),
+			                                              parameters.d.values_for_m (m), 1.);
 		}
 
 		std::cout << estimated_a.inner << "\n";
