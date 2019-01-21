@@ -3,7 +3,6 @@
 # Other useful flags:
 # '-static' for a statically compiled binary (for a pre-compiled release version).
 # '-march=native' for extra performance but looses portability.
-# '-fopenmp' for OpenMP multithreading
 # CXX_FLAGS_EXTRA can be used to pass additional flags for a custom compilation without modifying the script.
 CXX_FLAGS_COMMON = -std=c++14 -Wall -Wextra $(CXX_FLAGS_EXTRA)
 CXX_FLAGS_COMMON += -I /usr/include/eigen3 # Eigen uses a subdir

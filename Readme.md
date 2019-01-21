@@ -17,17 +17,16 @@ How to build
 ------------
 
 A C++ compiler supporting C++17 is required:
-- g++ >= 7.0
-- clang++ >= 5.0
-- for any other compiler, check that it supports the `-std=c++17` flag
+- g++ >= 5.0
+- clang++ >= 3.4
+- for any other compiler, check that it supports the `-std=c++14` flag
 
 Simple compilation:
 - `make` will compile the program with the default C++ compiler of your distribution.
 - `make CXX=<name_or_path_to_compiler_binary>` will use the specified compiler if the default is not valid.
 
 Advanced compilation:
-- `make CXX_FLAGS_EXTRA='-fopenmp'` to generate a multithreaded version of Hawkes using OpenMP. Only the convergence step is multithreaded. A special command line option `-n <n>` can be used to select the number of threads.
-- `make CXX_FLAGS_EXTRA='-static'` to generate a self-contained compiled version of Hawkes which should work on any machine with the same architecture and operating system (not compatible with multithreading).
+- `make CXX_FLAGS_EXTRA='-static'` to generate a self-contained compiled version of Hawkes which should work on any machine with the same architecture and operating system.
 
 Developer corner
 ----------------
@@ -39,8 +38,9 @@ This can be useful to investigate a bug with gdb.
 
 `make format` will try to format the format the source code using the `clang-format` tool.
 
-Hawkes uses two header-only libraries which are included in the current code:
+Hawkes uses 3 header-only libraries which are included in the current code:
 - [fmtlib](http://fmtlib.net) formatting library to generate output text
+- [mpark::variant](https://github.com/mpark/variant) to provide the C++17 variant sum type
 - [doctest](https://github.com/onqtam/doctest) as a test framework for unit tests
 
 License

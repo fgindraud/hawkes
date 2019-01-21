@@ -33,6 +33,7 @@
 
 /* Use external standalone implementation of std::variant.
  * std::variant is only available from C++17 onwards.
+ * File is from the release version 1.3.0.
  */
 #include "external/variant.hpp"
 using mpark::get;

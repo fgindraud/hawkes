@@ -95,17 +95,6 @@ int main (int argc, char * argv[]) {
 		std::exit (EXIT_SUCCESS);
 	});
 
-#if defined(_OPENMP)
-	parser.option ({"n", "nb-threads"}, "n", "Number of computation threads (default=max)", [](string_view n) {
-		const auto nb_threads = parse_strict_positive_int (n, "nb threads");
-		const auto nb_proc = std::size_t (omp_get_num_procs ());
-		if (!(nb_threads <= nb_proc)) {
-			throw std::runtime_error (fmt::format ("Number of threads must be in [1, {}]", nb_proc));
-		}
-		omp_set_num_threads (int(nb_threads));
-	});
-#endif
-
 	parser.option ({"g", "gamma"}, "value", "Set gamma value (double, positive)", [&gamma](string_view value) { //
 		gamma = parse_strict_positive_double (value, "gamma");
 	});
