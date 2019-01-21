@@ -606,8 +606,6 @@ struct LassoParameters {
 	Matrix_M_MK1 d;
 };
 
-#include <iostream>
-
 inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues & values, double gamma) {
 	const auto nb_regions = values.b_by_region.size ();
 	const auto nb_processes = values.b_hat.nb_processes;
@@ -638,14 +636,17 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 	const auto v_hat_factor = (1. / double(nb_regions * nb_regions)) * 2. * gamma * log_factor;
 	const auto b_hat_factor = gamma * log_factor / 3.;
 
+#ifndef NDEBUG
+	// Compare v_hat and b_hat parts of d.
 	{
-		// TODO compare v_hat / b_hat
-		std::cout << "======= sqrt(V_hat) / B_hat =======\n";
-		auto sqrt_v_hat = (v_hat_factor * v_hat_r2.m_lk_values ().array ()).sqrt ();
-		auto b_hat_corr = b_hat_factor * values.b_hat.m_lk_values ().array ();
-		std::cout << (sqrt_v_hat / b_hat_corr.max (1e-10)) << "\n";
-		std::cout << "===================================\n";
+		auto v_hat_part = (v_hat_factor * v_hat_r2.m_lk_values ().array ()).sqrt ();
+		auto b_hat_part = b_hat_factor * values.b_hat.m_lk_values ().array ();
+		const Eigen::IOFormat format (3, 0, "\t"); // 3 = precision in digits, this is enough
+		fmt::print (stderr, "### d = v_hat_part + b_hat_part: value of v_hat_part / b_hat_part ###\n");
+		fmt::print (stderr, "{}\n", (v_hat_part / b_hat_part.max (1e-10)).format (format));
+		fmt::print (stderr, "#####################################################################\n");
 	}
+#endif
 
 	Matrix_M_MK1 d (nb_processes, base_size);
 	d.m_0_values ().setZero (); // No penalty for constant component of estimators

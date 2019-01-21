@@ -70,8 +70,6 @@ static std::vector<RawRegionData> read_regions_from (string_view filename, span<
 /******************************************************************************
  * Program entry point.
  */
-#include <iostream> //FIXME debug output
-
 int main (int argc, char * argv[]) {
 	bool verbose = false;
 	double gamma = 3.;
@@ -173,7 +171,29 @@ int main (int argc, char * argv[]) {
 		auto parameters = compute_lasso_parameters (values, gamma);
 		auto estimated_a = compute_estimated_a_with_lasso (parameters);
 
-		std::cout << estimated_a.inner << "\n"; // TODO replace by output func
+		if (verbose) {
+			// Header
+			fmt::print ("# Processes = {{\n");
+			for (size_t i = 0; i < raw_processes.size (); ++i) {
+				const auto & p = raw_processes[i];
+				const string_view suffix = p.direction == RawProcessData::Direction::Backward ? " (backward)" : "";
+				fmt::print ("#  [{}] {}{}\n", i, p.name, suffix);
+			}
+			fmt::print ("# }}\n");
+			struct PrintBaseLine {
+				void operator() (None) const {}
+				void operator() (HistogramBase b) const {
+					fmt::print ("# base = Histogram(K = {}, delta = {})\n", b.base_size, b.delta);
+				}
+			};
+			visit (PrintBaseLine{}, base);
+			fmt::print ("# kernels = None\n"); // FIXME kernel support
+			fmt::print ("# gamma = {}\n", gamma);
+			fmt::print ("# Rows = {{0}} U {{(l,k)}} (order = 0,(0,0),..,(0,K-1),(1,0),..,(1,K-1),...,(M-1,K-1))\n");
+			fmt::print ("# Columns = {{m}}\n");
+		}
+		const Eigen::IOFormat eigen_format (Eigen::FullPrecision, 0, "\t");
+		fmt::print ("{}\n", estimated_a.inner.format (eigen_format));
 
 	} catch (const CommandLineParser::Exception & exc) {
 		fmt::print (stderr, "Error: {}. Use --help for a list of options.\n", exc.what ());
