@@ -179,13 +179,3 @@ inline std::vector<RawRegionData> read_selected_from_bed_file (std::FILE * file,
 	}
 	return selected_regions;
 }
-
-/******************************************************************************
- * Output functions.
- */
-inline void output_matrix_tsv (std::FILE * output, const Eigen::MatrixXd & m) {
-	assert (output != nullptr);
-	for (int r = 0; r < m.rows (); ++r) {
-		// fmt::print (output, "{:15g}\n", m.row (r));
-	}
-}

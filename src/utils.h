@@ -22,7 +22,7 @@
  * I decided to use fmtlib which is a nice replacement for iostream.
  * This is an external library, header-only (only .h files).
  * Files have been included in the repository in the external/ directory.
- * Files are from the release version 5.2.1.
+ * Files are from the release version 5.3.0.
  *
  * Usage of the library:
  * void fmt::print (FILE* output, "format string", ...); // for stdout, stderr, ...
@@ -30,6 +30,7 @@
  */
 //#define FMT_HEADER_ONLY 1 // In header only mode
 #include "external/fmt/format.h"
+#include "external/fmt/ostream.h"
 
 /* Use external standalone implementation of std::variant.
  * std::variant is only available from C++17 onwards.
