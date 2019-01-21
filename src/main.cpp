@@ -11,7 +11,7 @@
 
 #include "command_line.h"
 #include "computations.h"
-#include "input.h"
+#include "io.h"
 #include "lassoshooting.h"
 #include "utils.h"
 

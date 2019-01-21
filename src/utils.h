@@ -39,9 +39,6 @@
 using mpark::get;
 using mpark::variant;
 
-// Used to indicate that a raw pointer should not be null (interface info).
-template <typename T> using not_null = T;
-
 /*******************************************************************************
  * Optionally stores a value.
  * Simpler but less capable version of C++17 std::optional<T>.

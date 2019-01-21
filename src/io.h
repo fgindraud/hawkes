@@ -50,7 +50,7 @@ inline std::unique_ptr<std::FILE, FcloseDeleter> open_file (string_view pathname
  */
 class LineByLineReader {
 private:
-	not_null<std::FILE *> input_;
+	std::FILE * input_;
 
 	std::unique_ptr<char, FreeDeleter> current_line_data_{nullptr};
 	std::size_t current_line_data_buffer_size_{0};
@@ -60,7 +60,7 @@ private:
 
 public:
 	// State: no stored data
-	explicit LineByLineReader (not_null<std::FILE *> input) : input_ (input) {}
+	explicit LineByLineReader (std::FILE * input) : input_ (input) { assert (input != nullptr); }
 
 	/* Read a line from the file.
 	 * Returns true if a line was read, false on eof.
@@ -107,7 +107,8 @@ inline bool LineByLineReader::read_next_line () {
 /******************************************************************************
  * BED format parsing.
  */
-inline std::vector<RawRegionData> read_all_from_bed_file (not_null<FILE *> file) {
+inline std::vector<RawRegionData> read_all_from_bed_file (std::FILE * file) {
+	assert (file != nullptr);
 	std::vector<RawRegionData> regions;
 	LineByLineReader reader (file);
 
@@ -153,8 +154,8 @@ inline std::vector<RawRegionData> read_all_from_bed_file (not_null<FILE *> file)
 	}
 }
 
-inline std::vector<RawRegionData> read_selected_from_bed_file (not_null<FILE *> file,
-                                                               span<const string_view> region_names) {
+inline std::vector<RawRegionData> read_selected_from_bed_file (std::FILE * file, span<const string_view> region_names) {
+	assert (file != nullptr);
 	// Read all regions data, then copy them in the right order to the final vector of regions
 	std::vector<RawRegionData> all_regions = read_all_from_bed_file (file);
 	std::vector<RawRegionData> selected_regions;
@@ -177,4 +178,14 @@ inline std::vector<RawRegionData> read_selected_from_bed_file (not_null<FILE *> 
 		}
 	}
 	return selected_regions;
+}
+
+/******************************************************************************
+ * Output functions.
+ */
+inline void output_matrix_tsv (std::FILE * output, const Eigen::MatrixXd & m) {
+	assert (output != nullptr);
+	for (int r = 0; r < m.rows (); ++r) {
+		// fmt::print (output, "{:15g}\n", m.row (r));
+	}
 }

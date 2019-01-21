@@ -18,7 +18,7 @@
  */
 class CommandLineView {
 public:
-	CommandLineView (int argc, not_null<const char * const *> argv) : argc_ (argc), argv_ (argv) {}
+	CommandLineView (int argc, const char * const * argv) : argc_ (argc), argv_ (argv) { assert (argv != nullptr); }
 
 	// Raw access
 	string_view program_name () const { return {argv_[0]}; }
@@ -69,7 +69,7 @@ public:
 	 * Options are given in the order of declaration.
 	 * Options names are listed lexicographically.
 	 */
-	void usage (not_null<std::FILE *> output, string_view program_name) const;
+	void usage (std::FILE * output, string_view program_name) const;
 
 	/* Parse arguments in order of appearance on the command line.
 	 *
@@ -203,7 +203,8 @@ inline void CommandLineParser::positional (string_view value_name, string_view d
 	arg.description = to_string (description);
 }
 
-inline void CommandLineParser::usage (not_null<std::FILE *> output, string_view program_name) const {
+inline void CommandLineParser::usage (std::FILE * output, string_view program_name) const {
+	assert (output != nullptr);
 	std::size_t description_text_offset = 0;
 
 	const bool has_options = !option_index_by_name_.empty ();
