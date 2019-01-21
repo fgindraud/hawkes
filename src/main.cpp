@@ -73,6 +73,7 @@ static std::vector<RawRegionData> read_regions_from (string_view filename, span<
 #include <iostream> //FIXME debug output
 
 int main (int argc, char * argv[]) {
+	bool verbose = false;
 	double gamma = 3.;
 
 	struct None {};
@@ -93,6 +94,8 @@ int main (int argc, char * argv[]) {
 		parser.usage (stderr, command_line.program_name ());
 		std::exit (EXIT_SUCCESS);
 	});
+
+	parser.flag ({"v", "verbose"}, "Enable verbose output", [&]() { verbose = true; });
 
 	parser.option ({"g", "gamma"}, "value", "Set gamma value (double, positive)", [&gamma](string_view value) { //
 		gamma = parse_strict_positive_double (value, "gamma");
@@ -168,18 +171,9 @@ int main (int argc, char * argv[]) {
 
 		auto values = compute_intermediate_values (point_processes, histogram);
 		auto parameters = compute_lasso_parameters (values, gamma);
+		auto estimated_a = compute_estimated_a_with_lasso (parameters);
 
-		assert (parameters.sum_of_b.inner.allFinite ());
-		assert (parameters.sum_of_g.inner.allFinite ());
-		assert (parameters.d.inner.allFinite ());
-
-		Matrix_M_MK1 estimated_a (point_processes.nb_processes (), histogram.base_size);
-		for (ProcessId m = 0; m < point_processes.nb_processes (); ++m) {
-			estimated_a.values_for_m (m) = lassoshooting (parameters.sum_of_g.inner, parameters.sum_of_b.values_for_m (m),
-			                                              parameters.d.values_for_m (m), 1.);
-		}
-
-		std::cout << estimated_a.inner << "\n";
+		std::cout << estimated_a.inner << "\n"; // TODO replace by output func
 
 	} catch (const CommandLineParser::Exception & exc) {
 		fmt::print (stderr, "Error: {}. Use --help for a list of options.\n", exc.what ());

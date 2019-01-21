@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 
+#include "lassoshooting.h"
 #include "shape.h"
 #include "types.h"
 
@@ -585,7 +586,8 @@ struct CommonIntermediateValues {
 	Matrix_M_MK1 b_hat;
 };
 
-inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegionData & processes, HistogramBase base) {
+inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegionData & processes,
+                                                             HistogramBase base) {
 	const auto nb_regions = processes.nb_regions ();
 	std::vector<Matrix_M_MK1> b_by_region;
 	std::vector<MatrixG> g_by_region;
@@ -603,6 +605,8 @@ struct LassoParameters {
 	MatrixG sum_of_g;
 	Matrix_M_MK1 d;
 };
+
+#include <iostream>
 
 inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues & values, double gamma) {
 	const auto nb_regions = values.b_by_region.size ();
@@ -627,8 +631,6 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 		sum_of_g.inner += values.g_by_region[r].inner;
 	}
 
-	//TODO compare v_hat / b_hat
-
 	/* Compute D, the penalty for the lassoshooting.
 	 * V_hat_mkl is computed without dividing by R^2 so add the division to factor.
 	 */
@@ -636,10 +638,32 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 	const auto v_hat_factor = (1. / double(nb_regions * nb_regions)) * 2. * gamma * log_factor;
 	const auto b_hat_factor = gamma * log_factor / 3.;
 
+	{
+		// TODO compare v_hat / b_hat
+		std::cout << "======= sqrt(V_hat) / B_hat =======\n";
+		auto sqrt_v_hat = (v_hat_factor * v_hat_r2.m_lk_values ().array ()).sqrt ();
+		auto b_hat_corr = b_hat_factor * values.b_hat.m_lk_values ().array ();
+		std::cout << (sqrt_v_hat / b_hat_corr.max (1e-10)) << "\n";
+		std::cout << "===================================\n";
+	}
+
 	Matrix_M_MK1 d (nb_processes, base_size);
 	d.m_0_values ().setZero (); // No penalty for constant component of estimators
 	d.m_lk_values () =
 	    (v_hat_factor * v_hat_r2.m_lk_values ().array ()).sqrt () + b_hat_factor * values.b_hat.m_lk_values ().array ();
 
 	return {std::move (sum_of_b), std::move (sum_of_g), std::move (d)};
+}
+
+inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p) {
+	assert (p.sum_of_b.inner.allFinite ());
+	assert (p.sum_of_g.inner.allFinite ());
+	assert (p.d.inner.allFinite ());
+	const auto nb_processes = p.sum_of_b.nb_processes;
+	const auto base_size = p.sum_of_b.base_size;
+	Matrix_M_MK1 a (nb_processes, base_size);
+	for (ProcessId m = 0; m < nb_processes; ++m) {
+		a.values_for_m (m) = lassoshooting (p.sum_of_g.inner, p.sum_of_b.values_for_m (m), p.d.values_for_m (m), 1.);
+	}
+	return a;
 }
