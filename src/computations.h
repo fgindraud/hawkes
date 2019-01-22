@@ -638,6 +638,18 @@ struct LassoParameters {
 };
 
 inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues & values, double gamma) {
+	const auto check_b_g = [](const Eigen::MatrixXd & m, const string_view what, RegionId r) {
+		if (!m.allFinite ()) {
+#ifndef NDEBUG
+			// Print matrix in debug mode
+			fmt::print (stderr, "##### Bad values for {}[region={:2}] #####\n", what, r);
+			fmt::print (stderr, "{}\n", m);
+			fmt::print (stderr, "#########################################\n");
+#endif
+			throw std::runtime_error (fmt::format ("{}[region={}] has non finite values", what, r));
+		}
+	};
+
 	const auto nb_regions = values.b_g_by_region.size ();
 	const auto nb_processes = values.b_hat.nb_processes;
 	const auto base_size = values.b_hat.base_size;
@@ -656,7 +668,8 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 
 	for (RegionId r = 0; r < nb_regions; ++r) {
 		const auto & v = values.b_g_by_region[r];
-
+		check_b_g (v.b.inner, "B", r);
+		check_b_g (v.g.inner, "G", r);
 		sum_of_b.inner += v.b.inner;
 		v_hat_r2.m_lk_values ().array () += v.b.m_lk_values ().array ().square ();
 		sum_of_g.inner += v.g.inner;
@@ -675,9 +688,9 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 		auto v_hat_part = (v_hat_factor * v_hat_r2.m_lk_values ().array ()).sqrt ();
 		auto b_hat_part = b_hat_factor * values.b_hat.m_lk_values ().array ();
 		const Eigen::IOFormat format (3, 0, "\t"); // 3 = precision in digits, this is enough
-		fmt::print (stderr, "### d = v_hat_part + b_hat_part: value of v_hat_part / b_hat_part ###\n");
+		fmt::print (stderr, "##### d = v_hat_part + b_hat_part: value of v_hat_part / b_hat_part #####\n");
 		fmt::print (stderr, "{}\n", (v_hat_part / b_hat_part.max (1e-10)).format (format));
-		fmt::print (stderr, "#####################################################################\n");
+		fmt::print (stderr, "#########################################################################\n");
 	}
 #endif
 

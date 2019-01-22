@@ -146,7 +146,7 @@ inline double normalization_factor (HistogramBase base) {
 
 // 1_[-width/2, width/2]
 struct IntervalKernel {
-	PointSpace width;
+	PointSpace width; // [0, inf[
 };
 inline double normalization_factor (IntervalKernel kernel) {
 	return 1. / std::sqrt (kernel.width);

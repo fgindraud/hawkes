@@ -5,10 +5,6 @@
 #include <cassert>
 #include <random>
 
-#if defined(_OPENMP)
-#include <omp.h>
-#endif
-
 #include "command_line.h"
 #include "computations.h"
 #include "input.h"
@@ -190,7 +186,9 @@ int main (int argc, char * argv[]) {
 					}
 					return std::move (explicit_kernel_widths.value);
 				} else {
-					return average_interval_widths (raw_processes);
+					auto widths = average_interval_widths (raw_processes);
+					fmt::print (stderr, "Using deduced kernel widths: {}\n", fmt::join (widths, ", "));
+					return widths;
 				}
 			};
 
@@ -209,7 +207,7 @@ int main (int argc, char * argv[]) {
 		// Compute base/kernel specific values: B, G, B_hat
 		const auto compute_b_g_start = instant ();
 		const auto intermediate_values = visit (
-		    [&](const auto & base, const auto & kernels) {
+		    [&point_processes](const auto & base, const auto & kernels) {
 			    // Code to compute intermediate values for each combination of base and kernels.
 			    return compute_intermediate_values (point_processes, base, kernels);
 		    },
@@ -248,7 +246,7 @@ int main (int argc, char * argv[]) {
 				void operator() (None) const { fmt::print ("# kernels = None\n"); }
 				void operator() (const std::vector<IntervalKernel> & kernels) const {
 					const auto widths = map_to_vector (kernels, [](IntervalKernel k) { return k.width; });
-					fmt::print ("# kernels = Intervals{{{}}}\n", fmt::join (widths, ","));
+					fmt::print ("# kernels = Intervals{{{}}}\n", fmt::join (widths, ", "));
 				}
 			};
 			visit (PrintKernelLine{}, kernels);
