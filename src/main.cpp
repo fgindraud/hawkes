@@ -87,12 +87,7 @@ static PointSpace average_interval_width (const RawProcessData & raw_process) {
 	return PointSpace (sum_of_interval_widths / nb_elements);
 }
 static std::vector<PointSpace> average_interval_widths (const std::vector<RawProcessData> & raw_processes) {
-	std::vector<PointSpace> widths;
-	widths.reserve (raw_processes.size ());
-	for (const auto & raw_process : raw_processes) {
-		widths.emplace_back (average_interval_width (raw_process));
-	}
-	return widths;
+	return map_to_vector (raw_processes, average_interval_width);
 }
 
 /******************************************************************************
@@ -144,11 +139,9 @@ int main (int argc, char * argv[]) {
 	});
 	parser.option ({"kernel-widths"}, "w0[:w1:w2:...]", "Use explicit kernel widths (default=deduced)",
 	               [&explicit_kernel_widths](string_view values) {
-		               std::vector<PointSpace> widths;
-		               for (string_view value : split (':', values)) {
-			               widths.emplace_back (PointSpace (parse_strict_positive_int (value, "kernel width")));
-		               }
-		               explicit_kernel_widths = std::move (widths);
+		               explicit_kernel_widths = map_to_vector (split (':', values), [](string_view value) {
+			               return PointSpace (parse_strict_positive_int (value, "kernel width"));
+		               });
 	               });
 
 	parser.option ({"r", "regions"}, "r0[,r1,r2,...]", "Set region names extracted from next files",
@@ -202,12 +195,8 @@ int main (int argc, char * argv[]) {
 			};
 
 			if (use_kernel == Kernel::Interval) {
-				std::vector<IntervalKernel> kernels;
-				kernels.reserve (nb_processes);
-				for (PointSpace width : get_kernel_widths ()) {
-					kernels.emplace_back (IntervalKernel{width});
-				}
-				return kernels;
+				return map_to_vector (get_kernel_widths (),
+				                      [](PointSpace width) -> IntervalKernel { return IntervalKernel{width}; });
 			} else {
 				return None{};
 			}
@@ -247,7 +236,8 @@ int main (int argc, char * argv[]) {
 			struct PrintKernelLine {
 				void operator() (None) const { fmt::print ("# kernels = None\n"); }
 				void operator() (const std::vector<IntervalKernel> & kernels) const {
-					fmt::print ("# kernels = Intervals{{}}\n"); // FIXME
+					const auto widths = map_to_vector (kernels, [](IntervalKernel k) { return k.width; });
+					fmt::print ("# kernels = Intervals{{{}}}\n", fmt::join (widths, ","));
 				}
 			};
 			visit (PrintKernelLine{}, kernels);

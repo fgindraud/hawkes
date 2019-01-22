@@ -337,3 +337,16 @@ public:
 	const_iterator begin () const { return inner.begin (); }
 	const_iterator end () const { return inner.end (); }
 };
+
+/*******************************************************************************
+ * Map to vector: apply a function to a range and put result in a vector.
+ */
+template <typename Range, typename Function> auto map_to_vector (const Range & range, Function f) {
+	using ReturnType = decltype (f (*range.begin ()));
+	std::vector<ReturnType> vec;
+	vec.reserve (range.size ()); // Assume a vector like range.
+	for (const auto & element : range) {
+		vec.emplace_back (f (element));
+	}
+	return vec;
+}
