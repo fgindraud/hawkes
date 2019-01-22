@@ -116,6 +116,14 @@ inline auto component (const Shifted<Inner> & shape, ComponentTag tag) {
 	return shifted (shape.shift, component (shape.inner, tag));
 }
 
+// Interval approximation
+template <typename T, typename Inner> inline auto interval_approximation (const Scaled<T, Inner> & shape) {
+	return scaled (shape.scale, interval_approximation (shape.inner));
+}
+template <typename Inner> inline auto interval_approximation (const Shifted<Inner> & shape) {
+	return shifted (shape.shift, interval_approximation (shape.inner));
+}
+
 // Convolution simplifications: propagate combinators to the outer levels
 template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 2)>>
 inline auto convolution (const Shifted<L> & lhs, const R & rhs) {
@@ -246,6 +254,10 @@ inline auto component (const Trapezoid & trapezoid, Trapezoid::RightTriangle) {
 
 inline Trapezoid convolution (const IntervalIndicator & left, const IntervalIndicator & right) {
 	return {std::min (left.half_width, right.half_width) * 2, std::abs (left.half_width - right.half_width)};
+}
+
+inline auto interval_approximation (const Trapezoid & trapezoid) {
+	return scaled (trapezoid.height, IntervalIndicator::with_half_width (trapezoid.half_base + trapezoid.height));
 }
 
 /* Convolution between IntervalIndicator(half_width=l/2) and PositiveTriangle(side=c).

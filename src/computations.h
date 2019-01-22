@@ -186,6 +186,7 @@ inline auto sup_of_sum_of_differences_to_points (const SortedVec<Point> & points
 // Conversion of objects to shapes (shape.h)
 inline auto to_shape (HistogramBase::Interval i) {
 	// TODO Histo::Interval is ]left; right], but shape::Interval is [left; right].
+	// This conversion is only valid if used in a convolution, where the type of interval bound does not matter !
 	const auto delta = i.right - i.left;
 	const auto center = (i.left + i.right) / 2;
 	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
@@ -581,9 +582,15 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 	Matrix_M_MK1 b_hat (nb_processes, base_size);
 
 	for (ProcessId l = 0; l < nb_processes; ++l) {
+		const auto w_l = to_shape (kernels[l]);
 		for (ProcessId m = 0; m < nb_processes; ++m) {
+			const auto w_m = to_shape (kernels[m]);
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
-				const auto approx = shape::IntervalIndicator::with_half_width (1); // FIXME approx
+				const auto phi_k = to_shape (base.interval (k));
+
+				// Approximate trapezoids with an interval of height=max, width=width of trapezoid
+				const auto intermediate = interval_approximation (convolution (w_m, w_l));
+				const auto approx = interval_approximation (convolution (intermediate, phi_k));
 
 				double sum_of_region_sups = 0;
 				for (RegionId r = 0; r < nb_regions; ++r) {
