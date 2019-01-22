@@ -256,6 +256,33 @@ TEST_SUITE ("utils") {
 		CHECK (split (',', ",b") == std::vector<string_view>{"", "b"});
 		CHECK (split (',', " ,b ") == std::vector<string_view>{" ", "b "});
 	}
+	TEST_CASE ("split_first_n") {
+		auto r0 = split_first_n<1> (',', "");
+		CHECK (r0.has_value == true);
+		CHECK (r0.value[0] == "");
+		auto r1 = split_first_n<2> (',', "");
+		CHECK (r1.has_value == false);
+		
+		auto r2 = split_first_n<1> (',', "a,b");
+		CHECK (r2.has_value == true);
+		CHECK (r2.value[0] == "a");
+		auto r3 = split_first_n<2> (',', "a,b");
+		CHECK (r3.has_value == true);
+		CHECK (r3.value[0] == "a");
+		CHECK (r3.value[1] == "b");
+		auto r4 = split_first_n<3> (',', "a,b");
+		CHECK (r4.has_value == false);
+		
+		auto r5 = split_first_n<1> (',', "a,");
+		CHECK (r5.has_value == true);
+		CHECK (r5.value[0] == "a");
+		auto r6 = split_first_n<2> (',', "a,");
+		CHECK (r6.has_value == true);
+		CHECK (r6.value[0] == "a");
+		CHECK (r6.value[1] == "");
+		auto r7 = split_first_n<3> (',', "a,");
+		CHECK (r7.has_value == false);
+	}
 
 	TEST_CASE ("trim_ws") {
 		CHECK (trim_ws_left ("") == "");

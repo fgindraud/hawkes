@@ -2,6 +2,7 @@
 // Contains vocabulary types, basic functions used in many places.
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cctype>
 #include <cstdlib>
@@ -182,6 +183,25 @@ inline std::vector<string_view> split (char separator, string_view text) {
 		part_begin = part_end + 1; // Skip separator
 	}
 	return r;
+}
+// Like split above, but only get the first N parts, or empty optional if not enough parts.
+template <std::size_t N> Optional<std::array<string_view, N>> split_first_n (char separator, string_view text) {
+	std::array<string_view, N> parts;
+	const auto end = text.end ();
+	string_view::iterator part_begin = text.begin ();
+	std::size_t i = 0;
+	while (true) {
+		auto part_end = std::find (part_begin, end, separator);
+		parts[i] = make_string_view (part_begin, part_end);
+		++i;
+		if (i == N) {
+			return parts;
+		}
+		if (part_end == end) {
+			return {}; // Not enough parts
+		}
+		part_begin = part_end + 1; // Skip separator
+	}
 }
 
 // Parse numbers
