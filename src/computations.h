@@ -419,7 +419,6 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 /******************************************************************************
  * Histogram with interval convolution kernels.
  * TODO improve, clean normalization factors
- * TODO add b_hat
  * TODO doc
  */
 inline double b_mlk_histogram (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,

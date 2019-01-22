@@ -125,6 +125,11 @@ struct HistogramBase {
 	size_t base_size; // [1, inf[
 	PointSpace delta; // [1, inf[
 
+	HistogramBase (size_t base_size, PointSpace delta) : base_size (base_size), delta (delta) {
+		assert (base_size > 0);
+		assert (delta > 0);
+	}
+
 	// ]left; right]
 	struct Interval {
 		PointSpace left;
@@ -146,7 +151,9 @@ inline double normalization_factor (HistogramBase base) {
 
 // 1_[-width/2, width/2]
 struct IntervalKernel {
-	PointSpace width; // [0, inf[
+	PointSpace width; // [1, inf[ due to the normalization factor
+
+	IntervalKernel (PointSpace width) : width (width) { assert (width > 0); }
 };
 inline double normalization_factor (IntervalKernel kernel) {
 	return 1. / std::sqrt (kernel.width);

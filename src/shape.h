@@ -145,6 +145,7 @@ inline auto convolution (const L & lhs, const Scaled<T, R> & rhs) {
 struct IntervalIndicator {
 	PointSpace half_width; // [0, inf[
 
+	IntervalIndicator (PointSpace half_width) : half_width (half_width) { assert (half_width >= 0); }
 	static IntervalIndicator with_half_width (PointSpace half_width) { return {half_width}; }
 	static IntervalIndicator with_width (PointSpace width) { return {width / 2}; }
 
@@ -164,6 +165,8 @@ struct IntervalIndicator {
 struct PositiveTriangle {
 	PointSpace side; // [0, inf[
 
+	PositiveTriangle (PointSpace side) : side (side) { assert (side >= 0); }
+
 	ClosedInterval<Point> non_zero_domain () const { return {0, side}; }
 	int32_t operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
@@ -178,6 +181,8 @@ struct PositiveTriangle {
  */
 struct NegativeTriangle {
 	PointSpace side; // [0, inf[
+
+	NegativeTriangle (PointSpace side) : side (side) { assert (side >= 0); }
 
 	ClosedInterval<Point> non_zero_domain () const { return {-side, 0}; }
 	int32_t operator() (PointInNonZeroDomain x) const {
@@ -198,6 +203,11 @@ inline auto as_positive_triangle (NegativeTriangle t) {
 struct Trapezoid {
 	PointSpace height;    // [0, inf[
 	PointSpace half_base; // [0, inf[
+
+	Trapezoid (PointSpace height, PointSpace half_base) : height (height), half_base (half_base) {
+		assert (height >= 0);
+		assert (half_base >= 0);
+	}
 
 	ClosedInterval<Point> non_zero_domain () const {
 		const auto half_len = height + half_base;
@@ -241,12 +251,13 @@ inline Trapezoid convolution (const IntervalIndicator & left, const IntervalIndi
 /* Convolution between IntervalIndicator(half_width=l/2) and PositiveTriangle(side=c).
  */
 struct ConvolutionIntervalPositiveTriangle {
-	PointSpace half_l;
-	PointSpace c;
-	// Precompute values
-	ClosedInterval<PointSpace> central_section;
+	PointSpace half_l;                          // [0, inf[
+	PointSpace c;                               // [0, inf[
+	ClosedInterval<PointSpace> central_section; // Precomputed values
 
 	ConvolutionIntervalPositiveTriangle (PointSpace half_l, PointSpace c) : half_l (half_l), c (c) {
+		assert (half_l >= 0);
+		assert (c >= 0);
 		const auto p = std::minmax (half_l, c - half_l);
 		central_section = {p.first, p.second};
 	}
@@ -291,13 +302,15 @@ inline auto convolution (const NegativeTriangle & lhs, const IntervalIndicator &
 /* Convolution between PositiveTriangle(side=a) and PositiveTriangle(side=b).
  */
 struct ConvolutionPositiveTrianglePositiveTriangle {
-	// Precompute values (definitions in the shape doc)
+	// Precomputed values (definitions in the shape doc)
 	PointSpace a_plus_b;
 	PointSpace A;
 	PointSpace B;
 	int64_t polynom_constant;
 
 	ConvolutionPositiveTrianglePositiveTriangle (PointSpace a, PointSpace b) {
+		assert (a >= 0);
+		assert (b >= 0);
 		a_plus_b = a + b;
 		std::tie (A, B) = std::minmax (a, b);
 		// Polynom constant used for cubic right part = -2a^2 -2b^2 + 2ab.
@@ -337,11 +350,13 @@ inline auto convolution (const NegativeTriangle & lhs, const NegativeTriangle & 
 struct ConvolutionNegativeTrianglePositiveTriangle {
 	PointSpace a;
 	PointSpace b;
-	// Precompute values
+	// Precomputed values
 	PointSpace A;
 	PointSpace B;
 
 	ConvolutionNegativeTrianglePositiveTriangle (PointSpace a, PointSpace b) : a (a), b (b) {
+		assert (a >= 0);
+		assert (b >= 0);
 		std::tie (A, B) = std::minmax (0, b - a);
 	}
 

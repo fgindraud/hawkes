@@ -177,6 +177,7 @@ int main (int argc, char * argv[]) {
 		const auto post_processing_start = instant ();
 		const auto kernels = [&]() -> variant<None, std::vector<IntervalKernel>> {
 			// Helper: choose the source of kernel widths (explicit or deduced).
+			// widths must be strictly positive.
 			auto get_kernel_widths = [&]() -> std::vector<PointSpace> {
 				if (explicit_kernel_widths) {
 					if (explicit_kernel_widths.value.size () != raw_processes.size ()) {
@@ -187,6 +188,9 @@ int main (int argc, char * argv[]) {
 					return std::move (explicit_kernel_widths.value);
 				} else {
 					auto widths = average_interval_widths (raw_processes);
+					for (auto & w : widths) {
+						w = std::max (w, 1);
+					}
 					fmt::print (stderr, "Using deduced kernel widths: {}\n", fmt::join (widths, ", "));
 					return widths;
 				}
