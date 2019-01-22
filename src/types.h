@@ -71,50 +71,52 @@ private:
 	}
 
 public:
+	static ProcessesRegionData from_raw (const std::vector<RawProcessData> & raw_processes);
+
 	size_t nb_regions () const { return points_.nb_rows (); }
 	size_t nb_processes () const { return points_.nb_cols (); }
 
 	const SortedVec<Point> & process_data (ProcessId m, RegionId r) const { return points_ (r, m); }
 	span<const SortedVec<Point>> processes_data_for_region (RegionId r) const { return points_.row (r); }
-
-	static ProcessesRegionData from_raw (const std::vector<RawProcessData> & raw_processes) {
-		const auto nb_processes = raw_processes.size ();
-		if (raw_processes.empty ()) {
-			throw std::runtime_error ("ProcessesRegionData::from_raw: Empty process list");
-		}
-		const auto nb_regions = raw_processes[0].regions.size ();
-		ProcessesRegionData data (nb_processes, nb_regions);
-		for (ProcessId m = 0; m < nb_processes; m++) {
-			const auto & raw_process = raw_processes[m];
-			if (raw_process.regions.size () != nb_regions) {
-				throw std::runtime_error (
-				    fmt::format ("ProcessesRegionData::from_raw: process {} has wrong region number: got {}, expected {}", m,
-				                 raw_process.regions.size (), nb_regions));
-			}
-			for (RegionId r = 0; r < nb_regions; ++r) {
-				// Intervals are represented by their middle points
-				std::vector<Point> points;
-				points.reserve (raw_process.regions[r].unsorted_intervals.size ());
-				for (const auto & interval : raw_process.regions[r].unsorted_intervals) {
-					const auto point = (interval.left + interval.right) / 2;
-					points.emplace_back (point);
-				}
-				// Apply reversing if requested before sorting them in increasing order
-				if (raw_process.direction == RawProcessData::Direction::Backward && !points.empty ()) {
-					// Reverse point values, and add the max to have positive positions starting with 0.
-					// The shift with max is not necessary as algorithms do no require positive positions in general.
-					// TODO remove shifting ?
-					const auto max = *std::max_element (points.begin (), points.end ());
-					for (auto & point : points) {
-						point = max - point;
-					}
-				}
-				data.points_ (r, m) = SortedVec<Point>::from_unsorted (std::move (points));
-			}
-		}
-		return data;
-	}
 };
+
+inline ProcessesRegionData ProcessesRegionData::from_raw (const std::vector<RawProcessData> & raw_processes) {
+	const auto nb_processes = raw_processes.size ();
+	if (raw_processes.empty ()) {
+		throw std::runtime_error ("ProcessesRegionData::from_raw: Empty process list");
+	}
+	const auto nb_regions = raw_processes[0].regions.size ();
+	ProcessesRegionData data (nb_processes, nb_regions);
+	for (ProcessId m = 0; m < nb_processes; m++) {
+		const auto & raw_process = raw_processes[m];
+		if (raw_process.regions.size () != nb_regions) {
+			throw std::runtime_error (
+			    fmt::format ("ProcessesRegionData::from_raw: process {} has wrong region number: got {}, expected {}", m,
+			                 raw_process.regions.size (), nb_regions));
+		}
+		for (RegionId r = 0; r < nb_regions; ++r) {
+			// Intervals are represented by their middle points
+			std::vector<Point> points;
+			points.reserve (raw_process.regions[r].unsorted_intervals.size ());
+			for (const auto & interval : raw_process.regions[r].unsorted_intervals) {
+				const auto point = (interval.left + interval.right) / 2;
+				points.emplace_back (point);
+			}
+			// Apply reversing if requested before sorting them in increasing order
+			if (raw_process.direction == RawProcessData::Direction::Backward && !points.empty ()) {
+				// Reverse point values, and add the max to have positive positions starting with 0.
+				// The shift with max is not necessary as algorithms do no require positive positions in general.
+				// TODO remove shifting ?
+				const auto max = *std::max_element (points.begin (), points.end ());
+				for (auto & point : points) {
+					point = max - point;
+				}
+			}
+			data.points_ (r, m) = SortedVec<Point>::from_unsorted (std::move (points));
+		}
+	}
+	return data;
+}
 
 /******************************************************************************
  * Function bases.

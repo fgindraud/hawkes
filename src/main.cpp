@@ -59,12 +59,40 @@ static std::vector<RawRegionData> read_regions_from (string_view filename, span<
 		auto file = open_file (filename, "r");
 		auto regions = read_selected_from_bed_file (file.get (), region_names);
 		const auto end = instant ();
-		fmt::print (stderr, "Process loaded from {}: regions = {} ; time = {}\n", filename, regions.size (),
+		fmt::print (stderr, "Process {} loaded: regions = {} ; time = {}\n", filename, regions.size (),
 		            duration_string (end - start));
+		// TODO information on points ?
 		return regions;
 	} catch (const std::runtime_error & e) {
 		throw std::runtime_error (fmt::format ("Reading process data from {}: {}", filename, e.what ()));
 	}
+}
+
+/******************************************************************************
+ * Compute kernel widths as average of interval sizes.
+ */
+static PointSpace average_interval_width (const RawProcessData & raw_process) {
+	int64_t sum_of_interval_widths = 0;
+	int64_t nb_elements = 0;
+	for (const auto & region : raw_process.regions) {
+		nb_elements += int64_t (region.unsorted_intervals.size ());
+		for (const auto & interval : region.unsorted_intervals) {
+			assert (interval.right >= interval.left);
+			sum_of_interval_widths += interval.right - interval.left;
+		}
+	}
+	if (nb_elements == 0) {
+		throw std::runtime_error ("Kernel width deduction: process contains no points");
+	}
+	return PointSpace (sum_of_interval_widths / nb_elements);
+}
+static std::vector<PointSpace> average_interval_widths (const std::vector<RawProcessData> & raw_processes) {
+	std::vector<PointSpace> widths;
+	widths.reserve (raw_processes.size ());
+	for (const auto & raw_process : raw_processes) {
+		widths.emplace_back (average_interval_width (raw_process));
+	}
+	return widths;
 }
 
 /******************************************************************************
@@ -78,7 +106,7 @@ int main (int argc, char * argv[]) {
 
 	enum class Kernel { None, Interval };
 	Kernel use_kernel = Kernel::None;
-	Optional<std::vector<PointSpace>> kernel_widths;
+	Optional<std::vector<PointSpace>> explicit_kernel_widths;
 
 	std::vector<string_view> current_region_names;
 	std::vector<RawProcessData> raw_processes;
@@ -115,12 +143,12 @@ int main (int argc, char * argv[]) {
 		}
 	});
 	parser.option ({"kernel-widths"}, "w0[:w1:w2:...]", "Use explicit kernel widths (default=deduced)",
-	               [&kernel_widths](string_view values) {
+	               [&explicit_kernel_widths](string_view values) {
 		               std::vector<PointSpace> widths;
 		               for (string_view value : split (':', values)) {
 			               widths.emplace_back (PointSpace (parse_strict_positive_int (value, "kernel width")));
 		               }
-		               kernel_widths = std::move (widths);
+		               explicit_kernel_widths = std::move (widths);
 	               });
 
 	parser.option ({"r", "regions"}, "r0[,r1,r2,...]", "Set region names extracted from next files",
@@ -156,27 +184,52 @@ int main (int argc, char * argv[]) {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
 
+		const auto nb_processes = raw_processes.size ();
+
+		const auto kernels = [&]() -> variant<None, std::vector<IntervalKernel>> {
+			// Helper: choose the source of kernel widths (explicit or deduced).
+			auto get_kernel_widths = [&]() -> std::vector<PointSpace> {
+				if (explicit_kernel_widths) {
+					if (explicit_kernel_widths.value.size () != nb_processes) {
+						throw std::runtime_error (
+						    fmt::format ("Explicit kernel widths number does not match number of processes: expected {}, got {}",
+						                 nb_processes, explicit_kernel_widths.value.size ()));
+					}
+					return std::move (explicit_kernel_widths.value);
+				} else {
+					return average_interval_widths (raw_processes);
+				}
+			};
+
+			if (use_kernel == Kernel::Interval) {
+				std::vector<IntervalKernel> kernels;
+				kernels.reserve (nb_processes);
+				for (PointSpace width : get_kernel_widths ()) {
+					kernels.emplace_back (IntervalKernel{width});
+				}
+				return kernels;
+			} else {
+				return None{};
+			}
+		}();
+
 		const auto point_processes = ProcessesRegionData::from_raw (raw_processes);
 
-		// TODO Deduce kernel widths if not provided
-		// Check kernel numbers if provided.
-		// TODO generate variant<None, vector<IntervalKernel>>
-
-		auto values = visit (
-		    [&](const auto & base) {
+		const auto intermediate_values = visit (
+		    [&](const auto & base, const auto & kernels) {
 			    // Code to compute intermediate values for each combination of base and kernels.
-			    // TODO support kernels sets
-			    return compute_intermediate_values (point_processes, base, None{});
+			    return compute_intermediate_values (point_processes, base, kernels);
 		    },
-		    base);
+		    base, kernels);
 
-		auto parameters = compute_lasso_parameters (values, gamma);
-		auto estimated_a = compute_estimated_a_with_lasso (parameters);
+		const auto lasso_parameters = compute_lasso_parameters (intermediate_values, gamma);
+		const auto estimated_a = compute_estimated_a_with_lasso (lasso_parameters);
 
+		// Print results
 		if (verbose) {
 			// Header
 			fmt::print ("# Processes = {{\n");
-			for (size_t i = 0; i < raw_processes.size (); ++i) {
+			for (size_t i = 0; i < nb_processes; ++i) {
 				const auto & p = raw_processes[i];
 				const string_view suffix = p.direction == RawProcessData::Direction::Backward ? " (backward)" : "";
 				fmt::print ("#  [{}] {}{}\n", i, p.name, suffix);
@@ -191,7 +244,14 @@ int main (int argc, char * argv[]) {
 			};
 			visit (PrintBaseLine{}, base);
 
-			fmt::print ("# kernels = None\n"); // FIXME kernel support
+			struct PrintKernelLine {
+				void operator() (None) const { fmt::print ("# kernels = None\n"); }
+				void operator() (const std::vector<IntervalKernel> & kernels) const {
+					fmt::print ("# kernels = Intervals{{}}\n"); // FIXME
+				}
+			};
+			visit (PrintKernelLine{}, kernels);
+
 			fmt::print ("# gamma = {}\n", gamma);
 
 			fmt::print ("# Rows = {{0}} U {{(l,k)}} (order = 0,(0,0),..,(0,K-1),(1,0),..,(1,K-1),...,(M-1,K-1))\n");

@@ -483,7 +483,7 @@ inline double g_ll2kk2_histogram_integral (const SortedVec<Point> & l_points, co
 }
 
 inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base,
-                               span<const IntervalKernel> kernels) {
+                               const std::vector<IntervalKernel> & kernels) {
 	assert (kernels.size () == processes.size ());
 	const auto nb_processes = processes.size ();
 	const auto base_size = base.base_size;
@@ -509,7 +509,7 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 }
 
 inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase base,
-                          span<const IntervalKernel> kernels) {
+                          const std::vector<IntervalKernel> & kernels) {
 	assert (kernels.size () == processes.size ());
 	const auto nb_processes = processes.size ();
 	const auto base_size = base.base_size;
@@ -574,7 +574,8 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 }
 
 inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, HistogramBase base,
-                                   span<const IntervalKernel> kernels) {
+                                   const std::vector<IntervalKernel> & kernels) {
+	assert (kernels.size () == processes.nb_processes ());
 	const auto nb_processes = processes.nb_processes ();
 	const auto nb_regions = processes.nb_regions ();
 	const auto base_size = base.base_size;
@@ -584,7 +585,6 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 		for (ProcessId m = 0; m < nb_processes; ++m) {
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
 				const auto approx = shape::IntervalIndicator::with_half_width (1); // FIXME approx
-				// TODO replace spans of kernels with ref to std vector
 
 				double sum_of_region_sups = 0;
 				for (RegionId r = 0; r < nb_regions; ++r) {
