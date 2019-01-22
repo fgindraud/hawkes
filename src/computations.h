@@ -309,12 +309,11 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 	Matrix_M_MK1 b (nb_processes, base_size);
 
 	for (ProcessId m = 0; m < nb_processes; ++m) {
-		const auto & m_process = processes[m];
 		// b_0
-		b.set_0 (m, double(m_process.size ()));
+		b.set_0 (m, double(processes[m].size ()));
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
-			const auto counts = b_ml_histogram_counts_for_all_k_denormalized (m_process, processes[l], base);
+			const auto counts = b_ml_histogram_counts_for_all_k_denormalized (processes[m], processes[l], base);
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
 				b.set_lk (m, l, k, double(counts[k]) * phi_normalization_factor);
 			}
@@ -419,7 +418,6 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 
 /******************************************************************************
  * Histogram with interval convolution kernels.
- * TODO improve, clean normalization factors
  * TODO doc
  */
 inline double b_mlk_histogram (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
@@ -490,17 +488,12 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 	Matrix_M_MK1 b (nb_processes, base_size);
 
 	for (ProcessId m = 0; m < nb_processes; ++m) {
-		const auto & m_process = processes[m];
-		const auto & m_kernel = kernels[m];
-
 		// b0
-		b.set_0 (m, double(m_process.size ()) * std::sqrt (m_kernel.width));
-
+		b.set_0 (m, double(processes[m].size ()) * std::sqrt (kernels[m].width));
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
-			const auto & l_kernel = kernels[l];
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
-				const auto v = b_mlk_histogram (m_process, processes[l], base.interval (k), m_kernel, l_kernel);
+				const auto v = b_mlk_histogram (processes[m], processes[l], base.interval (k), kernels[m], kernels[l]);
 				b.set_lk (m, l, k, v);
 			}
 		}
@@ -582,12 +575,12 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 	Matrix_M_MK1 b_hat (nb_processes, base_size);
 
 	for (ProcessId l = 0; l < nb_processes; ++l) {
-		const auto w_l = to_shape (kernels[l]);
 		for (ProcessId m = 0; m < nb_processes; ++m) {
-			const auto w_m = to_shape (kernels[m]);
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
+				// Base shapes
+				const auto w_m = to_shape (kernels[m]);
+				const auto w_l = to_shape (kernels[l]);
 				const auto phi_k = to_shape (base.interval (k));
-
 				// Approximate trapezoids with an interval of height=max, width=width of trapezoid
 				const auto intermediate = interval_approximation (convolution (w_m, w_l));
 				const auto approx = interval_approximation (convolution (intermediate, phi_k));
