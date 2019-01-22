@@ -177,16 +177,16 @@ int main (int argc, char * argv[]) {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
 
-		const auto nb_processes = raw_processes.size ();
-
+		// Post processing: determine kernel setup, generate sorted points lists
+		const auto post_processing_start = instant ();
 		const auto kernels = [&]() -> variant<None, std::vector<IntervalKernel>> {
 			// Helper: choose the source of kernel widths (explicit or deduced).
 			auto get_kernel_widths = [&]() -> std::vector<PointSpace> {
 				if (explicit_kernel_widths) {
-					if (explicit_kernel_widths.value.size () != nb_processes) {
+					if (explicit_kernel_widths.value.size () != raw_processes.size ()) {
 						throw std::runtime_error (
 						    fmt::format ("Explicit kernel widths number does not match number of processes: expected {}, got {}",
-						                 nb_processes, explicit_kernel_widths.value.size ()));
+						                 raw_processes.size (), explicit_kernel_widths.value.size ()));
 					}
 					return std::move (explicit_kernel_widths.value);
 				} else {
@@ -201,24 +201,35 @@ int main (int argc, char * argv[]) {
 				return None{};
 			}
 		}();
-
 		const auto point_processes = ProcessesRegionData::from_raw (raw_processes);
+		const auto post_processing_end = instant ();
+		fmt::print (stderr, "Post processing done: time = {}\n",
+		            duration_string (post_processing_end - post_processing_start));
 
+		// Compute base/kernel specific values: B, G, B_hat
+		const auto compute_b_g_start = instant ();
 		const auto intermediate_values = visit (
 		    [&](const auto & base, const auto & kernels) {
 			    // Code to compute intermediate values for each combination of base and kernels.
 			    return compute_intermediate_values (point_processes, base, kernels);
 		    },
 		    base, kernels);
+		const auto compute_b_g_end = instant ();
+		fmt::print (stderr, "Computing B and G matrice done: time = {}\n",
+		            duration_string (compute_b_g_end - compute_b_g_start));
 
+		// Perform lassoshooting
+		const auto lasso_start = instant ();
 		const auto lasso_parameters = compute_lasso_parameters (intermediate_values, gamma);
 		const auto estimated_a = compute_estimated_a_with_lasso (lasso_parameters);
+		const auto lasso_end = instant ();
+		fmt::print (stderr, "Lassoshooting done: time = {}\n", duration_string (lasso_end - lasso_start));
 
 		// Print results
 		if (verbose) {
 			// Header
 			fmt::print ("# Processes = {{\n");
-			for (size_t i = 0; i < nb_processes; ++i) {
+			for (size_t i = 0; i < raw_processes.size (); ++i) {
 				const auto & p = raw_processes[i];
 				const string_view suffix = p.direction == RawProcessData::Direction::Backward ? " (backward)" : "";
 				fmt::print ("#  [{}] {}{}\n", i, p.name, suffix);
