@@ -603,8 +603,11 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 
 // This struct contains computed values specific to the chosen base and kernel.
 struct CommonIntermediateValues {
-	std::vector<Matrix_M_MK1> b_by_region;
-	std::vector<MatrixG> g_by_region;
+	struct B_G {
+		Matrix_M_MK1 b;
+		MatrixG g;
+	};
+	std::vector<B_G> b_g_by_region;
 	Matrix_M_MK1 b_hat;
 };
 
@@ -618,15 +621,14 @@ template <typename Base, typename Kernels>
 inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegionData & processes, const Base & base,
                                                              const Kernels & kernels) {
 	const auto nb_regions = processes.nb_regions ();
-	std::vector<Matrix_M_MK1> b_by_region;
-	std::vector<MatrixG> g_by_region;
-	b_by_region.reserve (nb_regions);
-	g_by_region.reserve (nb_regions);
+	using B_G = typename CommonIntermediateValues::B_G;
+	std::vector<B_G> b_g_by_region;
+	b_g_by_region.reserve (nb_regions);
 	for (RegionId r = 0; r < nb_regions; ++r) {
-		b_by_region.emplace_back (compute_b (processes.processes_data_for_region (r), base, kernels));
-		g_by_region.emplace_back (compute_g (processes.processes_data_for_region (r), base, kernels));
+		b_g_by_region.emplace_back (B_G{compute_b (processes.processes_data_for_region (r), base, kernels),
+		                                compute_g (processes.processes_data_for_region (r), base, kernels)});
 	}
-	return {std::move (b_by_region), std::move (g_by_region), compute_b_hat (processes, base, kernels)};
+	return {std::move (b_g_by_region), compute_b_hat (processes, base, kernels)};
 }
 
 struct LassoParameters {
@@ -636,7 +638,7 @@ struct LassoParameters {
 };
 
 inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues & values, double gamma) {
-	const auto nb_regions = values.b_by_region.size ();
+	const auto nb_regions = values.b_g_by_region.size ();
 	const auto nb_processes = values.b_hat.nb_processes;
 	const auto base_size = values.b_hat.base_size;
 
@@ -653,9 +655,11 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 	v_hat_r2.m_lk_values ().setZero ();
 
 	for (RegionId r = 0; r < nb_regions; ++r) {
-		sum_of_b.inner += values.b_by_region[r].inner;
-		v_hat_r2.m_lk_values ().array () += values.b_by_region[r].m_lk_values ().array ().square ();
-		sum_of_g.inner += values.g_by_region[r].inner;
+		const auto & v = values.b_g_by_region[r];
+
+		sum_of_b.inner += v.b.inner;
+		v_hat_r2.m_lk_values ().array () += v.b.m_lk_values ().array ().square ();
+		sum_of_g.inner += v.g.inner;
 	}
 
 	/* Compute D, the penalty for the lassoshooting.
