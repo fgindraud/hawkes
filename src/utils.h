@@ -100,6 +100,18 @@ template <typename T, std::size_t N> span<const T> make_span (const T (&array)[N
 template <typename T, std::size_t N> span<T> make_span (T (&array)[N]) {
 	return {&array[0], N};
 }
+template <typename T, std::size_t N> span<const T> make_span (const std::array<T, N> & a) {
+	return {&a[0], N};
+}
+template <typename T, std::size_t N> span<T> make_span (std::array<T, N> & a) {
+	return {&a[0], N};
+}
+template <typename T> span<T> make_span (T * base, T * end) {
+	return {base, end};
+}
+template <typename T> span<T> make_span (T * base, std::size_t size) {
+	return {base, size};
+}
 
 // Slice (sub span)
 template <typename T> span<T> slice (span<T> s, std::size_t from, std::size_t size) {

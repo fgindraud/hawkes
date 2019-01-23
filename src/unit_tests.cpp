@@ -37,9 +37,46 @@ template <> struct StringMaker<string_view> {
  * Computations tests.
  */
 TEST_SUITE ("computations") {
+	TEST_CASE ("tmax") {
+		const SortedVec<Point> one_array[] = {SortedVec<Point>::from_sorted ({-1, 1})};
+		CHECK (tmax (make_span (one_array)) == 2);
+		CHECK (tmax (make_span (&one_array[0], 0)) == 0); // Empty
+		const SortedVec<Point> two_arrays[] = {
+		    SortedVec<Point>::from_sorted ({0, 42}),
+		    SortedVec<Point>::from_sorted ({-1, 1}),
+		};
+		CHECK (tmax (make_span (two_arrays)) == 43);
+		const SortedVec<Point> contains_empty[] = {
+		    SortedVec<Point>::from_sorted ({0, 42}),
+		    SortedVec<Point>::from_sorted ({}),
+		};
+		CHECK (tmax (make_span (contains_empty)) == 42);
+		const SortedVec<Point> one_point[] = {SortedVec<Point>::from_sorted ({1})};
+		CHECK (tmax (make_span (one_point)) == 0);
+	}
+	TEST_CASE ("sum_of_point_differences") {
+		// Use interval [-1, 1] as this is a simple function to check
+		const auto interval = shape::IntervalIndicator::with_half_width (1);
+		const auto empty = SortedVec<Point>::from_sorted ({});
+		const auto zero = SortedVec<Point>::from_sorted ({0});
+		// Should be zero due to emptyset
+		CHECK (sum_of_point_differences (empty, empty, interval) == 0);
+		CHECK (sum_of_point_differences (empty, zero, interval) == 0);
+		CHECK (sum_of_point_differences (zero, empty, interval) == 0);
+		// Only one same point in both sets
+		CHECK (sum_of_point_differences (zero, zero, interval) == 1);
+		// Single point with all points near zero
+		const auto all_near_zero = SortedVec<Point>::from_sorted ({-4, -3, -2, -1, 0, 1, 2, 3, 4});
+		CHECK (sum_of_point_differences (zero, all_near_zero, interval) == 3);
+		CHECK (sum_of_point_differences (all_near_zero, zero, interval) == 3);
+		// Multiple points with all points near zero
+		const auto some_points = SortedVec<Point>::from_sorted ({-3, 0, 3});
+		CHECK (sum_of_point_differences (some_points, all_near_zero, interval) == 9);
+		CHECK (sum_of_point_differences (all_near_zero, some_points, interval) == 9);
+		CHECK (sum_of_point_differences (some_points, some_points, interval) == 3);
+	}
 	TEST_CASE ("sup_of_sum_of_differences_to_points: IntervalIndicator") {
 		const auto interval = shape::IntervalIndicator::with_half_width (1);
-
 		SUBCASE ("no points") {
 			const auto vec = SortedVec<Point>::from_sorted ({});
 			const auto minus_inf = std::numeric_limits<int32_t>::min ();
@@ -64,7 +101,6 @@ TEST_SUITE ("computations") {
 	}
 	TEST_CASE ("sup_of_sum_of_differences_to_points: HistogramBase::Interval") {
 		const auto interval = HistogramBase::Interval{0, 3}; // ]0,3]
-
 		SUBCASE ("no points") {
 			const auto vec = SortedVec<Point>::from_sorted ({});
 			const auto minus_inf = std::numeric_limits<int32_t>::min ();
@@ -262,7 +298,7 @@ TEST_SUITE ("utils") {
 		CHECK (r0.value[0] == "");
 		auto r1 = split_first_n<2> (',', "");
 		CHECK (r1.has_value == false);
-		
+
 		auto r2 = split_first_n<1> (',', "a,b");
 		CHECK (r2.has_value == true);
 		CHECK (r2.value[0] == "a");
@@ -272,7 +308,7 @@ TEST_SUITE ("utils") {
 		CHECK (r3.value[1] == "b");
 		auto r4 = split_first_n<3> (',', "a,b");
 		CHECK (r4.has_value == false);
-		
+
 		auto r5 = split_first_n<1> (',', "a,");
 		CHECK (r5.has_value == true);
 		CHECK (r5.value[0] == "a");
