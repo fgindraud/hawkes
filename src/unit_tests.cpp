@@ -137,9 +137,77 @@ TEST_SUITE ("shape") {
 		CHECK (right_tri (3) == 0);
 	}
 	TEST_CASE ("ConvolutionIntervalPositiveTriangle") {
-		const auto interval = IntervalIndicator::with_half_width (1);
-		const auto small_tri = PositiveTriangle (1);
-		const auto big_tri = PositiveTriangle (3);
+		{
+			// Case l <= c
+			const auto interval = IntervalIndicator::with_width (2);
+			const auto tri = PositiveTriangle (3);
+			const auto conv = convolution (interval, tri);
+			CHECK (conv.non_zero_domain () == ClosedInterval<Point>{-1, 3 + 1});
+			CHECK (conv (-2) == 0);
+			CHECK (conv (-1) == 0); // f(-l/2) == 0
+			CHECK (conv (0) > conv (-1));
+			CHECK (conv (1) > conv (0));
+			CHECK (conv (1) == 2 * 2 / 2); // f(l/2) = l^2/2
+			CHECK (conv (2) > conv (1));
+			CHECK (conv (2) == 3 * 2 - 2 * 2 / 2); // f(c-l/2) = cl - l^2/2
+			CHECK (conv (3) < conv (2));
+			CHECK (conv (4) < conv (3));
+			CHECK (conv (4) == 0);
+			CHECK (conv (5) == 0);
+		}
+		{
+			// Case l >= c
+			const auto interval = IntervalIndicator::with_width (2);
+			const auto tri = PositiveTriangle (1);
+			const auto conv = convolution (interval, tri);
+			CHECK (conv.non_zero_domain () == ClosedInterval<Point>{-1, 1 + 1});
+			CHECK (conv (-2) == 0);
+			CHECK (conv (-1) == 0); // f(-l/2) == 0
+			CHECK (conv (0) > conv (-1));
+			CHECK (conv (0) == 1. * 1. / 2.); // f(c-l/2) = c^2/2
+			CHECK (conv (1) == 1. * 1. / 2.); // f(l/2) = c^2/2
+			CHECK (conv (2) < conv (1));
+			CHECK (conv (2) == 0);
+			CHECK (conv (3) == 0);
+		}
+	}
+	TEST_CASE ("ConvolutionPositiveTrianglePositiveTriangle") {
+		// 2 symmetrical cases: use a=3,b=4 so that the max of the shape is at 5.
+		const auto a_tri = PositiveTriangle (3);
+		const auto b_tri = PositiveTriangle (4);
+		const auto conv = convolution (a_tri, b_tri);
+		CHECK (conv.non_zero_domain () == ClosedInterval<Point>{0, 3 + 4});
+		CHECK (conv (-1) == 0);
+		CHECK (conv (0) == 0);
+		CHECK (conv (1) > conv (0));
+		CHECK (conv (2) > conv (1));
+		CHECK (conv (3) > conv (2));
+		CHECK (conv (3) == 3. * 3. * 3. / 6.);
+		CHECK (conv (4) > conv (3));
+		CHECK (conv (4) == 3. * 3. * (3. * 4. - 2. * 3.) / 6.);
+		CHECK (conv (5) > conv (4));
+		CHECK (conv (6) < conv (5));
+		CHECK (conv (7) < conv (6));
+		CHECK (conv (7) == 0);
+		CHECK (conv (8) == 0);
+	}
+	TEST_CASE ("ConvolutionNegativeTrianglePositiveTriangle") {
+		// 2 cases with results time reverted from the other.
+		const auto neg_tri = NegativeTriangle (2);
+		const auto pos_tri = PositiveTriangle (3);
+		const auto conv = convolution (neg_tri, pos_tri);
+		CHECK (conv.non_zero_domain () == ClosedInterval<Point>{-2, 3});
+		CHECK (conv (-3) == 0);
+		CHECK (conv (-2) == 0);
+		CHECK (conv (-1) > conv (-2));
+		CHECK (conv (0) > conv (-1));
+		CHECK (conv (0) == 2. * 2. * 2. / 3.);
+		CHECK (conv (1) > conv (0));
+		CHECK (conv (1) == 2. * 2. * (3. * 3. - 2.) / 6.);
+		CHECK (conv (2) < conv (1));
+		CHECK (conv (3) < conv (2));
+		CHECK (conv (3) == 0);
+		CHECK (conv (4) == 0);
 	}
 }
 
