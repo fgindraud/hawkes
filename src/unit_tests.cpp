@@ -9,6 +9,7 @@
 #include "command_line.h"
 #include "computations.h"
 #include "input.h"
+#include "shape.h"
 #include "utils.h"
 
 namespace doctest {
@@ -32,6 +33,93 @@ template <> struct StringMaker<string_view> {
 	}
 };
 } // namespace doctest
+
+/******************************************************************************
+ * Shape tests.
+ */
+TEST_SUITE ("shape") {
+	using namespace shape;
+	TEST_CASE ("interval") {
+		const auto interval = IntervalIndicator::with_half_width (1); // [-1, 1]
+		const auto nzd = interval.non_zero_domain ();
+		CHECK (nzd == ClosedInterval<Point>{-1, 1});
+		CHECK (contains (nzd, 0));
+		CHECK (contains (nzd, 1));
+		CHECK (!contains (nzd, 2));
+		CHECK (interval (-2) == 0);
+		CHECK (interval (-1) == 1);
+		CHECK (interval (0) == 1);
+		CHECK (interval (1) == 1);
+		CHECK (interval (2) == 0);
+	}
+	TEST_CASE ("combinators") {
+		const auto interval = IntervalIndicator::with_half_width (1); // [-1, 1]
+		const auto scaled_2 = scaled (2, interval);
+		CHECK (scaled_2 (0) == 2);
+		CHECK (scaled_2 (1) == 2);
+		CHECK (scaled_2 (2) == 0);
+		CHECK (scaled_2.non_zero_domain () == interval.non_zero_domain ());
+		const auto shifted_forward = shifted (1, interval);
+		CHECK (shifted_forward (-2) == 0);
+		CHECK (shifted_forward (-1) == 0);
+		CHECK (shifted_forward (0) == 1);
+		CHECK (shifted_forward (1) == 1);
+		CHECK (shifted_forward (2) == 1);
+		CHECK (shifted_forward (3) == 0);
+		CHECK (shifted_forward.non_zero_domain () == ClosedInterval<Point>{0, 2});
+		const auto rev = reversed (shifted_forward); // Use the non symmetric shifted_forward shape
+		CHECK (rev (-3) == 0);
+		CHECK (rev (-2) == 1);
+		CHECK (rev (-1) == 1);
+		CHECK (rev (0) == 1);
+		CHECK (rev (1) == 0);
+		CHECK (rev (2) == 0);
+		CHECK (rev.non_zero_domain () == ClosedInterval<Point>{-2, 0});
+	}
+	TEST_CASE ("triangles") {
+		const auto pos_tri = PositiveTriangle (2);
+		CHECK (pos_tri (-1) == 0);
+		CHECK (pos_tri (0) == 0);
+		CHECK (pos_tri (1) == 1);
+		CHECK (pos_tri (2) == 2);
+		CHECK (pos_tri (3) == 0);
+		const auto neg_tri = NegativeTriangle (2);
+		CHECK (neg_tri (-3) == 0);
+		CHECK (neg_tri (-2) == 2);
+		CHECK (neg_tri (-1) == 1);
+		CHECK (neg_tri (0) == 0);
+		CHECK (neg_tri (1) == 0);
+	}
+	TEST_CASE ("trapezoid") {
+		const auto interval = IntervalIndicator::with_half_width (1); // [-1, 1]
+		const auto degenerate_trapezoid = convolution (interval, interval);
+		// The trapezoid is a simple triangle centered on 0 (no central section).
+		const auto degenerate_trapezoid_nzd = degenerate_trapezoid.non_zero_domain ();
+		CHECK (degenerate_trapezoid_nzd.left == -degenerate_trapezoid_nzd.right);
+		CHECK (degenerate_trapezoid_nzd.right == 2 * interval.half_width);
+		CHECK (degenerate_trapezoid.half_base == 0);
+		CHECK (degenerate_trapezoid.height == 2); // Max height == integral_x interval(x) == 1*width == 2
+		// Graph
+		CHECK (degenerate_trapezoid (-3) == 0);
+		CHECK (degenerate_trapezoid (-2) == 0);
+		CHECK (degenerate_trapezoid (-1) == 1);
+		CHECK (degenerate_trapezoid (0) == 2);
+		CHECK (degenerate_trapezoid (1) == 1);
+		CHECK (degenerate_trapezoid (2) == 0);
+		CHECK (degenerate_trapezoid (3) == 0);
+		// Non degenerate trapezoid
+		const auto trapezoid = convolution (interval, IntervalIndicator::with_half_width (2));
+		CHECK (trapezoid (-4) == 0);
+		CHECK (trapezoid (-3) == 0);
+		CHECK (trapezoid (-2) == 1);
+		CHECK (trapezoid (-1) == 2);
+		CHECK (trapezoid (0) == 2);
+		CHECK (trapezoid (1) == 2);
+		CHECK (trapezoid (2) == 1);
+		CHECK (trapezoid (3) == 0);
+		CHECK (trapezoid (4) == 0);
+	}
+}
 
 /******************************************************************************
  * Computations tests.

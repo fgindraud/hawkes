@@ -22,12 +22,17 @@ inline int64_t square (int32_t x) {
 template <typename T> struct ClosedInterval {
 	T left;
 	T right;
+	ClosedInterval () = default;
+	ClosedInterval (T left, T right) : left (left), right (right) { assert (left <= right); }
 };
 template <typename T> inline ClosedInterval<T> operator+ (const T & offset, const ClosedInterval<T> & i) {
 	return {offset + i.left, offset + i.right};
 }
 template <typename T> inline ClosedInterval<T> operator- (const ClosedInterval<T> & i) {
 	return {-i.right, -i.left};
+}
+template <typename T> inline bool operator== (const ClosedInterval<T> & lhs, const ClosedInterval<T> & rhs) {
+	return lhs.left == rhs.left && lhs.right == rhs.right;
 }
 template <typename T> inline bool contains (const ClosedInterval<T> & i, const T & value) {
 	return i.left <= value && value <= i.right;
@@ -224,7 +229,7 @@ struct Trapezoid {
 	int32_t operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		if (x.value < -half_base) {
-			return x.value - (half_base + height); // Left triangle
+			return x.value + height + half_base; // Left triangle
 		} else if (x.value > half_base) {
 			return (half_base + height) - x.value; // Right triangle
 		} else {
