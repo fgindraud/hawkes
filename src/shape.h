@@ -216,22 +216,21 @@ inline auto as_positive_triangle (NegativeTriangle t) {
 struct Trapezoid {
 	PointSpace height;    // [0, inf[
 	PointSpace half_base; // [0, inf[
+	PointSpace half_len;  // Precomputed
 
 	Trapezoid (PointSpace height, PointSpace half_base) : height (height), half_base (half_base) {
 		assert (height >= 0);
 		assert (half_base >= 0);
+		half_len = half_base + height;
 	}
 
-	ClosedInterval<Point> non_zero_domain () const {
-		const auto half_len = height + half_base;
-		return {-half_len, half_len};
-	}
+	ClosedInterval<Point> non_zero_domain () const { return {-half_len, half_len}; }
 	int32_t operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		if (x.value < -half_base) {
-			return x.value + height + half_base; // Left triangle
+			return x.value + half_len; // Left triangle
 		} else if (x.value > half_base) {
-			return (half_base + height) - x.value; // Right triangle
+			return half_len - x.value; // Right triangle
 		} else {
 			return height; // Central block
 		}
@@ -251,10 +250,10 @@ inline auto component (const Trapezoid & trapezoid, Trapezoid::CentralBlock) {
 	return scaled (trapezoid.height, IntervalIndicator::with_half_width (trapezoid.half_base));
 }
 inline auto component (const Trapezoid & trapezoid, Trapezoid::LeftTriangle) {
-	return shifted (-(trapezoid.height + trapezoid.half_base), PositiveTriangle{trapezoid.height});
+	return shifted (-trapezoid.half_len, PositiveTriangle{trapezoid.height});
 }
 inline auto component (const Trapezoid & trapezoid, Trapezoid::RightTriangle) {
-	return shifted (trapezoid.height + trapezoid.half_base, NegativeTriangle{trapezoid.height});
+	return shifted (trapezoid.half_len, NegativeTriangle{trapezoid.height});
 }
 
 inline Trapezoid convolution (const IntervalIndicator & left, const IntervalIndicator & right) {
@@ -262,7 +261,7 @@ inline Trapezoid convolution (const IntervalIndicator & left, const IntervalIndi
 }
 
 inline auto interval_approximation (const Trapezoid & trapezoid) {
-	return scaled (trapezoid.height, IntervalIndicator::with_half_width (trapezoid.half_base + trapezoid.height));
+	return scaled (trapezoid.height, IntervalIndicator::with_half_width (trapezoid.half_len));
 }
 
 /* Convolution between IntervalIndicator(half_width=l/2) and PositiveTriangle(side=c).

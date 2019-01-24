@@ -118,6 +118,28 @@ TEST_SUITE ("shape") {
 		CHECK (trapezoid (2) == 1);
 		CHECK (trapezoid (3) == 0);
 		CHECK (trapezoid (4) == 0);
+		// Components
+		const auto left_tri = component (trapezoid, Trapezoid::LeftTriangle{});
+		CHECK (left_tri (-3) == 0);
+		CHECK (left_tri (-2) == 1);
+		CHECK (left_tri (-1) == 2);
+		CHECK (left_tri (0) == 0);
+		const auto central_block = component (trapezoid, Trapezoid::CentralBlock{});
+		CHECK (central_block (-2) == 0);
+		CHECK (central_block (-1) == 2);
+		CHECK (central_block (0) == 2);
+		CHECK (central_block (1) == 2);
+		CHECK (central_block (2) == 0);
+		const auto right_tri = component (trapezoid, Trapezoid::RightTriangle{});
+		CHECK (right_tri (0) == 0);
+		CHECK (right_tri (1) == 2);
+		CHECK (right_tri (2) == 1);
+		CHECK (right_tri (3) == 0);
+	}
+	TEST_CASE ("ConvolutionIntervalPositiveTriangle") {
+		const auto interval = IntervalIndicator::with_half_width (1);
+		const auto small_tri = PositiveTriangle (1);
+		const auto big_tri = PositiveTriangle (3);
 	}
 }
 
