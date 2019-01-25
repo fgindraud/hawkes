@@ -65,25 +65,44 @@ static std::vector<RawRegionData> read_regions_from (string_view filename, span<
 }
 
 /******************************************************************************
- * Compute kernel widths as average of interval sizes.
+ * Compute kernel widths as median of interval sizes.
  */
-static PointSpace average_interval_width (const RawProcessData & raw_process) {
-	int64_t sum_of_interval_widths = 0;
-	int64_t nb_elements = 0;
+static PointSpace median_interval_width (const RawProcessData & raw_process) {
+	const auto sum_of_region_sizes = [&]() {
+		size_t sum = 0;
+		for (const auto & region : raw_process.regions) {
+			sum += region.unsorted_intervals.size ();
+		}
+		return sum;
+	}();
+	// Degenerate case
+	if (sum_of_region_sizes == 0) {
+		return PointSpace (0);
+	}
+	// Build a vector containing the unsorted widths of all intervals from all regions
+	std::vector<PointSpace> all_widths;
+	all_widths.reserve (sum_of_region_sizes);
 	for (const auto & region : raw_process.regions) {
-		nb_elements += int64_t (region.unsorted_intervals.size ());
 		for (const auto & interval : region.unsorted_intervals) {
 			assert (interval.right >= interval.left);
-			sum_of_interval_widths += interval.right - interval.left;
+			all_widths.emplace_back (interval.right - interval.left);
 		}
 	}
-	if (nb_elements == 0) {
-		throw std::runtime_error ("Kernel width deduction: process contains no points");
+	assert (all_widths.size () == sum_of_region_sizes);
+	// Compute the median in the naive way. In C++17 std::nth_element would be a better O(n) solution.
+	std::sort (all_widths.begin (), all_widths.end ());
+	assert (sum_of_region_sizes > 0);
+	if (sum_of_region_sizes % 2 == 1) {
+		const auto mid_point_index = sum_of_region_sizes / 2;
+		return all_widths[mid_point_index];
+	} else {
+		const auto above_mid_point_index = sum_of_region_sizes / 2;
+		assert (above_mid_point_index > 0);
+		return (all_widths[above_mid_point_index - 1] + all_widths[above_mid_point_index]) / 2;
 	}
-	return PointSpace (sum_of_interval_widths / nb_elements);
 }
-static std::vector<PointSpace> average_interval_widths (const std::vector<RawProcessData> & raw_processes) {
-	return map_to_vector (raw_processes, average_interval_width);
+static std::vector<PointSpace> median_interval_widths (const std::vector<RawProcessData> & raw_processes) {
+	return map_to_vector (raw_processes, median_interval_width);
 }
 
 /******************************************************************************
@@ -187,7 +206,7 @@ int main (int argc, char * argv[]) {
 					}
 					return std::move (explicit_kernel_widths.value);
 				} else {
-					auto widths = average_interval_widths (raw_processes);
+					auto widths = median_interval_widths (raw_processes);
 					for (auto & w : widths) {
 						w = std::max (w, 1);
 					}
