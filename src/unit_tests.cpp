@@ -315,6 +315,7 @@ TEST_SUITE ("computations") {
 	TEST_CASE ("g_ll2kk2_histogram_integral_denormalized") {
 		const auto interval_0_1 = HistogramBase::Interval{0, 1}; // ]0,1]
 		const auto interval_0_2 = HistogramBase::Interval{0, 2}; // ]0,2]
+		const auto interval_2_4 = HistogramBase::Interval{2, 4}; // ]2,4]
 		const auto empty = SortedVec<Point>::from_sorted ({});
 		const auto point = SortedVec<Point>::from_sorted ({0});
 		const auto points = SortedVec<Point>::from_sorted ({0, 1, 2});
@@ -344,7 +345,19 @@ TEST_SUITE ("computations") {
 		//                         ##            ##     ##
 		// (#___ + _#__ + __#_) * #### = ###_ * #### = ###_
 		CHECK (g_ll2kk2_histogram_integral_denormalized (points, points, interval_0_1, interval_0_2) == 5);
+		// Check that value is invariant by common interval shifting
+		CHECK (g_ll2kk2_histogram_integral_denormalized (points, points, interval_0_2, interval_0_2) ==
+		       g_ll2kk2_histogram_integral_denormalized (points, points, interval_2_4, interval_2_4));
 	}
+	/*	TEST_CASE ("b_values") {
+	    const auto base = HistogramBase{2, 10}; // K=2, delta=10, intervals= ]0,10] ]10,20]
+	    const auto norm_factor = normalization_factor (base);
+	    const SortedVec<Point> points[] = {
+	        SortedVec<Point>::from_sorted ({0}),
+	        SortedVec<Point>::from_sorted ({0}),
+	    };
+	    fmt::print (stdout, "###############################\n{}\n", compute_b (make_span (points), base, None{}).inner);
+	  }*/
 }
 
 /******************************************************************************

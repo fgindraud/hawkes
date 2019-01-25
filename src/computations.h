@@ -688,8 +688,7 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 		auto b_hat_part = b_hat_factor * values.b_hat.m_lk_values ().array ();
 		const Eigen::IOFormat format (3, 0, "\t"); // 3 = precision in digits, this is enough
 		fmt::print (stderr, "##### d = v_hat_part + b_hat_part: value of v_hat_part / b_hat_part #####\n");
-		fmt::print (stderr, "{}\n", (v_hat_part / b_hat_part.max (1e-10)).format (format));
-		fmt::print (stderr, "#########################################################################\n");
+		fmt::print (stderr, "{}\n", (v_hat_part / b_hat_part).format (format));
 	}
 #endif
 
@@ -705,6 +704,15 @@ inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p) {
 	assert (p.sum_of_b.inner.allFinite ());
 	assert (p.sum_of_g.inner.allFinite ());
 	assert (p.d.inner.allFinite ());
+#ifndef NDEBUG
+	fmt::print (stderr, "############################### sum B ###################################\n");
+	fmt::print (stderr, "{}\n", p.sum_of_b.inner);
+	fmt::print (stderr, "############################### sum G ###################################\n");
+	fmt::print (stderr, "{}\n", p.sum_of_g.inner);
+	fmt::print (stderr, "################################# D #####################################\n");
+	fmt::print (stderr, "{}\n", p.d.inner);
+	fmt::print (stderr, "#########################################################################\n");
+#endif
 	const auto nb_processes = p.sum_of_b.nb_processes;
 	const auto base_size = p.sum_of_b.base_size;
 	Matrix_M_MK1 a (nb_processes, base_size);
