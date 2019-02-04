@@ -110,7 +110,7 @@ static std::vector<PointSpace> median_interval_widths (const std::vector<RawProc
  */
 int main (int argc, char * argv[]) {
 	bool verbose = false;
-	double gamma = 3.;
+	double gamma = 1.;
 
 	variant<None, HistogramBase> base = None{};
 
@@ -208,7 +208,7 @@ int main (int argc, char * argv[]) {
 				} else {
 					auto widths = median_interval_widths (raw_processes);
 					for (auto & w : widths) {
-						w = std::max (w, 1);
+						w = std::max (w, 2); // FIXME round to minimum of 2 so that shapes are not degenerated
 					}
 					fmt::print (stderr, "Using deduced kernel widths: {}\n", fmt::join (widths, ", "));
 					return widths;

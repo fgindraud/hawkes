@@ -183,18 +183,6 @@ inline auto sup_of_sum_of_differences_to_points (const SortedVec<Point> & points
 	return sup_of_sum_of_differences_to_points (points, shape.inner);
 }
 
-// Conversion of objects to shapes (shape.h)
-inline auto to_shape (HistogramBase::Interval i) {
-	// TODO Histo::Interval is ]left; right], but shape::Interval is [left; right].
-	// This conversion is only valid if used in a convolution, where the type of interval bound does not matter !
-	const auto delta = i.right - i.left;
-	const auto center = (i.left + i.right) / 2;
-	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
-}
-inline auto to_shape (IntervalKernel kernel) {
-	return shape::scaled (normalization_factor (kernel), shape::IntervalIndicator::with_width (kernel.width));
-}
-
 /******************************************************************************
  * Basic histogram case.
  * Due to the simplicity of the functions involved, the computations can use efficient specialized algorithms.
@@ -420,6 +408,19 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
  * Histogram with interval convolution kernels.
  * TODO doc
  */
+
+// Conversion of objects to shapes (shape.h)
+inline auto to_shape (HistogramBase::Interval i) {
+	// TODO Histo::Interval is ]left; right], but shape::Interval is [left; right].
+	// This conversion is only valid if used in a convolution, where the type of interval bound does not matter !
+	const auto delta = i.right - i.left;
+	const auto center = (i.left + i.right) / 2;
+	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
+}
+inline auto to_shape (IntervalKernel kernel) {
+	return shape::scaled (normalization_factor (kernel), shape::IntervalIndicator::with_width (kernel.width));
+}
+
 inline double b_mlk_histogram (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
                                HistogramBase::Interval base_interval, IntervalKernel m_kernel,
                                IntervalKernel l_kernel) {
@@ -700,6 +701,11 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 	return {std::move (sum_of_b), std::move (sum_of_g), std::move (d)};
 }
 
+#ifndef NDEBUG
+// inverse() is not defined in Eigen/Core, and we need it for debug info
+#include <Eigen/Dense>
+#endif
+
 inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p) {
 	assert (p.sum_of_b.inner.allFinite ());
 	assert (p.sum_of_g.inner.allFinite ());
@@ -711,13 +717,21 @@ inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p) {
 	fmt::print (stderr, "{}\n", p.sum_of_g.inner);
 	fmt::print (stderr, "################################# D #####################################\n");
 	fmt::print (stderr, "{}\n", p.d.inner);
+	fmt::print (stderr, "############################### G^-1*B ##################################\n");
+	fmt::print (stderr, "{}\n", p.sum_of_g.inner.inverse() * p.sum_of_b.inner);
 	fmt::print (stderr, "#########################################################################\n");
 #endif
 	const auto nb_processes = p.sum_of_b.nb_processes;
 	const auto base_size = p.sum_of_b.base_size;
 	Matrix_M_MK1 a (nb_processes, base_size);
 	for (ProcessId m = 0; m < nb_processes; ++m) {
-		a.values_for_m (m) = lassoshooting (p.sum_of_g.inner, p.sum_of_b.values_for_m (m), p.d.values_for_m (m), 1.);
+		// In BRP18.pdf, the expression to optimize is written as min_a (-2 a B + t(a) G a + D |a|).
+		// The traditional Lasso problem is written as: min_beta (0.5 |y - X beta|^2_2 + lambda |beta|).
+		// We add variable penalty coefficients D: min_beta (0.5 |y - X beta|^2_2 + lambda D |beta|).
+		// This can be written as: min_a (0.5 a X t(X) a - X t(y) a + lambda D |a|).
+		// Both expressions match if we pose for X t(X) == G, X t(y) == B, lambda = 0.5 and multiply by 2.
+		// FIXME Old code used lambda == 2, discuss why...
+		a.values_for_m (m) = lassoshooting (p.sum_of_g.inner, p.sum_of_b.values_for_m (m), p.d.values_for_m (m), 2);
 	}
 	return a;
 }
