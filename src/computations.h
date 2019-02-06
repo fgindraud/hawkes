@@ -702,8 +702,7 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 }
 
 #ifndef NDEBUG
-// inverse() is not defined in Eigen/Core, and we need it for debug info
-#include <Eigen/Dense>
+#include <Eigen/LU> // We need extra Eigen includes for matrix inversion.
 #endif
 
 inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p) {
@@ -718,7 +717,17 @@ inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p) {
 	fmt::print (stderr, "################################# D #####################################\n");
 	fmt::print (stderr, "{}\n", p.d.inner);
 	fmt::print (stderr, "############################### G^-1*B ##################################\n");
-	fmt::print (stderr, "{}\n", p.sum_of_g.inner.inverse() * p.sum_of_b.inner);
+	const auto inverse_g = p.sum_of_g.inner.fullPivLu ();
+	if (inverse_g.isInvertible ()) {
+		const Eigen::MatrixXd solution = inverse_g.solve (p.sum_of_b.inner);
+		if ((p.sum_of_g.inner * solution).isApprox (p.sum_of_b.inner)) {
+			fmt::print (stderr, "{}\n", solution);
+		} else {
+			fmt::print (stderr, "G * a = B has no solution\n");
+		}
+	} else {
+		fmt::print (stderr, "G is not invertible\n");
+	}
 	fmt::print (stderr, "#########################################################################\n");
 #endif
 	const auto nb_processes = p.sum_of_b.nb_processes;
