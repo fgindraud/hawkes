@@ -327,7 +327,9 @@ private:
 public:
 	SortedVec () = default;
 	static SortedVec from_sorted (std::vector<T> && sorted_data) {
-		if (!std::is_sorted (sorted_data.begin (), sorted_data.end ())) {
+		const auto first_unsorted_or_duplicate_element = std::adjacent_find (
+		    sorted_data.begin (), sorted_data.end (), [](const T & current, const T & next) { return current >= next; });
+		if (first_unsorted_or_duplicate_element != sorted_data.end ()) {
 			throw std::runtime_error ("SortedVec::from_sorted: unsorted data");
 		}
 		return SortedVec (std::move (sorted_data));

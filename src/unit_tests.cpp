@@ -558,7 +558,6 @@ TEST_SUITE ("utils") {
 		auto r7 = split_first_n<3> (',', "a,");
 		CHECK (r7.has_value == false);
 	}
-
 	TEST_CASE ("trim_ws") {
 		CHECK (trim_ws_left ("") == "");
 		CHECK (trim_ws_right ("") == "");
@@ -571,6 +570,14 @@ TEST_SUITE ("utils") {
 		CHECK (trim_ws_left (" a ") == "a ");
 		CHECK (trim_ws_right (" a ") == " a");
 		CHECK (trim_ws (" a ") == "a");
+	}
+	TEST_CASE ("sorted_vec") {
+		CHECK_THROWS (SortedVec<int>::from_sorted ({1, 0}));
+		CHECK_THROWS (SortedVec<int>::from_sorted ({0, 0, 1}));
+		const auto sorted = SortedVec<int>::from_unsorted ({1, 0, 0});
+		CHECK (sorted.size () == 2);
+		CHECK (sorted[0] == 0);
+		CHECK (sorted[1] == 1);
 	}
 }
 
