@@ -104,12 +104,9 @@ inline ProcessesRegionData ProcessesRegionData::from_raw (const std::vector<RawP
 			}
 			// Apply reversing if requested before sorting them in increasing order
 			if (raw_process.direction == RawProcessData::Direction::Backward && !points.empty ()) {
-				// Reverse point values, and add the max to have positive positions starting with 0.
-				// The shift with max is not necessary as algorithms do no require positive positions in general.
-				// TODO remove shifting ?
-				const auto max = *std::max_element (points.begin (), points.end ());
+				// Reverse point values
 				for (auto & point : points) {
-					point = max - point;
+					point = -point;
 				}
 			}
 			data.points_ (r, m) = SortedVec<Point>::from_unsorted (std::move (points));

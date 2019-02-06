@@ -734,13 +734,8 @@ inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p) {
 	const auto base_size = p.sum_of_b.base_size;
 	Matrix_M_MK1 a (nb_processes, base_size);
 	for (ProcessId m = 0; m < nb_processes; ++m) {
-		// In BRP18.pdf, the expression to optimize is written as min_a (-2 a B + t(a) G a + D |a|).
-		// The traditional Lasso problem is written as: min_beta (0.5 |y - X beta|^2_2 + lambda |beta|).
-		// We add variable penalty coefficients D: min_beta (0.5 |y - X beta|^2_2 + lambda D |beta|).
-		// This can be written as: min_a (0.5 a X t(X) a - X t(y) a + lambda D |a|).
-		// Both expressions match if we pose for X t(X) == G, X t(y) == B, lambda = 0.5 and multiply by 2.
-		// FIXME Old code used lambda == 2, discuss why...
-		a.values_for_m (m) = lassoshooting (p.sum_of_g.inner, p.sum_of_b.values_for_m (m), p.d.values_for_m (m), 2);
+		const double lambda = 1.;
+		a.values_for_m (m) = lassoshooting (p.sum_of_g.inner, p.sum_of_b.values_for_m (m), p.d.values_for_m (m), lambda);
 	}
 	return a;
 }
