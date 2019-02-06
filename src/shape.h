@@ -86,6 +86,7 @@ template <typename T, typename Inner> struct Scaled {
  * This is used to force order of simplifications in convolution(a,b) or other modificators.
  * Without it, we have multiple valid overloads and ambiguity, leading to a compile error.
  * The higher the priority, the quickest a rule is applied.
+ * FIXME simplify with set of overloads ?
  */
 template <typename T> struct Priority { static constexpr int value = 0; };
 
@@ -257,7 +258,7 @@ inline auto component (const Trapezoid & trapezoid, Trapezoid::RightTriangle) {
 }
 
 inline Trapezoid convolution (const IntervalIndicator & left, const IntervalIndicator & right) {
-	return {std::min (left.half_width, right.half_width) * 2, std::abs (left.half_width - right.half_width)};
+	return Trapezoid{std::min (left.half_width, right.half_width) * 2, std::abs (left.half_width - right.half_width)};
 }
 
 inline auto interval_approximation (const Trapezoid & trapezoid) {
