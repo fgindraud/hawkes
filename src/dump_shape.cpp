@@ -5,8 +5,10 @@
 template <typename Shape> void dump_shape (const Shape & shape) {
 	fmt::print (stdout, "x\tshape\n");
 	const auto domain = shape.non_zero_domain ();
-	const auto margins = std::max ((domain.right - domain.left) / 10, 10);
-	for (Point x = domain.left - margins; x < domain.right + margins; ++x) {
+	const auto domain_size = domain.right - domain.left;
+	const auto margins = std::max (domain_size / 10., 10.);
+	const auto increment = (domain_size + 2 * margins) / 1000.;
+	for (Point x = domain.left - margins; x < domain.right + margins; x += increment) {
 		fmt::print (stdout, "{}\t{}\n", x, shape (x));
 	}
 }
@@ -16,9 +18,9 @@ template <typename Shape> void dump_shape (const Shape & shape) {
 namespace shape {
 template <typename... Shapes> struct Add {
 	std::tuple<Shapes...> shapes;
-	ClosedInterval<Point> nzd;
+	ClosedInterval nzd;
 
-	ClosedInterval<Point> non_zero_domain () const { return nzd; }
+	ClosedInterval non_zero_domain () const { return nzd; }
 	auto operator() (Point x) const {
 		return std::apply ([x](const Shapes &... shapes) { return (shapes (x) + ...); }, shapes);
 	}
@@ -65,7 +67,7 @@ int main (int argc, const char * argv[]) {
 		    dump_shape (convolution (empty, interval));
 	    },
 	    []() {
-		    const auto small = IntervalIndicator::with_width (2);
+		    const auto small = IntervalIndicator::with_width (0.1);
 		    const auto interval = IntervalIndicator::with_width (100);
 		    dump_shape (convolution (small, interval));
 	    },
@@ -100,7 +102,7 @@ int main (int argc, const char * argv[]) {
 	    },
 	    []() {
 		    const auto base = HistogramBase (5, 10000);
-		    const auto kernel = IntervalKernel (2);
+		    const auto kernel = IntervalKernel (0.1);
 		    const auto kernel2 = IntervalKernel (100);
 		    const auto phi = base.interval (0);
 		    const auto phi2 = base.interval (3);
