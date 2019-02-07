@@ -106,7 +106,7 @@ inline double sum_of_point_differences (const SortedVec<Point> & m_points, const
 		// Thus we only scan from starting_i_m to the last i_m in interval.
 		// N_m[x] is strictly increasing so we only need to check the right bound of the interval.
 		for (size_t i_m = starting_i_m; i_m < m_points.size () && m_points[i_m] <= interval_i_l.right; i_m += 1) {
-			sum += shape (shape::PointInNonZeroDomain{m_points[i_m] - x_l});
+			sum += shape (m_points[i_m] - x_l);
 		}
 	}
 

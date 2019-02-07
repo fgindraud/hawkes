@@ -37,11 +37,6 @@ inline bool contains (const ClosedInterval & i, Point value) {
 	return i.left <= value && value <= i.right;
 }
 
-// Type tag to indicate that a value is supposed to be in the non zero domain.
-struct PointInNonZeroDomain {
-	Point value;
-};
-
 /******************************************************************************
  * Combinators.
  */
@@ -51,10 +46,6 @@ template <typename Inner> struct Reversed {
 	Inner inner;
 
 	ClosedInterval non_zero_domain () const { return -inner.non_zero_domain (); }
-	double operator() (PointInNonZeroDomain x) const {
-		assert (contains (non_zero_domain (), x.value));
-		return inner (PointInNonZeroDomain{-x.value});
-	}
 	double operator() (Point x) const { return inner (-x); }
 };
 
@@ -64,10 +55,6 @@ template <typename Inner> struct Shifted {
 	Inner inner;
 
 	ClosedInterval non_zero_domain () const { return shift + inner.non_zero_domain (); }
-	double operator() (PointInNonZeroDomain x) const {
-		assert (contains (non_zero_domain (), x.value));
-		return inner (PointInNonZeroDomain{x.value - shift});
-	}
 	double operator() (Point x) const { return inner (x - shift); }
 };
 
@@ -77,7 +64,6 @@ template <typename Inner> struct Scaled {
 	Inner inner;
 
 	ClosedInterval non_zero_domain () const { return inner.non_zero_domain (); }
-	double operator() (PointInNonZeroDomain x) const { return scale * inner (x); }
 	double operator() (Point x) const { return scale * inner (x); }
 };
 
@@ -162,13 +148,12 @@ struct IntervalIndicator {
 	static IntervalIndicator with_width (PointSpace width) { return {width / 2.}; }
 
 	ClosedInterval non_zero_domain () const { return {-half_width, half_width}; }
-	double operator() (PointInNonZeroDomain x) const {
-		assert (contains (non_zero_domain (), x.value));
-		static_cast<void> (x); // Ignored, only used in assert
-		return 1.;
-	}
 	double operator() (Point x) const {
-		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
+		if (contains (non_zero_domain (), x)) {
+			return 1.;
+		} else {
+			return 0.;
+		}
 	}
 };
 
@@ -180,12 +165,12 @@ struct PositiveTriangle {
 	PositiveTriangle (PointSpace side) : side (side) { assert (side >= 0.); }
 
 	ClosedInterval non_zero_domain () const { return {0., side}; }
-	double operator() (PointInNonZeroDomain x) const {
-		assert (contains (non_zero_domain (), x.value));
-		return x.value;
-	}
 	double operator() (Point x) const {
-		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
+		if (contains (non_zero_domain (), x)) {
+			return x;
+		} else {
+			return 0.;
+		}
 	}
 };
 
@@ -197,12 +182,12 @@ struct NegativeTriangle {
 	NegativeTriangle (PointSpace side) : side (side) { assert (side >= 0.); }
 
 	ClosedInterval non_zero_domain () const { return {-side, 0.}; }
-	double operator() (PointInNonZeroDomain x) const {
-		assert (contains (non_zero_domain (), x.value));
-		return -x.value;
-	}
 	double operator() (Point x) const {
-		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
+		if (contains (non_zero_domain (), x)) {
+			return -x;
+		} else {
+			return 0.;
+		}
 	}
 };
 inline auto as_positive_triangle (NegativeTriangle t) {
@@ -224,18 +209,16 @@ struct Trapezoid {
 	}
 
 	ClosedInterval non_zero_domain () const { return {-half_len, half_len}; }
-	double operator() (PointInNonZeroDomain x) const {
-		assert (contains (non_zero_domain (), x.value));
-		if (x.value < -half_base) {
-			return x.value + half_len; // Left triangle
-		} else if (x.value > half_base) {
-			return half_len - x.value; // Right triangle
+	double operator() (Point x) const {
+		if (!contains (non_zero_domain (), x)) {
+			return 0.;
+		} else if (x < -half_base) {
+			return x + half_len; // Left triangle
+		} else if (x > half_base) {
+			return half_len - x; // Right triangle
 		} else {
 			return height; // Central block
 		}
-	}
-	double operator() (Point x) const {
-		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
 	}
 
 	// Component type tags.
@@ -279,25 +262,23 @@ struct ConvolutionIntervalPositiveTriangle {
 	}
 
 	ClosedInterval non_zero_domain () const { return {-half_l, c + half_l}; }
-	double operator() (PointInNonZeroDomain x) const {
-		assert (contains (non_zero_domain (), x.value));
-		if (x.value < central_section_left) {
+	double operator() (Point x) const {
+		if (!contains (non_zero_domain (), x)) {
+			return 0.;
+		} else if (x < central_section_left) {
 			// Quadratic left part
-			return square (x.value + half_l) / 2.;
-		} else if (x.value > central_section_right) {
+			return square (x + half_l) / 2.;
+		} else if (x > central_section_right) {
 			// Quadratic right part
-			return (square (c) - square (x.value - half_l)) / 2.;
+			return (square (c) - square (x - half_l)) / 2.;
 		} else {
 			// Central section has two behaviors depending on l <=> c
 			if (2. * half_l >= c) {
 				return square (c) / 2.; // l >= c : constant central part
 			} else {
-				return 2. * half_l * x.value; // l < c : linear central part
+				return 2. * half_l * x; // l < c : linear central part
 			}
 		}
-	}
-	double operator() (Point x) const {
-		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
 	}
 };
 
@@ -334,22 +315,20 @@ struct ConvolutionPositiveTrianglePositiveTriangle {
 	}
 
 	ClosedInterval non_zero_domain () const { return {0., a_plus_b}; }
-	double operator() (PointInNonZeroDomain x) const {
-		assert (contains (non_zero_domain (), x.value));
-		if (x.value < A) {
+	double operator() (Point x) const {
+		if (!contains (non_zero_domain (), x)) {
+			return 0.;
+		} else if (x < A) {
 			// Cubic left part
-			return cube (x.value) / 6.;
-		} else if (x.value > B) {
+			return cube (x) / 6.;
+		} else if (x > B) {
 			// Cubic right part
-			const auto polynom = x.value * (x.value + a_plus_b) + polynom_constant;
-			return (a_plus_b - x.value) * polynom / 6.;
+			const auto polynom = x * (x + a_plus_b) + polynom_constant;
+			return (a_plus_b - x) * polynom / 6.;
 		} else {
 			// Central section has one formula using A=min(a,b)
-			return square (A) * (3. * x.value - 2. * A) / 6.;
+			return square (A) * (3. * x - 2. * A) / 6.;
 		}
-	}
-	double operator() (Point x) const {
-		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
 	}
 };
 
@@ -377,27 +356,25 @@ struct ConvolutionNegativeTrianglePositiveTriangle {
 	}
 
 	ClosedInterval non_zero_domain () const { return {-a, b}; }
-	double operator() (PointInNonZeroDomain x) const {
-		assert (contains (non_zero_domain (), x.value));
-		if (x.value < A) {
+	double operator() (Point x) const {
+		if (!contains (non_zero_domain (), x)) {
+			return 0.;
+		} else if (x < A) {
 			// Cubic left part
-			return square (x.value + a) * (2. * a - x.value) / 6.;
-		} else if (x.value > B) {
+			return square (x + a) * (2. * a - x) / 6.;
+		} else if (x > B) {
 			// Cubic right part
-			return square (b - x.value) * (2. * b + x.value) / 6.;
+			return square (b - x) * (2. * b + x) / 6.;
 		} else {
 			// Central section has two behaviors depending on a <=> b
 			if (a < b) {
 				// Linear central part for [0, b-a].
-				return square (a) * (2. * a + 3. * x.value) / 6.;
+				return square (a) * (2. * a + 3. * x) / 6.;
 			} else {
 				// Linear central part for [b-a, 0].
-				return square (b) * (2. * b - 3. * x.value) / 6.;
+				return square (b) * (2. * b - 3. * x) / 6.;
 			}
 		}
-	}
-	double operator() (Point x) const {
-		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
 	}
 };
 
