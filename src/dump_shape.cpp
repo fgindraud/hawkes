@@ -98,6 +98,15 @@ int main (int argc, const char * argv[]) {
 		    dump_shape (convolution (convolution (to_shape (kernel), to_shape (phi)),
 		                             convolution (to_shape (kernel2), to_shape (phi2))));
 	    },
+	    []() {
+		    const auto base = HistogramBase (5, 10000);
+		    const auto kernel = IntervalKernel (2);
+		    const auto kernel2 = IntervalKernel (100);
+		    const auto phi = base.interval (0);
+		    const auto phi2 = base.interval (3);
+		    dump_shape (convolution (convolution (to_shape (kernel), to_shape (phi)),
+		                             convolution (to_shape (kernel2), to_shape (phi2))));
+	    },
 	};
 	const auto nb_cases = std::distance (std::begin (cases), std::end (cases));
 
