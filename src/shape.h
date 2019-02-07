@@ -9,32 +9,31 @@ namespace shape {
 
 using ::Point;
 using ::PointSpace;
-using std::int32_t;
-using std::int64_t;
-static_assert (std::is_same<Point, int32_t>::value, "Point must be an int32_t to avoid any overflow");
-static_assert (std::is_same<PointSpace, int32_t>::value, "PointSpace must be int32_t for int size coherence");
 
-inline int64_t square (int32_t x) {
-	return int64_t (x) * int64_t (x); // Cannot overflow
+inline double square (double x) {
+	return x * x;
+}
+inline double cube (double x) {
+	return x * square (x);
 }
 
 // [left, right]
-template <typename T> struct ClosedInterval {
-	T left;
-	T right;
+struct ClosedInterval {
+	Point left;
+	Point right;
 	ClosedInterval () = default;
-	ClosedInterval (T left, T right) : left (left), right (right) { assert (left <= right); }
+	ClosedInterval (Point left, Point right) : left (left), right (right) { assert (left <= right); }
 };
-template <typename T> inline ClosedInterval<T> operator+ (const T & offset, const ClosedInterval<T> & i) {
+inline ClosedInterval operator+ (PointSpace offset, const ClosedInterval i) {
 	return {offset + i.left, offset + i.right};
 }
-template <typename T> inline ClosedInterval<T> operator- (const ClosedInterval<T> & i) {
+inline ClosedInterval operator- (const ClosedInterval & i) {
 	return {-i.right, -i.left};
 }
-template <typename T> inline bool operator== (const ClosedInterval<T> & lhs, const ClosedInterval<T> & rhs) {
+inline bool operator== (const ClosedInterval & lhs, const ClosedInterval & rhs) {
 	return lhs.left == rhs.left && lhs.right == rhs.right;
 }
-template <typename T> inline bool contains (const ClosedInterval<T> & i, const T & value) {
+inline bool contains (const ClosedInterval & i, Point value) {
 	return i.left <= value && value <= i.right;
 }
 
@@ -51,12 +50,12 @@ struct PointInNonZeroDomain {
 template <typename Inner> struct Reversed {
 	Inner inner;
 
-	ClosedInterval<Point> non_zero_domain () const { return -inner.non_zero_domain (); }
-	auto operator() (PointInNonZeroDomain x) const {
+	ClosedInterval non_zero_domain () const { return -inner.non_zero_domain (); }
+	double operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		return inner (PointInNonZeroDomain{-x.value});
 	}
-	auto operator() (Point x) const { return inner (-x); }
+	double operator() (Point x) const { return inner (-x); }
 };
 
 // Temporal shift of a shape: move it forward by 'shift'.
@@ -64,22 +63,22 @@ template <typename Inner> struct Shifted {
 	PointSpace shift;
 	Inner inner;
 
-	ClosedInterval<Point> non_zero_domain () const { return shift + inner.non_zero_domain (); }
-	auto operator() (PointInNonZeroDomain x) const {
+	ClosedInterval non_zero_domain () const { return shift + inner.non_zero_domain (); }
+	double operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		return inner (PointInNonZeroDomain{x.value - shift});
 	}
-	auto operator() (Point x) const { return inner (x - shift); }
+	double operator() (Point x) const { return inner (x - shift); }
 };
 
 // Scale a shape on the vertical axis by 'scale'.
-template <typename T, typename Inner> struct Scaled {
-	T scale;
+template <typename Inner> struct Scaled {
+	double scale;
 	Inner inner;
 
-	ClosedInterval<Point> non_zero_domain () const { return inner.non_zero_domain (); }
-	auto operator() (PointInNonZeroDomain x) const { return scale * inner (x); }
-	auto operator() (Point x) const { return scale * inner (x); }
+	ClosedInterval non_zero_domain () const { return inner.non_zero_domain (); }
+	double operator() (PointInNonZeroDomain x) const { return scale * inner (x); }
+	double operator() (Point x) const { return scale * inner (x); }
 };
 
 /* Priority value for combinator application.
@@ -92,7 +91,7 @@ template <typename T> struct Priority { static constexpr int value = 0; };
 
 template <typename Inner> struct Priority<Reversed<Inner>> { static constexpr int value = 1; };
 template <typename Inner> struct Priority<Shifted<Inner>> { static constexpr int value = 2; };
-template <typename T, typename Inner> struct Priority<Scaled<T, Inner>> { static constexpr int value = 3; };
+template <typename Inner> struct Priority<Scaled<Inner>> { static constexpr int value = 3; };
 
 template <typename Inner> inline auto reversed (const Inner & inner) {
 	return Reversed<Inner>{inner};
@@ -105,16 +104,15 @@ template <typename Inner> inline auto shifted (PointSpace shift, const Shifted<I
 	return shifted (shift + s.shift, s.inner);
 }
 
-template <typename T, typename Inner> inline auto scaled (T scale, const Inner & inner) {
-	return Scaled<T, Inner>{scale, inner};
+template <typename Inner> inline auto scaled (double scale, const Inner & inner) {
+	return Scaled<Inner>{scale, inner};
 }
-template <typename T, typename U, typename Inner> inline auto scaled (T scale, const Scaled<U, Inner> & s) {
+template <typename Inner> inline auto scaled (double scale, const Scaled<Inner> & s) {
 	return scaled (scale * s.scale, s.inner);
 }
 
 // Component decomposition
-template <typename T, typename Inner, typename ComponentTag>
-inline auto component (const Scaled<T, Inner> & shape, ComponentTag tag) {
+template <typename Inner, typename ComponentTag> inline auto component (const Scaled<Inner> & shape, ComponentTag tag) {
 	return scaled (shape.scale, component (shape.inner, tag));
 }
 template <typename Inner, typename ComponentTag>
@@ -123,7 +121,7 @@ inline auto component (const Shifted<Inner> & shape, ComponentTag tag) {
 }
 
 // Interval approximation
-template <typename T, typename Inner> inline auto interval_approximation (const Scaled<T, Inner> & shape) {
+template <typename Inner> inline auto interval_approximation (const Scaled<Inner> & shape) {
 	return scaled (shape.scale, interval_approximation (shape.inner));
 }
 template <typename Inner> inline auto interval_approximation (const Shifted<Inner> & shape) {
@@ -140,12 +138,12 @@ inline auto convolution (const L & lhs, const Shifted<R> & rhs) {
 	return shifted (rhs.shift, convolution (lhs, rhs.inner));
 }
 
-template <typename T, typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 3)>>
-inline auto convolution (const Scaled<T, L> & lhs, const R & rhs) {
+template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 3)>>
+inline auto convolution (const Scaled<L> & lhs, const R & rhs) {
 	return scaled (lhs.scale, convolution (lhs.inner, rhs));
 }
-template <typename L, typename T, typename R, typename = std::enable_if_t<(Priority<L>::value <= 3)>>
-inline auto convolution (const L & lhs, const Scaled<T, R> & rhs) {
+template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= 3)>>
+inline auto convolution (const L & lhs, const Scaled<R> & rhs) {
 	return scaled (rhs.scale, convolution (lhs, rhs.inner));
 }
 
@@ -159,18 +157,18 @@ inline auto convolution (const L & lhs, const Scaled<T, R> & rhs) {
 struct IntervalIndicator {
 	PointSpace half_width; // [0, inf[
 
-	IntervalIndicator (PointSpace half_width) : half_width (half_width) { assert (half_width >= 0); }
+	IntervalIndicator (PointSpace half_width) : half_width (half_width) { assert (half_width >= 0.); }
 	static IntervalIndicator with_half_width (PointSpace half_width) { return {half_width}; }
-	static IntervalIndicator with_width (PointSpace width) { return {width / 2}; }
+	static IntervalIndicator with_width (PointSpace width) { return {width / 2.}; }
 
-	ClosedInterval<Point> non_zero_domain () const { return {-half_width, half_width}; }
-	int32_t operator() (PointInNonZeroDomain x) const {
+	ClosedInterval non_zero_domain () const { return {-half_width, half_width}; }
+	double operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		static_cast<void> (x); // Ignored, only used in assert
-		return 1;
+		return 1.;
 	}
-	int32_t operator() (Point x) const {
-		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0;
+	double operator() (Point x) const {
+		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
 	}
 };
 
@@ -179,15 +177,15 @@ struct IntervalIndicator {
 struct PositiveTriangle {
 	PointSpace side; // [0, inf[
 
-	PositiveTriangle (PointSpace side) : side (side) { assert (side >= 0); }
+	PositiveTriangle (PointSpace side) : side (side) { assert (side >= 0.); }
 
-	ClosedInterval<Point> non_zero_domain () const { return {0, side}; }
-	int32_t operator() (PointInNonZeroDomain x) const {
+	ClosedInterval non_zero_domain () const { return {0., side}; }
+	double operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		return x.value;
 	}
-	int32_t operator() (Point x) const {
-		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0;
+	double operator() (Point x) const {
+		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
 	}
 };
 
@@ -196,15 +194,15 @@ struct PositiveTriangle {
 struct NegativeTriangle {
 	PointSpace side; // [0, inf[
 
-	NegativeTriangle (PointSpace side) : side (side) { assert (side >= 0); }
+	NegativeTriangle (PointSpace side) : side (side) { assert (side >= 0.); }
 
-	ClosedInterval<Point> non_zero_domain () const { return {-side, 0}; }
-	int32_t operator() (PointInNonZeroDomain x) const {
+	ClosedInterval non_zero_domain () const { return {-side, 0.}; }
+	double operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		return -x.value;
 	}
-	int32_t operator() (Point x) const {
-		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0;
+	double operator() (Point x) const {
+		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
 	}
 };
 inline auto as_positive_triangle (NegativeTriangle t) {
@@ -220,13 +218,13 @@ struct Trapezoid {
 	PointSpace half_len;  // Precomputed
 
 	Trapezoid (PointSpace height, PointSpace half_base) : height (height), half_base (half_base) {
-		assert (height >= 0);
-		assert (half_base >= 0);
+		assert (height >= 0.);
+		assert (half_base >= 0.);
 		half_len = half_base + height;
 	}
 
-	ClosedInterval<Point> non_zero_domain () const { return {-half_len, half_len}; }
-	int32_t operator() (PointInNonZeroDomain x) const {
+	ClosedInterval non_zero_domain () const { return {-half_len, half_len}; }
+	double operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		if (x.value < -half_base) {
 			return x.value + half_len; // Left triangle
@@ -236,8 +234,8 @@ struct Trapezoid {
 			return height; // Central block
 		}
 	}
-	int32_t operator() (Point x) const {
-		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0;
+	double operator() (Point x) const {
+		return contains (non_zero_domain (), x) ? operator() (PointInNonZeroDomain{x}) : 0.;
 	}
 
 	// Component type tags.
@@ -268,32 +266,33 @@ inline auto interval_approximation (const Trapezoid & trapezoid) {
 /* Convolution between IntervalIndicator(half_width=l/2) and PositiveTriangle(side=c).
  */
 struct ConvolutionIntervalPositiveTriangle {
-	PointSpace half_l;                          // [0, inf[
-	PointSpace c;                               // [0, inf[
-	ClosedInterval<PointSpace> central_section; // Precomputed values
+	PointSpace half_l; // [0, inf[
+	PointSpace c;      // [0, inf[
+	// Precomputed values
+	PointSpace central_section_left;
+	PointSpace central_section_right;
 
 	ConvolutionIntervalPositiveTriangle (PointSpace half_l, PointSpace c) : half_l (half_l), c (c) {
-		assert (half_l >= 0);
-		assert (c >= 0);
-		const auto p = std::minmax (half_l, c - half_l);
-		central_section = {p.first, p.second};
+		assert (half_l >= 0.);
+		assert (c >= 0.);
+		std::tie (central_section_left, central_section_right) = std::minmax (half_l, c - half_l);
 	}
 
-	ClosedInterval<Point> non_zero_domain () const { return {-half_l, c + half_l}; }
+	ClosedInterval non_zero_domain () const { return {-half_l, c + half_l}; }
 	double operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
-		if (x.value < central_section.left) {
+		if (x.value < central_section_left) {
 			// Quadratic left part
-			return double(square (x.value + half_l)) * 0.5;
-		} else if (x.value > central_section.right) {
+			return square (x.value + half_l) / 2.;
+		} else if (x.value > central_section_right) {
 			// Quadratic right part
-			return double(square (c) - square (x.value - half_l)) / 2.;
+			return (square (c) - square (x.value - half_l)) / 2.;
 		} else {
 			// Central section has two behaviors depending on l <=> c
-			if (2 * half_l >= c) {
-				return double(square (c)) / 2.; // l >= c : constant central part
+			if (2. * half_l >= c) {
+				return square (c) / 2.; // l >= c : constant central part
 			} else {
-				return double(int64_t (x.value) * int64_t (2 * half_l)); // l < c : linear central part
+				return 2. * half_l * x.value; // l < c : linear central part
 			}
 		}
 	}
@@ -323,30 +322,30 @@ struct ConvolutionPositiveTrianglePositiveTriangle {
 	PointSpace a_plus_b;
 	PointSpace A;
 	PointSpace B;
-	int64_t polynom_constant;
+	double polynom_constant;
 
 	ConvolutionPositiveTrianglePositiveTriangle (PointSpace a, PointSpace b) {
-		assert (a >= 0);
-		assert (b >= 0);
+		assert (a >= 0.);
+		assert (b >= 0.);
 		a_plus_b = a + b;
 		std::tie (A, B) = std::minmax (a, b);
 		// Polynom constant used for cubic right part = -2a^2 -2b^2 + 2ab.
-		polynom_constant = 2 * (3 * int64_t (a) * int64_t (b) - square (a_plus_b));
+		polynom_constant = 2. * (3. * a * b - square (a_plus_b));
 	}
 
-	ClosedInterval<Point> non_zero_domain () const { return {0, a_plus_b}; }
+	ClosedInterval non_zero_domain () const { return {0., a_plus_b}; }
 	double operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		if (x.value < A) {
 			// Cubic left part
-			return double(square (x.value)) * double(x.value) / 6.;
+			return cube (x.value) / 6.;
 		} else if (x.value > B) {
 			// Cubic right part
-			const int64_t polynom = int64_t (x.value) * int64_t (x.value + a_plus_b) + polynom_constant;
-			return double(a_plus_b - x.value) * double(polynom) / 6.;
+			const auto polynom = x.value * (x.value + a_plus_b) + polynom_constant;
+			return (a_plus_b - x.value) * polynom / 6.;
 		} else {
 			// Central section has one formula using A=min(a,b)
-			return double(square (A)) * double(3 * x.value - 2 * A) / 6.;
+			return square (A) * (3. * x.value - 2. * A) / 6.;
 		}
 	}
 	double operator() (Point x) const {
@@ -372,28 +371,28 @@ struct ConvolutionNegativeTrianglePositiveTriangle {
 	PointSpace B;
 
 	ConvolutionNegativeTrianglePositiveTriangle (PointSpace a, PointSpace b) : a (a), b (b) {
-		assert (a >= 0);
-		assert (b >= 0);
-		std::tie (A, B) = std::minmax (0, b - a);
+		assert (a >= 0.);
+		assert (b >= 0.);
+		std::tie (A, B) = std::minmax (0., b - a);
 	}
 
-	ClosedInterval<Point> non_zero_domain () const { return {-a, b}; }
+	ClosedInterval non_zero_domain () const { return {-a, b}; }
 	double operator() (PointInNonZeroDomain x) const {
 		assert (contains (non_zero_domain (), x.value));
 		if (x.value < A) {
 			// Cubic left part
-			return double(square (x.value + a)) * double(2 * a - x.value) / 6.;
+			return square (x.value + a) * (2. * a - x.value) / 6.;
 		} else if (x.value > B) {
 			// Cubic right part
-			return double(square (b - x.value)) * double(2 * b + x.value) / 6.;
+			return square (b - x.value) * (2. * b + x.value) / 6.;
 		} else {
 			// Central section has two behaviors depending on a <=> b
 			if (a < b) {
 				// Linear central part for [0, b-a].
-				return double(square (a)) * double(2 * a + 3 * x.value) / 6.;
+				return square (a) * (2. * a + 3. * x.value) / 6.;
 			} else {
 				// Linear central part for [b-a, 0].
-				return double(square (b)) * double(2 * b - 3 * x.value) / 6.;
+				return square (b) * (2. * b - 3. * x.value) / 6.;
 			}
 		}
 	}

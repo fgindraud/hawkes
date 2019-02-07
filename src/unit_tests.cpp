@@ -42,7 +42,7 @@ TEST_SUITE ("shape") {
 	TEST_CASE ("interval") {
 		const auto interval = IntervalIndicator::with_half_width (1); // [-1, 1]
 		const auto nzd = interval.non_zero_domain ();
-		CHECK (nzd == ClosedInterval<Point>{-1, 1});
+		CHECK (nzd == ClosedInterval{-1, 1});
 		CHECK (contains (nzd, 0));
 		CHECK (contains (nzd, 1));
 		CHECK (!contains (nzd, 2));
@@ -66,7 +66,7 @@ TEST_SUITE ("shape") {
 		CHECK (shifted_forward (1) == 1);
 		CHECK (shifted_forward (2) == 1);
 		CHECK (shifted_forward (3) == 0);
-		CHECK (shifted_forward.non_zero_domain () == ClosedInterval<Point>{0, 2});
+		CHECK (shifted_forward.non_zero_domain () == ClosedInterval{0, 2});
 		const auto rev = reversed (shifted_forward); // Use the non symmetric shifted_forward shape
 		CHECK (rev (-3) == 0);
 		CHECK (rev (-2) == 1);
@@ -74,7 +74,7 @@ TEST_SUITE ("shape") {
 		CHECK (rev (0) == 1);
 		CHECK (rev (1) == 0);
 		CHECK (rev (2) == 0);
-		CHECK (rev.non_zero_domain () == ClosedInterval<Point>{-2, 0});
+		CHECK (rev.non_zero_domain () == ClosedInterval{-2, 0});
 	}
 	TEST_CASE ("triangles") {
 		const auto pos_tri = PositiveTriangle (2);
@@ -142,7 +142,7 @@ TEST_SUITE ("shape") {
 			const auto interval = IntervalIndicator::with_width (2);
 			const auto tri = PositiveTriangle (3);
 			const auto conv = convolution (interval, tri);
-			CHECK (conv.non_zero_domain () == ClosedInterval<Point>{-1, 3 + 1});
+			CHECK (conv.non_zero_domain () == ClosedInterval{-1, 3 + 1});
 			CHECK (conv (-2) == 0);
 			CHECK (conv (-1) == 0); // f(-l/2) == 0
 			CHECK (conv (0) > conv (-1));
@@ -160,7 +160,7 @@ TEST_SUITE ("shape") {
 			const auto interval = IntervalIndicator::with_width (2);
 			const auto tri = PositiveTriangle (1);
 			const auto conv = convolution (interval, tri);
-			CHECK (conv.non_zero_domain () == ClosedInterval<Point>{-1, 1 + 1});
+			CHECK (conv.non_zero_domain () == ClosedInterval{-1, 1 + 1});
 			CHECK (conv (-2) == 0);
 			CHECK (conv (-1) == 0); // f(-l/2) == 0
 			CHECK (conv (0) > conv (-1));
@@ -176,7 +176,7 @@ TEST_SUITE ("shape") {
 		const auto a_tri = PositiveTriangle (3);
 		const auto b_tri = PositiveTriangle (4);
 		const auto conv = convolution (a_tri, b_tri);
-		CHECK (conv.non_zero_domain () == ClosedInterval<Point>{0, 3 + 4});
+		CHECK (conv.non_zero_domain () == ClosedInterval{0, 3 + 4});
 		CHECK (conv (-1) == 0);
 		CHECK (conv (0) == 0);
 		CHECK (conv (1) > conv (0));
@@ -196,7 +196,7 @@ TEST_SUITE ("shape") {
 		const auto neg_tri = NegativeTriangle (2);
 		const auto pos_tri = PositiveTriangle (3);
 		const auto conv = convolution (neg_tri, pos_tri);
-		CHECK (conv.non_zero_domain () == ClosedInterval<Point>{-2, 3});
+		CHECK (conv.non_zero_domain () == ClosedInterval{-2, 3});
 		CHECK (conv (-3) == 0);
 		CHECK (conv (-2) == 0);
 		CHECK (conv (-1) > conv (-2));
@@ -257,7 +257,7 @@ TEST_SUITE ("computations") {
 		const auto interval = shape::IntervalIndicator::with_half_width (1);
 		SUBCASE ("no points") {
 			const auto vec = SortedVec<Point>::from_sorted ({});
-			const auto minus_inf = std::numeric_limits<int32_t>::min ();
+			const auto minus_inf = -std::numeric_limits<double>::infinity ();
 			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == minus_inf);
 		}
 		SUBCASE ("non overlapping") {
@@ -281,7 +281,7 @@ TEST_SUITE ("computations") {
 		const auto interval = HistogramBase::Interval{0, 3}; // ]0,3]
 		SUBCASE ("no points") {
 			const auto vec = SortedVec<Point>::from_sorted ({});
-			const auto minus_inf = std::numeric_limits<int32_t>::min ();
+			const auto minus_inf = -std::numeric_limits<double>::infinity ();
 			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == minus_inf);
 		}
 		SUBCASE ("non overlapping") {

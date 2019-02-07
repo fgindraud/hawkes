@@ -98,7 +98,7 @@ static PointSpace median_interval_width (const RawProcessData & raw_process) {
 	} else {
 		const auto above_mid_point_index = sum_of_region_sizes / 2;
 		assert (above_mid_point_index > 0);
-		return (all_widths[above_mid_point_index - 1] + all_widths[above_mid_point_index]) / 2;
+		return (all_widths[above_mid_point_index - 1] + all_widths[above_mid_point_index]) / 2.;
 	}
 }
 static std::vector<PointSpace> median_interval_widths (const std::vector<RawProcessData> & raw_processes) {
@@ -139,7 +139,7 @@ int main (int argc, char * argv[]) {
 	parser.option2 ({"histogram"}, "K", "delta", "Use an histogram base (k > 0, delta > 0)",
 	                [&base](string_view k_value, string_view delta_value) {
 		                const auto base_size = size_t (parse_strict_positive_int (k_value, "histogram K"));
-		                const auto delta = PointSpace (parse_strict_positive_int (delta_value, "histogram delta"));
+		                const auto delta = PointSpace (parse_strict_positive_double (delta_value, "histogram delta"));
 		                base = HistogramBase{base_size, delta};
 	                });
 
@@ -155,7 +155,7 @@ int main (int argc, char * argv[]) {
 	parser.option ({"kernel-widths"}, "w0[:w1:w2:...]", "Use explicit kernel widths (default=deduced)",
 	               [&explicit_kernel_widths](string_view values) {
 		               explicit_kernel_widths = map_to_vector (split (':', values), [](string_view value) {
-			               return PointSpace (parse_strict_positive_int (value, "kernel width"));
+			               return PointSpace (parse_strict_positive_double (value, "kernel width"));
 		               });
 	               });
 
@@ -208,7 +208,7 @@ int main (int argc, char * argv[]) {
 				} else {
 					auto widths = median_interval_widths (raw_processes);
 					for (auto & w : widths) {
-						w = std::max (w, 2); // FIXME round to minimum of 2 so that shapes are not degenerated
+						w = std::max (w, 1.); // FIXME cannot be zero, what should be a minimum ??
 					}
 					fmt::print (stderr, "Using deduced kernel widths: {}\n", fmt::join (widths, ", "));
 					return widths;

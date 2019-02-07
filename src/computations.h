@@ -28,7 +28,7 @@ inline PointSpace tmax (span<const SortedVec<Point>> processes) {
 	if (min <= max) {
 		return max - min;
 	} else {
-		return 0; // If there are no points at all, return 0
+		return 0.; // If there are no points at all, return 0
 	}
 }
 
@@ -39,7 +39,7 @@ struct SlidingCursor {
 	const SortedVec<Point> & points; // Points to slide on
 	const PointSpace shift;          // Shifting from points
 
-	static constexpr PointSpace inf = std::numeric_limits<PointSpace>::max ();
+	static constexpr PointSpace inf = std::numeric_limits<PointSpace>::infinity ();
 
 	// Indexes of next point to be visited, and shifted value (or inf)
 	size_t current_i = 0;
@@ -72,10 +72,9 @@ struct SlidingCursor {
  * Average complexity: O(|N| * density(N) * width(shape)) = O(|N|^2 * width(shape) / Tmax).
  */
 template <typename Shape>
-inline auto sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
-                                      const Shape & shape) {
-	using ReturnType = decltype (shape (Point{}));
-	ReturnType sum{};
+inline double sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
+                                        const Shape & shape) {
+	double sum = 0.;
 
 	// shape(x) != 0 => x in shape.non_zero_domain().
 	// Thus sum_{x_m,x_l} shape(x_m - x_l) = sum_{(x_m, x_l), x_m - x_l in non_zero_domain} shape(x_m - x_l).
@@ -115,9 +114,9 @@ inline auto sum_of_point_differences (const SortedVec<Point> & m_points, const S
 }
 
 // Scaling can be moved out of computation.
-template <typename T, typename Inner>
-inline auto sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
-                                      const shape::Scaled<T, Inner> & shape) {
+template <typename Inner>
+inline double sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
+                                        const shape::Scaled<Inner> & shape) {
 	return shape.scale * sum_of_point_differences (m_points, l_points, shape.inner);
 }
 
@@ -128,13 +127,12 @@ inline auto sum_of_point_differences (const SortedVec<Point> & m_points, const S
  * This function has at maximum 2*|N_l| points of change, so the number of different values is finite.
  * Thus the sup over x is a max over all these possible values.
  */
-inline int32_t sup_of_sum_of_differences_to_points (const SortedVec<Point> & points,
-                                                    shape::IntervalIndicator indicator) {
+inline double sup_of_sum_of_differences_to_points (const SortedVec<Point> & points,
+                                                   shape::IntervalIndicator indicator) {
 	// These structs represent the sets of left and right interval bounds coordinates.
 	SlidingCursor left_interval_bounds (points, -indicator.half_width);
 	SlidingCursor right_interval_bounds (points, indicator.half_width);
-
-	int32_t max = std::numeric_limits<int32_t>::min ();
+	double max = -std::numeric_limits<double>::infinity ();
 	while (true) {
 		// Loop over all interval boundaries: x is a {left, right, both} interval bound.
 		const Point x = std::min (left_interval_bounds.current_x, right_interval_bounds.current_x);
@@ -152,11 +150,11 @@ inline int32_t sup_of_sum_of_differences_to_points (const SortedVec<Point> & poi
 	}
 	return max;
 }
-inline int32_t sup_of_sum_of_differences_to_points (const SortedVec<Point> & points, HistogramBase::Interval interval) {
+inline double sup_of_sum_of_differences_to_points (const SortedVec<Point> & points, HistogramBase::Interval interval) {
 	// Same algorithm, but left bound is advanced after computing the sum due to the open left bound.
 	SlidingCursor left_interval_bounds (points, interval.left);
 	SlidingCursor right_interval_bounds (points, interval.right);
-	int32_t max = std::numeric_limits<int32_t>::min ();
+	double max = -std::numeric_limits<double>::infinity ();
 	while (true) {
 		const Point x = std::min (left_interval_bounds.current_x, right_interval_bounds.current_x);
 		if (x == SlidingCursor::inf) {
@@ -172,14 +170,15 @@ inline int32_t sup_of_sum_of_differences_to_points (const SortedVec<Point> & poi
 }
 
 // Scaling can be moved out
-template <typename T, typename Inner>
-inline auto sup_of_sum_of_differences_to_points (const SortedVec<Point> & points,
-                                                 const shape::Scaled<T, Inner> & shape) {
+template <typename Inner>
+inline double sup_of_sum_of_differences_to_points (const SortedVec<Point> & points,
+                                                   const shape::Scaled<Inner> & shape) {
 	return shape.scale * sup_of_sum_of_differences_to_points (points, shape.inner);
 }
 // Shifting has no effect on the sup value.
 template <typename Inner>
-inline auto sup_of_sum_of_differences_to_points (const SortedVec<Point> & points, const shape::Shifted<Inner> & shape) {
+inline double sup_of_sum_of_differences_to_points (const SortedVec<Point> & points,
+                                                   const shape::Shifted<Inner> & shape) {
 	return sup_of_sum_of_differences_to_points (points, shape.inner);
 }
 
@@ -238,10 +237,10 @@ inline std::vector<int64_t> b_ml_histogram_counts_for_all_k_denormalized (const 
  * The strategy is to compute the integral by splitting the point space in the constant parts of N_l(..) * N_l2(..).
  * Thus we loop over all points of changes of this product.
  */
-inline int64_t g_ll2kk2_histogram_integral_denormalized (const SortedVec<Point> & l_points,
-                                                         const SortedVec<Point> & l2_points,
-                                                         HistogramBase::Interval interval,
-                                                         HistogramBase::Interval interval2) {
+inline double g_ll2kk2_histogram_integral_denormalized (const SortedVec<Point> & l_points,
+                                                        const SortedVec<Point> & l2_points,
+                                                        HistogramBase::Interval interval,
+                                                        HistogramBase::Interval interval2) {
 	struct SlidingInterval {
 		// Iterators over coordinates where points enter of exit the sliding interval
 		SlidingCursor entering;
@@ -268,8 +267,8 @@ inline int64_t g_ll2kk2_histogram_integral_denormalized (const SortedVec<Point> 
 	SlidingInterval si1 (l_points, interval);
 	SlidingInterval si2 (l2_points, interval2);
 
-	int64_t accumulated_area = 0;
-	Point previous_x = std::numeric_limits<Point>::min (); // Start at -inf
+	double accumulated_area = 0;
+	Point previous_x = -std::numeric_limits<Point>::max (); // Start at -inf
 	while (true) {
 		// Process the next interesting coordinate
 		const Point x = std::min (si1.min_interesting_x (), si2.min_interesting_x ());
@@ -280,7 +279,7 @@ inline int64_t g_ll2kk2_histogram_integral_denormalized (const SortedVec<Point> 
 			break;
 		}
 		// Integrate the constant between current and previous x.
-		accumulated_area += int64_t (si1.current_points_inside () * si2.current_points_inside ()) * (x - previous_x);
+		accumulated_area += double(si1.current_points_inside () * si2.current_points_inside ()) * (x - previous_x);
 		// Point x has been processed, move to next one
 		previous_x = x;
 		si1.point_processed (x);
@@ -314,8 +313,8 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase base, None /*kernels*/) {
 	const auto nb_processes = processes.size ();
 	const auto base_size = base.base_size;
-	const auto sqrt_delta = std::sqrt (double(base.delta));
-	const auto inv_delta = 1 / double(base.delta);
+	const auto sqrt_delta = std::sqrt (base.delta);
+	const auto inv_delta = 1. / base.delta;
 	MatrixG g (nb_processes, base_size);
 
 	g.set_tmax (tmax (processes));
@@ -330,7 +329,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 	auto G_value = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
 		const auto integral =
 		    g_ll2kk2_histogram_integral_denormalized (processes[l], processes[l2], base.interval (k), base.interval (k2));
-		return double(integral) * inv_delta;
+		return integral * inv_delta;
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
 	 *
@@ -389,11 +388,11 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 	const auto phi_0_interval = base.interval (FunctionBaseId{0}); // Representative for all k.
 
 	for (ProcessId l = 0; l < nb_processes; ++l) {
-		int64_t sum_of_region_sups = 0;
+		double sum_of_region_sups = 0.;
 		for (RegionId r = 0; r < nb_regions; ++r) {
 			sum_of_region_sups += sup_of_sum_of_differences_to_points (processes.process_data (l, r), phi_0_interval);
 		}
-		const auto b_hat_l = double(sum_of_region_sups) * phi_normalization_factor;
+		const auto b_hat_l = sum_of_region_sups * phi_normalization_factor;
 
 		for (ProcessId m = 0; m < nb_processes; ++m) {
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
@@ -414,7 +413,7 @@ inline auto to_shape (HistogramBase::Interval i) {
 	// TODO Histo::Interval is ]left; right], but shape::Interval is [left; right].
 	// This conversion is only valid if used in a convolution, where the type of interval bound does not matter !
 	const auto delta = i.right - i.left;
-	const auto center = (i.left + i.right) / 2;
+	const auto center = (i.left + i.right) / 2.;
 	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
 }
 inline auto to_shape (IntervalKernel kernel) {
@@ -449,7 +448,7 @@ inline double g_ll2kk2_histogram_integral (const SortedVec<Point> & l_points, co
 	// V = factorized_scaling * sum_{x_l,x_l2} shifted((k2-k)*delta, conv(trapezoid(l), trapezoid(l2))) (x_l-x_l2)
 
 	// prepare common scaling and shift
-	const auto factorized_scaling = 1. / (double(delta) * std::sqrt (kernel.width * kernel2.width));
+	const auto factorized_scaling = 1. / (delta * std::sqrt (kernel.width * kernel2.width));
 	const auto factorized_shift = delta * (PointSpace (k2) - PointSpace (k));
 	// compute the two sub-convolutions shapes, shift one of them
 	const auto phi_indicator = shape::IntervalIndicator::with_width (delta);
@@ -583,6 +582,7 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 				const auto w_l = to_shape (kernels[l]);
 				const auto phi_k = to_shape (base.interval (k));
 				// Approximate trapezoids with an interval of height=max, width=width of trapezoid
+				// TODO order important ?
 				const auto intermediate = interval_approximation (convolution (w_m, w_l));
 				const auto approx = interval_approximation (convolution (intermediate, phi_k));
 

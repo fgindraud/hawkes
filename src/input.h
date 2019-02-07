@@ -126,8 +126,8 @@ inline std::vector<RawRegionData> read_all_from_bed_file (std::FILE * file) {
 					throw std::runtime_error ("Line must contain at least 3 fields: (region, start, end)");
 				}
 				const string_view region_name = fields.value[0];
-				const Point interval_start_position = parse_int (fields.value[1], "interval_position_start");
-				const Point interval_end_position = parse_int (fields.value[2], "interval_position_end");
+				const Point interval_start_position = parse_double (fields.value[1], "interval_position_start");
+				const Point interval_end_position = parse_double (fields.value[2], "interval_position_end");
 				if (!(interval_start_position <= interval_end_position)) {
 					throw std::runtime_error ("interval bounds are invalid");
 				}

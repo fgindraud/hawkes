@@ -3,7 +3,6 @@
 #include <Eigen/Core>
 #include <algorithm>
 #include <cassert>
-#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <vector>
@@ -30,16 +29,14 @@ using RegionId = size_t;       // [0; nb_regions[
  * Process data.
  */
 
-// Points are stored as signed integer values to avoid corner cases around the 0 coordinate.
-using std::int32_t;
-using std::int64_t;
-
-// Single coordinate for a process represented by points. int32 are sufficient (covers +/- 2G).
-using Point = int32_t;
-
-// PointSpace is used when any integer is converted to the "point space" before computing with point coordinates.
-// This is used to convey the intent more clearly in the code, and ensure safe conversion to signed values for indexes.
-using PointSpace = int32_t;
+/* The space where points and point-related dimensional values live is the set of real numbers.
+ * Points values are usually integers, but we need to be able to represent smaller than 1 distances.
+ * Thus floating point numbers are used.
+ * Point: a single point.
+ * PointSpace: a distance, offset, intermediate value computed from Point positions.
+ */
+using Point = double;
+using PointSpace = double;
 
 // Interval for a point with uncertainty
 struct PointInterval {
@@ -99,7 +96,7 @@ inline ProcessesRegionData ProcessesRegionData::from_raw (const std::vector<RawP
 			std::vector<Point> points;
 			points.reserve (raw_process.regions[r].unsorted_intervals.size ());
 			for (const auto & interval : raw_process.regions[r].unsorted_intervals) {
-				const auto point = (interval.left + interval.right) / 2;
+				const auto point = (interval.left + interval.right) / 2.;
 				points.emplace_back (point);
 			}
 			// Apply reversing if requested before sorting them in increasing order
@@ -120,11 +117,11 @@ inline ProcessesRegionData ProcessesRegionData::from_raw (const std::vector<RawP
  */
 struct HistogramBase {
 	size_t base_size; // [1, inf[
-	PointSpace delta; // [1, inf[
+	PointSpace delta; // ]0, inf[
 
 	HistogramBase (size_t base_size, PointSpace delta) : base_size (base_size), delta (delta) {
 		assert (base_size > 0);
-		assert (delta > 0);
+		assert (delta > 0.);
 	}
 
 	// ]left; right]
@@ -135,7 +132,7 @@ struct HistogramBase {
 
 	Interval interval (FunctionBaseId k) const {
 		assert (k < base_size);
-		return {PointSpace (k) * delta, (PointSpace (k) + 1) * delta};
+		return {PointSpace (k) * delta, PointSpace (k + 1) * delta};
 	}
 };
 inline double normalization_factor (HistogramBase base) {
@@ -148,9 +145,9 @@ inline double normalization_factor (HistogramBase base) {
 
 // 1_[-width/2, width/2]
 struct IntervalKernel {
-	PointSpace width; // [1, inf[ due to the normalization factor
+	PointSpace width; // ]0, inf[ due to the normalization factor
 
-	IntervalKernel (PointSpace width) : width (width) { assert (width > 0); }
+	IntervalKernel (PointSpace width) : width (width) { assert (width > 0.); }
 };
 inline double normalization_factor (IntervalKernel kernel) {
 	return 1. / std::sqrt (kernel.width);
@@ -222,7 +219,6 @@ struct Matrix_M_MK1 {
  * Handles conversions of indexes to Eigen indexes (int).
  */
 struct MatrixG {
-
 	size_t nb_processes; // M
 	size_t base_size;    // K
 	Eigen::MatrixXd inner;
