@@ -259,6 +259,10 @@ struct ConvolutionIntervalPositiveTriangle {
 		assert (half_l >= 0.);
 		assert (c >= 0.);
 		std::tie (central_section_left, central_section_right) = std::minmax (half_l, c - half_l);
+		// Check bounds
+		assert (-half_l <= central_section_left);
+		assert (central_section_left <= central_section_right);
+		assert (central_section_right <= c + half_l);
 	}
 
 	ClosedInterval non_zero_domain () const { return {-half_l, c + half_l}; }
@@ -266,11 +270,9 @@ struct ConvolutionIntervalPositiveTriangle {
 		if (!contains (non_zero_domain (), x)) {
 			return 0.;
 		} else if (x < central_section_left) {
-			// Quadratic left part
-			return square (x + half_l) / 2.;
+			return square (x + half_l) / 2.; // Quadratic left part
 		} else if (x > central_section_right) {
-			// Quadratic right part
-			return (square (c) - square (x - half_l)) / 2.;
+			return (square (c) - square (x - half_l)) / 2.; // Quadratic right part
 		} else {
 			// Central section has two behaviors depending on l <=> c
 			if (2. * half_l >= c) {
@@ -312,6 +314,10 @@ struct ConvolutionPositiveTrianglePositiveTriangle {
 		std::tie (A, B) = std::minmax (a, b);
 		// Polynom constant used for cubic right part = -2a^2 -2b^2 + 2ab.
 		polynom_constant = 2. * (3. * a * b - square (a_plus_b));
+		// Check bounds
+		assert (0. <= A);
+		assert (A <= B);
+		assert (B <= a_plus_b);
 	}
 
 	ClosedInterval non_zero_domain () const { return {0., a_plus_b}; }
@@ -319,15 +325,13 @@ struct ConvolutionPositiveTrianglePositiveTriangle {
 		if (!contains (non_zero_domain (), x)) {
 			return 0.;
 		} else if (x < A) {
-			// Cubic left part
-			return cube (x) / 6.;
+			return cube (x) / 6.; // Cubic left part
 		} else if (x > B) {
 			// Cubic right part
 			const auto polynom = x * (x + a_plus_b) + polynom_constant;
 			return (a_plus_b - x) * polynom / 6.;
 		} else {
-			// Central section has one formula using A=min(a,b)
-			return square (A) * (3. * x - 2. * A) / 6.;
+			return square (A) * (3. * x - 2. * A) / 6.; // Central section has one formula using A=min(a,b)
 		}
 	}
 };
@@ -353,6 +357,10 @@ struct ConvolutionNegativeTrianglePositiveTriangle {
 		assert (a >= 0.);
 		assert (b >= 0.);
 		std::tie (A, B) = std::minmax (0., b - a);
+		// Check bounds
+		assert (-a <= A);
+		assert (A <= B);
+		assert (B <= b);
 	}
 
 	ClosedInterval non_zero_domain () const { return {-a, b}; }
@@ -360,19 +368,15 @@ struct ConvolutionNegativeTrianglePositiveTriangle {
 		if (!contains (non_zero_domain (), x)) {
 			return 0.;
 		} else if (x < A) {
-			// Cubic left part
-			return square (x + a) * (2. * a - x) / 6.;
+			return square (x + a) * (2. * a - x) / 6.; // Cubic left part
 		} else if (x > B) {
-			// Cubic right part
-			return square (b - x) * (2. * b + x) / 6.;
+			return square (b - x) * (2. * b + x) / 6.; // Cubic right part
 		} else {
 			// Central section has two behaviors depending on a <=> b
 			if (a < b) {
-				// Linear central part for [0, b-a].
-				return square (a) * (2. * a + 3. * x) / 6.;
+				return square (a) * (2. * a + 3. * x) / 6.; // Linear central part for [0, b-a].
 			} else {
-				// Linear central part for [b-a, 0].
-				return square (b) * (2. * b - 3. * x) / 6.;
+				return square (b) * (2. * b - 3. * x) / 6.; // Linear central part for [b-a, 0].
 			}
 		}
 	}
