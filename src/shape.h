@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cmath>
-#include <type_traits>
+#include <tuple>       // Add
+#include <type_traits> // enable_if
+#include <utility>
 
 #include "types.h"
 
@@ -37,6 +39,15 @@ inline bool contains (const ClosedInterval & i, Point value) {
 	return i.left <= value && value <= i.right;
 }
 
+// tuple-only equivalent of std::apply, used in add.
+template <typename F, size_t... Is, typename... Types>
+inline auto tuple_apply_impl (F && f, const std::tuple<Types...> & t, std::index_sequence<Is...>) {
+	return std::forward<F> (f) (std::get<Is> (t)...);
+}
+template <typename F, typename... Types> inline auto tuple_apply (F && f, const std::tuple<Types...> & t) {
+	return tuple_apply_impl (std::forward<F> (f), t, std::index_sequence_for<Types...> ());
+}
+
 /******************************************************************************
  * Combinators.
  */
@@ -67,6 +78,33 @@ template <typename Inner> struct Scaled {
 	double operator() (Point x) const { return scale * inner (x); }
 };
 
+// Addition of multiple sub-shapes
+inline double add_doubles (double x) {
+	return x;
+}
+template <typename... Doubles> inline double add_doubles (double first, Doubles... others) {
+	return first + add_doubles (others...);
+}
+template <typename... Shapes> struct Add {
+	std::tuple<Shapes...> shapes;
+	ClosedInterval non_zero_domain_; // Precomputed
+
+	Add (const Shapes &... from_shapes) : shapes (from_shapes...) {
+		non_zero_domain_.left = std::min ({from_shapes.non_zero_domain ().left...});
+		non_zero_domain_.right = std::max ({from_shapes.non_zero_domain ().right...});
+		assert (non_zero_domain_.left <= non_zero_domain_.right);
+	}
+
+	ClosedInterval non_zero_domain () const { return non_zero_domain_; }
+	double operator() (Point x) const {
+		if (!contains (non_zero_domain_, x)) {
+			return 0.;
+		} else {
+			return tuple_apply ([x](const Shapes &... shapes) { return add_doubles (shapes (x)...); }, shapes);
+		}
+	}
+};
+
 /* Priority value for combinator application.
  * This is used to force order of simplifications in convolution(a,b) or other modificators.
  * Without it, we have multiple valid overloads and ambiguity, leading to a compile error.
@@ -75,7 +113,6 @@ template <typename Inner> struct Scaled {
  */
 template <typename T> struct Priority { static constexpr int value = 0; };
 
-template <typename Inner> struct Priority<Reversed<Inner>> { static constexpr int value = 1; };
 template <typename Inner> struct Priority<Shifted<Inner>> { static constexpr int value = 2; };
 template <typename Inner> struct Priority<Scaled<Inner>> { static constexpr int value = 3; };
 
@@ -95,6 +132,10 @@ template <typename Inner> inline auto scaled (double scale, const Inner & inner)
 }
 template <typename Inner> inline auto scaled (double scale, const Scaled<Inner> & s) {
 	return scaled (scale * s.scale, s.inner);
+}
+
+template <typename... Shapes> inline auto add (const Shapes &... shapes) {
+	return Add<Shapes...> (shapes...);
 }
 
 // Component decomposition
@@ -387,5 +428,34 @@ inline auto convolution (const NegativeTriangle & lhs, const PositiveTriangle & 
 }
 inline auto convolution (const PositiveTriangle & lhs, const NegativeTriangle & rhs) {
 	return convolution (rhs, lhs);
+}
+
+/* Define convolution of Trapezoid using Add of combinations.
+ */
+inline auto convolution (const Trapezoid & lhs, const IntervalIndicator & rhs) {
+	return add (convolution (component (lhs, Trapezoid::LeftTriangle{}), rhs),
+	            convolution (component (lhs, Trapezoid::CentralBlock{}), rhs),
+	            convolution (component (lhs, Trapezoid::RightTriangle{}), rhs));
+}
+inline auto convolution (const IntervalIndicator & lhs, const Trapezoid & rhs) {
+	return convolution (rhs, lhs);
+}
+inline auto convolution (const Trapezoid & lhs, const Trapezoid & rhs) {
+	const auto left_part = Trapezoid::LeftTriangle{};
+	const auto central_part = Trapezoid::CentralBlock{};
+	const auto right_part = Trapezoid::RightTriangle{};
+	return add (
+	    //
+	    convolution (component (lhs, left_part), component (rhs, left_part)),
+	    convolution (component (lhs, central_part), component (rhs, left_part)),
+	    convolution (component (lhs, right_part), component (rhs, left_part)),
+	    //
+	    convolution (component (lhs, left_part), component (rhs, central_part)),
+	    convolution (component (lhs, central_part), component (rhs, central_part)),
+	    convolution (component (lhs, right_part), component (rhs, central_part)),
+	    //
+	    convolution (component (lhs, left_part), component (rhs, right_part)),
+	    convolution (component (lhs, central_part), component (rhs, right_part)),
+	    convolution (component (lhs, right_part), component (rhs, right_part)));
 }
 } // namespace shape

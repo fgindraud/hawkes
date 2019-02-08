@@ -13,48 +13,6 @@ template <typename Shape> void dump_shape (const Shape & shape) {
 	}
 }
 
-#include <limits>
-#include <tuple>
-namespace shape {
-template <typename... Shapes> struct Add {
-	std::tuple<Shapes...> shapes;
-	ClosedInterval nzd;
-
-	ClosedInterval non_zero_domain () const { return nzd; }
-	auto operator() (Point x) const {
-		return std::apply ([x](const Shapes &... shapes) { return (shapes (x) + ...); }, shapes);
-	}
-};
-template <typename... Shapes> inline Add<Shapes...> add (const Shapes &... shapes) {
-	const Point left = std::min ({(shapes.non_zero_domain ().left)...});
-	const Point right = std::max ({(shapes.non_zero_domain ().right)...});
-	return {std::make_tuple (shapes...), {left, right}};
-}
-template <typename Shape> inline auto convolution (const Trapezoid & left, const Shape & right) {
-	return add (convolution (component (left, Trapezoid::LeftTriangle{}), right),
-	            convolution (component (left, Trapezoid::CentralBlock{}), right),
-	            convolution (component (left, Trapezoid::RightTriangle{}), right));
-}
-inline auto convolution (const Trapezoid & left, const Trapezoid & right) {
-	const auto left_part = Trapezoid::LeftTriangle{};
-	const auto central_part = Trapezoid::CentralBlock{};
-	const auto right_part = Trapezoid::RightTriangle{};
-	return add (
-	    //
-	    convolution (component (left, left_part), component (right, left_part)),
-	    convolution (component (left, central_part), component (right, left_part)),
-	    convolution (component (left, right_part), component (right, left_part)),
-	    //
-	    convolution (component (left, left_part), component (right, central_part)),
-	    convolution (component (left, central_part), component (right, central_part)),
-	    convolution (component (left, right_part), component (right, central_part)),
-	    //
-	    convolution (component (left, left_part), component (right, right_part)),
-	    convolution (component (left, central_part), component (right, right_part)),
-	    convolution (component (left, right_part), component (right, right_part)));
-}
-} // namespace shape
-
 using namespace shape;
 
 int main (int argc, const char * argv[]) {
