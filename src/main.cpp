@@ -227,7 +227,7 @@ int main (int argc, char * argv[]) {
 		fmt::print (stderr, "Post processing done: time = {}\n",
 		            duration_string (post_processing_end - post_processing_start));
 
-		{
+		if (verbose) {
 			Eigen::MatrixXi nb_points (point_processes.nb_processes (), point_processes.nb_regions ());
 			for (ProcessId m = 0; m < point_processes.nb_processes (); ++m) {
 				for (RegionId r = 0; r < point_processes.nb_regions (); ++r) {
