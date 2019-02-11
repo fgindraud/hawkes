@@ -182,6 +182,18 @@ inline double sup_of_sum_of_differences_to_points (const SortedVec<Point> & poin
 	return sup_of_sum_of_differences_to_points (points, shape.inner);
 }
 
+// Conversion of objects to shapes (shape.h)
+inline auto to_shape (HistogramBase::Interval i) {
+	// Histo::Interval is ]left; right], but shape::Interval is [left; right].
+	// This conversion is only valid if used in a convolution, where the type of interval bound does not matter !
+	const auto delta = i.right - i.left;
+	const auto center = (i.left + i.right) / 2.;
+	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
+}
+inline auto to_shape (IntervalKernel kernel) {
+	return shape::scaled (normalization_factor (kernel), shape::IntervalIndicator::with_width (kernel.width));
+}
+
 /******************************************************************************
  * Basic histogram case.
  * Due to the simplicity of the functions involved, the computations can use efficient specialized algorithms.
@@ -405,48 +417,15 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 
 /******************************************************************************
  * Histogram with interval convolution kernels.
- * TODO doc
+ *
+ * In this case we use the shape strategy.
+ * Values of B/G are expressed from convolution of shapes coming from the base and kernels.
+ * The convoluted shapes are computed using the template-expression strategy in shape.h.
+ * Then the B and G values are computed using the shape expressions.
+ * This is less efficient than the Histogram/no_kernel case.
+ *
+ * TODO doc.
  */
-
-// Conversion of objects to shapes (shape.h)
-inline auto to_shape (HistogramBase::Interval i) {
-	// TODO Histo::Interval is ]left; right], but shape::Interval is [left; right].
-	// This conversion is only valid if used in a convolution, where the type of interval bound does not matter !
-	const auto delta = i.right - i.left;
-	const auto center = (i.left + i.right) / 2.;
-	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
-}
-inline auto to_shape (IntervalKernel kernel) {
-	return shape::scaled (normalization_factor (kernel), shape::IntervalIndicator::with_width (kernel.width));
-}
-
-inline double b_mlk_histogram (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
-                               HistogramBase::Interval base_interval, IntervalKernel m_kernel,
-                               IntervalKernel l_kernel) {
-	const auto shape = convolution (to_shape (base_interval), convolution (to_shape (m_kernel), to_shape (l_kernel)));
-	return sum_of_point_differences (m_points, l_points, shape);
-}
-
-inline double g_ll2kk2_histogram_integral (const SortedVec<Point> & l_points, const SortedVec<Point> & l2_points,
-                                           PointSpace delta, FunctionBaseId k, FunctionBaseId k2, IntervalKernel kernel,
-                                           IntervalKernel kernel2) {
-	// V = sum_{x_l,x_l2} corr(conv(W_l,phi_k),conv(W_l2,phi_k2)) (x_l-x_l2)
-	// V = factorized_scaling * sum_{x_l,x_l2} shifted((k2-k)*delta, conv(trapezoid(l), trapezoid(l2))) (x_l-x_l2)
-
-	// compute the shape
-	const auto phi_indicator = shape::IntervalIndicator::with_width (delta);
-	const auto kernel_indicator = shape::IntervalIndicator::with_width (kernel.width);
-	const auto kernel2_indicator = shape::IntervalIndicator::with_width (kernel2.width);
-	const auto trapezoid = convolution (kernel_indicator, phi_indicator);
-	const auto trapezoid2 = convolution (kernel2_indicator, phi_indicator);
-	const auto shape = convolution (trapezoid, trapezoid2);
-	// Apply final transformations and compute sum
-	const auto factorized_scaling = 1. / (delta * std::sqrt (kernel.width * kernel2.width));
-	const auto factorized_shift = delta * (PointSpace (k2) - PointSpace (k));
-	const auto final_shape = scaled (factorized_scaling, shifted (factorized_shift, shape));
-	return sum_of_point_differences (l_points, l2_points, final_shape);
-}
-
 inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base,
                                const std::vector<IntervalKernel> & kernels) {
 	assert (kernels.size () == processes.size ());
@@ -454,13 +433,18 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b (nb_processes, base_size);
 
+	const auto b_mlk = [](const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
+	                      HistogramBase::Interval base_interval, IntervalKernel m_kernel, IntervalKernel l_kernel) {
+		const auto shape = convolution (to_shape (base_interval), convolution (to_shape (m_kernel), to_shape (l_kernel)));
+		return sum_of_point_differences (m_points, l_points, shape);
+	};
 	for (ProcessId m = 0; m < nb_processes; ++m) {
 		// b0
 		b.set_0 (m, double(processes[m].size ()) * std::sqrt (kernels[m].width));
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
-				const auto v = b_mlk_histogram (processes[m], processes[l], base.interval (k), kernels[m], kernels[l]);
+				const auto v = b_mlk (processes[m], processes[l], base.interval (k), kernels[m], kernels[l]);
 				b.set_lk (m, l, k, v);
 			}
 		}
@@ -488,8 +472,22 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 		}
 	}
 
-	auto G_value = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
-		return g_ll2kk2_histogram_integral (processes[l], processes[l2], base.delta, k, k2, kernels[l], kernels[l2]);
+	const auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
+		// V = sum_{x_l,x_l2} corr(conv(W_l,phi_k),conv(W_l2,phi_k2)) (x_l-x_l2)
+		// V = factorized_scaling * sum_{x_l,x_l2} shifted((k2-k)*delta, conv(trapezoid(l), trapezoid(l2))) (x_l-x_l2)
+
+		// compute the shape
+		const auto phi_indicator = shape::IntervalIndicator::with_width (base.delta);
+		const auto kernel_indicator = shape::IntervalIndicator::with_width (kernels[l].width);
+		const auto kernel2_indicator = shape::IntervalIndicator::with_width (kernels[l2].width);
+		const auto trapezoid = convolution (kernel_indicator, phi_indicator);
+		const auto trapezoid2 = convolution (kernel2_indicator, phi_indicator);
+		const auto shape = convolution (trapezoid, trapezoid2);
+		// Apply final transformations and compute sum
+		const auto factorized_scaling = 1. / (base.delta * std::sqrt (kernels[l].width * kernels[l2].width));
+		const auto factorized_shift = base.delta * (PointSpace (k2) - PointSpace (k));
+		const auto final_shape = scaled (factorized_scaling, shifted (factorized_shift, shape));
+		return sum_of_point_differences (processes[l], processes[l2], final_shape);
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
 	 *
@@ -502,7 +500,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 		// Case l2 == l: compute for k2 >= k:
 		for (FunctionBaseId k = 0; k < base_size; ++k) {
 			// Compute G_{l,l,0,k} and copy to G_{l,l,c,k+c} for k in [0,K[.
-			const auto v = G_value (l, l, FunctionBaseId{0}, k);
+			const auto v = G_ll2kk2 (l, l, FunctionBaseId{0}, k);
 			for (size_t c = 0; k + c < base_size; ++c) {
 				g.set_G (l, l, FunctionBaseId{c}, FunctionBaseId{k + c}, v);
 			}
@@ -511,7 +509,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 		for (ProcessId l2 = l; l2 < nb_processes; ++l2) {
 			// Compute G_{l,l2,0,0} and copy to G_{l,l2,c,c}.
 			{
-				const auto v = G_value (l, l2, FunctionBaseId{0}, FunctionBaseId{0});
+				const auto v = G_ll2kk2 (l, l2, FunctionBaseId{0}, FunctionBaseId{0});
 				for (size_t c = 0; c < base_size; ++c) {
 					g.set_G (l, l2, FunctionBaseId{c}, FunctionBaseId{c}, v);
 				}
@@ -521,8 +519,8 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 			 * Compute G_{l,l2,k,0} and copy to G_{l,l2,k+c,c}.
 			 */
 			for (FunctionBaseId k = 1; k < base_size; ++k) {
-				const auto v_0k = G_value (l, l2, FunctionBaseId{0}, k);
-				const auto v_k0 = G_value (l, l2, k, FunctionBaseId{0});
+				const auto v_0k = G_ll2kk2 (l, l2, FunctionBaseId{0}, k);
+				const auto v_k0 = G_ll2kk2 (l, l2, k, FunctionBaseId{0});
 				for (size_t c = 0; k + c < base_size; ++c) {
 					g.set_G (l, l2, FunctionBaseId{c}, FunctionBaseId{k + c}, v_0k);
 					g.set_G (l, l2, FunctionBaseId{k + c}, FunctionBaseId{c}, v_k0);
