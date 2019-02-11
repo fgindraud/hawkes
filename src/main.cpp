@@ -57,7 +57,6 @@ static std::vector<RawRegionData> read_regions_from (string_view filename, span<
 		const auto end = instant ();
 		fmt::print (stderr, "Process {} loaded: regions = {} ; time = {}\n", filename, regions.size (),
 		            duration_string (end - start));
-		// TODO information on points ?
 		return regions;
 	} catch (const std::runtime_error & e) {
 		throw std::runtime_error (fmt::format ("Reading process data from {}: {}", filename, e.what ()));
@@ -114,7 +113,7 @@ int main (int argc, char * argv[]) {
 
 	variant<None, HistogramBase> base = None{};
 
-	enum class Kernel { None, Interval };
+	enum class Kernel { None, Interval, PointSpecificInterval };
 	Kernel use_kernel = Kernel::None;
 	Optional<std::vector<PointSpace>> explicit_kernel_widths;
 
@@ -143,15 +142,18 @@ int main (int argc, char * argv[]) {
 		                base = HistogramBase{base_size, delta};
 	                });
 
-	parser.option ({"kernel"}, "none|interval", "Use a kernel type (default=none)", [&use_kernel](string_view value) {
-		if (value == "none") {
-			use_kernel = Kernel::None;
-		} else if (value == "interval") {
-			use_kernel = Kernel::Interval;
-		} else {
-			throw std::runtime_error (fmt::format ("Unknown kernel type option: '{}'", value));
-		}
-	});
+	parser.option ({"kernel"}, "none|interval|point_interval", "Use a kernel type (default=none)",
+	               [&use_kernel](string_view value) {
+		               if (value == "none") {
+			               use_kernel = Kernel::None;
+		               } else if (value == "interval") {
+			               use_kernel = Kernel::Interval;
+		               } else if (value == "point_interval") {
+			               use_kernel = Kernel::PointSpecificInterval;
+		               } else {
+			               throw std::runtime_error (fmt::format ("Unknown kernel type option: '{}'", value));
+		               }
+	               });
 	parser.option ({"kernel-widths"}, "w0[:w1:w2:...]", "Use explicit kernel widths (default=deduced)",
 	               [&explicit_kernel_widths](string_view values) {
 		               explicit_kernel_widths = map_to_vector (split (':', values), [](string_view value) {
@@ -194,7 +196,7 @@ int main (int argc, char * argv[]) {
 
 		// Post processing: determine kernel setup, generate sorted points lists
 		const auto post_processing_start = instant ();
-		const auto kernels = [&]() -> variant<None, std::vector<IntervalKernel>> {
+		const auto kernels = [&]() -> variant<None, std::vector<IntervalKernel>, PointAndKernelData> {
 			// Helper: choose the source of kernel widths (explicit or deduced).
 			// widths must be strictly positive.
 			auto get_kernel_widths = [&]() -> std::vector<PointSpace> {
@@ -218,6 +220,8 @@ int main (int argc, char * argv[]) {
 			if (use_kernel == Kernel::Interval) {
 				return map_to_vector (get_kernel_widths (),
 				                      [](PointSpace width) -> IntervalKernel { return IntervalKernel{width}; });
+			} else if (use_kernel == Kernel::PointSpecificInterval) {
+				return PointAndKernelData::from_raw (raw_processes);
 			} else {
 				return None{};
 			}
@@ -282,6 +286,7 @@ int main (int argc, char * argv[]) {
 					const auto widths = map_to_vector (kernels, [](IntervalKernel k) { return k.width; });
 					fmt::print ("# kernels = Intervals{{{}}}\n", fmt::join (widths, ", "));
 				}
+				void operator() (const PointAndKernelData &) const { fmt::print ("# kernels = IntervalForEachPoint\n"); }
 			};
 			visit (PrintKernelLine{}, kernels);
 

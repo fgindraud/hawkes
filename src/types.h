@@ -260,3 +260,64 @@ struct MatrixG {
 		inner (i, i2) = inner (i2, i) = v;
 	}
 };
+
+/******************************************************************************
+ * FIXME Experimental: interval kernel specific by point.
+ */
+struct PointAndKernel {
+	Point point;
+	IntervalKernel kernel;
+};
+class PointAndKernelData {
+private:
+	Vector2d<std::vector<PointAndKernel>> data;
+
+	PointAndKernelData (size_t nb_processes, size_t nb_regions) : data (nb_regions, nb_processes) {
+		assert (nb_processes > 0);
+		assert (nb_regions > 0);
+	}
+
+public:
+	static PointAndKernelData from_raw (const std::vector<RawProcessData> & raw_processes);
+
+	size_t nb_regions () const { return data.nb_rows (); }
+	size_t nb_processes () const { return data.nb_cols (); }
+
+	const std::vector<PointAndKernel> & process_data (ProcessId m, RegionId r) const { return data (r, m); }
+	span<const std::vector<PointAndKernel>> processes_data_for_region (RegionId r) const { return data.row (r); }
+};
+inline PointAndKernelData PointAndKernelData::from_raw (const std::vector<RawProcessData> & raw_processes) {
+	const auto nb_processes = raw_processes.size ();
+	if (raw_processes.empty ()) {
+		throw std::runtime_error ("PointAndKernelData::from_raw: Empty process list");
+	}
+	const auto nb_regions = raw_processes[0].regions.size ();
+	PointAndKernelData data (nb_processes, nb_regions);
+	for (ProcessId m = 0; m < nb_processes; m++) {
+		const auto & raw_process = raw_processes[m];
+		if (raw_process.regions.size () != nb_regions) {
+			throw std::runtime_error (
+			    fmt::format ("PointAndKernelData::from_raw: process {} has wrong region number: got {}, expected {}", m,
+			                 raw_process.regions.size (), nb_regions));
+		}
+		for (RegionId r = 0; r < nb_regions; ++r) {
+			// Intervals are represented by their middle points
+			std::vector<PointAndKernel> points;
+			points.reserve (raw_process.regions[r].unsorted_intervals.size ());
+			for (const auto & interval : raw_process.regions[r].unsorted_intervals) {
+				const auto point = (interval.left + interval.right) / 2.;
+				const auto kernel = IntervalKernel (std::max (interval.right - interval.left, 1.));
+				points.emplace_back (PointAndKernel{point, kernel});
+			}
+			// Apply reversing if requested before sorting them in increasing order
+			if (raw_process.direction == RawProcessData::Direction::Backward && !points.empty ()) {
+				// Reverse point values
+				for (auto & point : points) {
+					point.point = -point.point;
+				}
+			}
+			data.data (r, m) = std::move (points);
+		}
+	}
+	return data;
+}
