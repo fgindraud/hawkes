@@ -575,12 +575,6 @@ struct CommonIntermediateValues {
 	Matrix_M_MK1 b_hat;
 };
 
-template <typename Kernels>
-inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegionData &, None /*base*/,
-                                                             const Kernels &) {
-	throw std::runtime_error ("Function base is not defined");
-}
-
 template <typename Base, typename Kernels>
 inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegionData & processes, const Base & base,
                                                              const Kernels & kernels) {

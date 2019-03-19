@@ -108,15 +108,29 @@ static std::vector<PointSpace> median_interval_widths (const std::vector<RawProc
 /******************************************************************************
  * Program entry point.
  */
+
+enum class KernelConfig {
+	None,          // No Kernel, "ponctual" mode
+	Homogeneous,   // One kernel per process, chosen as median of BED interval widths by default
+	Heterogeneous, // One kernel per point, chosen as width of the BED interval from which the point was generated
+};
+enum class KernelType {
+	Interval,          // L2-normalized indicator function centered on 0
+	IntervalRightHalf, // L2-normalized indicator function on [0, width/2]
+};
+
+using UncheckedBaseType = variant<None, HistogramBase>;
+using CheckedBaseType = variant<HistogramBase>;
+
 int main (int argc, char * argv[]) {
 	bool verbose = false;
 	double gamma = 1.;
 
-	variant<None, HistogramBase> base = None{};
+	UncheckedBaseType base_type = None{}; // Base choice starts undefined and MUST be defined
+	KernelConfig kernel_config = KernelConfig::None;
+	KernelType kernel_type = KernelType::Interval;
 
-	enum class Kernel { None, Interval };
-	Kernel use_kernel = Kernel::None;
-	Optional<std::vector<PointSpace>> explicit_kernel_widths;
+	Optional<std::vector<PointSpace>> override_homogeneous_kernel_widths;
 
 	std::vector<string_view> current_region_names;
 	std::vector<RawProcessData> raw_processes;
@@ -125,40 +139,57 @@ int main (int argc, char * argv[]) {
 	const auto command_line = CommandLineView (argc, argv);
 	auto parser = CommandLineParser ();
 
+	// Common
 	parser.flag ({"h", "help"}, "Display this help", [&]() { //
 		parser.usage (stderr, command_line.program_name ());
 		std::exit (EXIT_SUCCESS);
 	});
-
 	parser.flag ({"v", "verbose"}, "Enable verbose output", [&]() { verbose = true; });
 
+	// Hyper-parameters
 	parser.option ({"g", "gamma"}, "value", "Set gamma value (double, positive)", [&gamma](string_view value) { //
 		gamma = parse_strict_positive_double (value, "gamma");
 	});
 
+	// Base
 	parser.option2 ({"histogram"}, "K", "delta", "Use an histogram base (k > 0, delta > 0)",
-	                [&base](string_view k_value, string_view delta_value) {
+	                [&base_type](string_view k_value, string_view delta_value) {
 		                const auto base_size = size_t (parse_strict_positive_int (k_value, "histogram K"));
 		                const auto delta = PointSpace (parse_strict_positive_double (delta_value, "histogram delta"));
-		                base = HistogramBase{base_size, delta};
+		                base_type = HistogramBase{base_size, delta};
 	                });
 
-	parser.option ({"kernel"}, "none|interval", "Use a kernel type (default=none)", [&use_kernel](string_view value) {
-		if (value == "none") {
-			use_kernel = Kernel::None;
-		} else if (value == "interval") {
-			use_kernel = Kernel::Interval;
-		} else {
-			throw std::runtime_error (fmt::format ("Unknown kernel type option: '{}'", value));
-		}
-	});
-	parser.option ({"kernel-widths"}, "w0[:w1:w2:...]", "Use explicit kernel widths (default=deduced)",
-	               [&explicit_kernel_widths](string_view values) {
-		               explicit_kernel_widths = map_to_vector (split (':', values), [](string_view value) {
+	// Kernel setup
+	parser.option ({"k", "kernel"}, "none|homogeneous|heterogeneous", "Kernel configuration (default=none)",
+	               [&kernel_config](string_view value) {
+		               if (value == "none") {
+			               kernel_config = KernelConfig::None;
+		               } else if (value == "homogeneous") {
+			               kernel_config = KernelConfig::Homogeneous;
+		               } else if (value == "heterogeneous") {
+			               kernel_config = KernelConfig::Heterogeneous;
+		               } else {
+			               throw std::runtime_error (fmt::format ("Unknown kernel configuration: '{}'", value));
+		               }
+	               });
+	parser.option ({"t", "kernel-type"}, "interval|interval_right_half", "Kernel type",
+	               [&kernel_type](string_view value) {
+		               if (value == "interval") {
+			               kernel_type = KernelType::Interval;
+		               } else if (value == "interval_right_half") {
+			               kernel_type = KernelType::IntervalRightHalf;
+		               } else {
+			               throw std::runtime_error (fmt::format ("Unknown kernel type: '{}'", value));
+		               }
+	               });
+	parser.option ({"homogeneous-kernel-widths"}, "w0[:w1:w2:...]", "Override kernel widths (default=median)",
+	               [&override_homogeneous_kernel_widths](string_view values) {
+		               override_homogeneous_kernel_widths = map_to_vector (split (':', values), [](string_view value) {
 			               return PointSpace (parse_strict_positive_double (value, "kernel width"));
 		               });
 	               });
 
+	// File parsing
 	parser.option ({"r", "regions"}, "r0[,r1,r2,...]", "Set region names extracted from next files",
 	               [&current_region_names](string_view regions) {
 		               auto region_names = split (',', regions);
@@ -192,19 +223,26 @@ int main (int argc, char * argv[]) {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
 
+		// Check that base is not null
+		struct CheckBaseType {
+			CheckedBaseType operator() (const None &) const { throw std::runtime_error ("Function base is not defined"); }
+			CheckedBaseType operator() (const HistogramBase & base) const { return base; }
+		};
+		const CheckedBaseType base = visit (CheckBaseType{}, base_type);
+
 		// Post processing: determine kernel setup, generate sorted points lists
 		const auto post_processing_start = instant ();
 		const auto kernels = [&]() -> variant<None, std::vector<IntervalKernel>> {
 			// Helper: choose the source of kernel widths (explicit or deduced).
 			// widths must be strictly positive.
 			auto get_kernel_widths = [&]() -> std::vector<PointSpace> {
-				if (explicit_kernel_widths) {
-					if (explicit_kernel_widths.value.size () != raw_processes.size ()) {
+				if (override_homogeneous_kernel_widths) {
+					if (override_homogeneous_kernel_widths.value.size () != raw_processes.size ()) {
 						throw std::runtime_error (
 						    fmt::format ("Explicit kernel widths number does not match number of processes: expected {}, got {}",
-						                 raw_processes.size (), explicit_kernel_widths.value.size ()));
+						                 raw_processes.size (), override_homogeneous_kernel_widths.value.size ()));
 					}
-					return std::move (explicit_kernel_widths.value);
+					return std::move (override_homogeneous_kernel_widths.value);
 				} else {
 					auto widths = median_interval_widths (raw_processes);
 					for (auto & w : widths) {
@@ -215,7 +253,7 @@ int main (int argc, char * argv[]) {
 				}
 			};
 
-			if (use_kernel == Kernel::Interval) {
+			if (kernel_type == KernelType::Interval) {
 				return map_to_vector (get_kernel_widths (),
 				                      [](PointSpace width) -> IntervalKernel { return IntervalKernel{width}; });
 			} else {
@@ -269,7 +307,6 @@ int main (int argc, char * argv[]) {
 			fmt::print ("# }}\n");
 
 			struct PrintBaseLine {
-				void operator() (None) const {}
 				void operator() (HistogramBase b) const {
 					fmt::print ("# base = Histogram(K = {}, delta = {})\n", b.base_size, b.delta);
 				}
