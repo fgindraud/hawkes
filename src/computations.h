@@ -301,18 +301,18 @@ inline double g_ll2kk2_histogram_integral_denormalized (const SortedVec<Point> &
 }
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base, None /*kernels*/) {
-	const auto nb_processes = processes.size ();
+inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBase base, None /*kernels*/) {
+	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
 	const auto phi_normalization_factor = normalization_factor (base);
 	Matrix_M_MK1 b (nb_processes, base_size);
 
 	for (ProcessId m = 0; m < nb_processes; ++m) {
 		// b_0
-		b.set_0 (m, double(processes[m].size ()));
+		b.set_0 (m, double(points[m].size ()));
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
-			const auto counts = b_ml_histogram_counts_for_all_k_denormalized (processes[m], processes[l], base);
+			const auto counts = b_ml_histogram_counts_for_all_k_denormalized (points[m], points[l], base);
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
 				b.set_lk (m, l, k, double(counts[k]) * phi_normalization_factor);
 			}
@@ -322,17 +322,17 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 }
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase base, None /*kernels*/) {
-	const auto nb_processes = processes.size ();
+inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase base, None /*kernels*/) {
+	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
 	const auto sqrt_delta = std::sqrt (base.delta);
 	const auto inv_delta = 1. / base.delta;
 	MatrixG g (nb_processes, base_size);
 
-	g.set_tmax (tmax (processes));
+	g.set_tmax (tmax (points));
 
 	for (ProcessId l = 0; l < nb_processes; ++l) {
-		const auto g_lk = double(processes[l].size ()) * sqrt_delta;
+		const auto g_lk = double(points[l].size ()) * sqrt_delta;
 		for (FunctionBaseId k = 0; k < base_size; ++k) {
 			g.set_g (l, k, g_lk);
 		}
@@ -340,7 +340,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 
 	auto G_value = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
 		const auto integral =
-		    g_ll2kk2_histogram_integral_denormalized (processes[l], processes[l2], base.interval (k), base.interval (k2));
+		    g_ll2kk2_histogram_integral_denormalized (points[l], points[l2], base.interval (k), base.interval (k2));
 		return integral * inv_delta;
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
@@ -387,9 +387,10 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 
 // Complexity: O( M^2 * K + M * max(|N_m|) )
 // Computation is exact (sup can be evaluated perfectly).
-inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, HistogramBase base, None /*kernels*/) {
-	const auto nb_processes = processes.nb_processes ();
-	const auto nb_regions = processes.nb_regions ();
+inline Matrix_M_MK1 compute_b_hat (const DataByProcessRegion<SortedVec<Point>> & points, HistogramBase base,
+                                   None /*kernels*/) {
+	const auto nb_processes = points.nb_processes ();
+	const auto nb_regions = points.nb_regions ();
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b_hat (nb_processes, base_size);
 
@@ -402,7 +403,7 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 	for (ProcessId l = 0; l < nb_processes; ++l) {
 		double sum_of_region_sups = 0.;
 		for (RegionId r = 0; r < nb_regions; ++r) {
-			sum_of_region_sups += sup_of_sum_of_differences_to_points (processes.process_data (l, r), phi_0_interval);
+			sum_of_region_sups += sup_of_sum_of_differences_to_points (points.data (l, r), phi_0_interval);
 		}
 		const auto b_hat_l = sum_of_region_sups * phi_normalization_factor;
 
@@ -426,10 +427,10 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
  *
  * TODO doc.
  */
-inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base,
+inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBase base,
                                const std::vector<IntervalKernel> & kernels) {
-	assert (kernels.size () == processes.size ());
-	const auto nb_processes = processes.size ();
+	assert (kernels.size () == points.size ());
+	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b (nb_processes, base_size);
 
@@ -440,11 +441,11 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 	};
 	for (ProcessId m = 0; m < nb_processes; ++m) {
 		// b0
-		b.set_0 (m, double(processes[m].size ()) * std::sqrt (kernels[m].width));
+		b.set_0 (m, double(points[m].size ()) * std::sqrt (kernels[m].width));
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
-				const auto v = b_mlk (processes[m], processes[l], base.interval (k), kernels[m], kernels[l]);
+				const auto v = b_mlk (points[m], points[l], base.interval (k), kernels[m], kernels[l]);
 				b.set_lk (m, l, k, v);
 			}
 		}
@@ -452,21 +453,21 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 	return b;
 }
 
-inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase base,
+inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase base,
                           const std::vector<IntervalKernel> & kernels) {
-	assert (kernels.size () == processes.size ());
-	const auto nb_processes = processes.size ();
+	assert (kernels.size () == points.size ());
+	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
 	const auto sqrt_delta = std::sqrt (double(base.delta));
 	MatrixG g (nb_processes, base_size);
 
-	g.set_tmax (tmax (processes));
+	g.set_tmax (tmax (points));
 
 	for (ProcessId l = 0; l < nb_processes; ++l) {
 		/* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
 		 * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l sqrt(delta) = |N_m| eta_l sqrt(delta).
 		 */
-		const auto g_lk = double(processes[l].size ()) * std::sqrt (kernels[l].width) * sqrt_delta;
+		const auto g_lk = double(points[l].size ()) * std::sqrt (kernels[l].width) * sqrt_delta;
 		for (FunctionBaseId k = 0; k < base_size; ++k) {
 			g.set_g (l, k, g_lk);
 		}
@@ -487,7 +488,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 		const auto factorized_scaling = 1. / (base.delta * std::sqrt (kernels[l].width * kernels[l2].width));
 		const auto factorized_shift = base.delta * (PointSpace (k2) - PointSpace (k));
 		const auto final_shape = scaled (factorized_scaling, shifted (factorized_shift, shape));
-		return sum_of_point_differences (processes[l], processes[l2], final_shape);
+		return sum_of_point_differences (points[l], points[l2], final_shape);
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
 	 *
@@ -531,11 +532,11 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 	return g;
 }
 
-inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, HistogramBase base,
+inline Matrix_M_MK1 compute_b_hat (const DataByProcessRegion<SortedVec<Point>> & points, HistogramBase base,
                                    const std::vector<IntervalKernel> & kernels) {
-	assert (kernels.size () == processes.nb_processes ());
-	const auto nb_processes = processes.nb_processes ();
-	const auto nb_regions = processes.nb_regions ();
+	assert (kernels.size () == points.nb_processes ());
+	const auto nb_processes = points.nb_processes ();
+	const auto nb_regions = points.nb_regions ();
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b_hat (nb_processes, base_size);
 
@@ -552,7 +553,7 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 
 				double sum_of_region_sups = 0;
 				for (RegionId r = 0; r < nb_regions; ++r) {
-					sum_of_region_sups += sup_of_sum_of_differences_to_points (processes.process_data (l, r), approx);
+					sum_of_region_sups += sup_of_sum_of_differences_to_points (points.data (l, r), approx);
 				}
 				b_hat.set_lk (m, l, k, sum_of_region_sups);
 			}
@@ -576,17 +577,17 @@ struct CommonIntermediateValues {
 };
 
 template <typename Base, typename Kernels>
-inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegionData & processes, const Base & base,
-                                                             const Kernels & kernels) {
-	const auto nb_regions = processes.nb_regions ();
+inline CommonIntermediateValues compute_intermediate_values (const DataByProcessRegion<SortedVec<Point>> & points,
+                                                             const Base & base, const Kernels & kernels) {
+	const auto nb_regions = points.nb_regions ();
 	using B_G = typename CommonIntermediateValues::B_G;
 	std::vector<B_G> b_g_by_region;
 	b_g_by_region.reserve (nb_regions);
 	for (RegionId r = 0; r < nb_regions; ++r) {
-		b_g_by_region.emplace_back (B_G{compute_b (processes.processes_data_for_region (r), base, kernels),
-		                                compute_g (processes.processes_data_for_region (r), base, kernels)});
+		b_g_by_region.emplace_back (B_G{compute_b (points.data_for_region (r), base, kernels),
+		                                compute_g (points.data_for_region (r), base, kernels)});
 	}
-	return {std::move (b_g_by_region), compute_b_hat (processes, base, kernels)};
+	return {std::move (b_g_by_region), compute_b_hat (points, base, kernels)};
 }
 
 struct LassoParameters {

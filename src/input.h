@@ -107,9 +107,14 @@ inline bool LineByLineReader::read_next_line () {
 /******************************************************************************
  * BED format parsing.
  */
-inline std::vector<RawRegionData> read_all_from_bed_file (std::FILE * file) {
+struct BedRegion {
+	std::string name;
+	std::vector<PointInterval> unsorted_intervals;
+};
+
+inline std::vector<BedRegion> read_all_from_bed_file (std::FILE * file) {
 	assert (file != nullptr);
-	std::vector<RawRegionData> regions;
+	std::vector<BedRegion> regions;
 	LineByLineReader reader (file);
 
 	std::vector<PointInterval> current_region_intervals;
@@ -138,12 +143,16 @@ inline std::vector<RawRegionData> read_all_from_bed_file (std::FILE * file) {
 					}
 					if (!empty (current_region_name)) {
 						// End current region and store its data
-						regions.emplace_back (RawRegionData{std::move (current_region_name), std::move (current_region_intervals)});
+						regions.emplace_back (BedRegion{std::move (current_region_name), std::move (current_region_intervals)});
 					}
 					current_region_intervals.clear ();
 					current_region_name = to_string (region_name);
 				}
-				current_region_intervals.emplace_back (PointInterval{interval_start_position, interval_end_position});
+				auto point_interval = PointInterval{
+				    (interval_start_position + interval_end_position) / 2.,
+				    interval_end_position - interval_start_position,
+				};
+				current_region_intervals.emplace_back (point_interval);
 			}
 		}
 		return regions;
@@ -154,11 +163,12 @@ inline std::vector<RawRegionData> read_all_from_bed_file (std::FILE * file) {
 	}
 }
 
-inline std::vector<RawRegionData> read_selected_from_bed_file (std::FILE * file, span<const string_view> region_names) {
+inline std::vector<BedRegion> read_selected_from_bed_file (std::FILE * file,
+                                                           const std::vector<string_view> & region_names) {
 	assert (file != nullptr);
 	// Read all regions data, then copy them in the right order to the final vector of regions
-	std::vector<RawRegionData> all_regions = read_all_from_bed_file (file);
-	std::vector<RawRegionData> selected_regions;
+	std::vector<BedRegion> all_regions = read_all_from_bed_file (file);
+	std::vector<BedRegion> selected_regions;
 	selected_regions.reserve (region_names.size ());
 	for (auto name_it = region_names.begin (); name_it != region_names.end (); ++name_it) {
 		const auto wanted_name = *name_it;

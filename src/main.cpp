@@ -47,9 +47,34 @@ static std::chrono::high_resolution_clock::time_point instant () {
 }
 
 /******************************************************************************
- * Reading process data.
+ * Program entry point.
  */
-static std::vector<RawRegionData> read_regions_from (string_view filename, span<const string_view> region_names) {
+
+enum class KernelConfig {
+	None,          // No Kernel, "ponctual" mode
+	Homogeneous,   // One kernel per process, chosen as median of BED interval widths by default
+	Heterogeneous, // One kernel per point, chosen as width of the BED interval from which the point was generated
+};
+enum class KernelType {
+	Interval,          // L2-normalized indicator function centered on 0
+	IntervalRightHalf, // L2-normalized indicator function on [0, width/2]
+};
+
+using BaseOption = variant<None, HistogramBase>;
+using BaseType = variant<HistogramBase>;
+
+enum class ProcessDirection {
+	Forward,  // Keep points coordinates
+	Backward, // x -> -x for all points coordinates
+};
+
+struct ProcessFile {
+	string_view filename;
+	std::vector<string_view> regions_to_extract;
+	ProcessDirection direction;
+};
+
+static std::vector<BedRegion> read_regions_from (string_view filename, const std::vector<string_view> & region_names) {
 	try {
 		const auto start = instant ();
 		auto file = open_file (filename, "r");
@@ -64,76 +89,110 @@ static std::vector<RawRegionData> read_regions_from (string_view filename, span<
 	}
 }
 
-/******************************************************************************
- * Compute kernel widths as median of interval sizes.
- */
-static PointSpace median_interval_width (const RawProcessData & raw_process) {
-	const auto sum_of_region_sizes = [&]() {
-		size_t sum = 0;
-		for (const auto & region : raw_process.regions) {
-			sum += region.unsorted_intervals.size ();
+static DataByProcessRegion<SortedVec<PointInterval>> read_process_files (const std::vector<ProcessFile> & files) {
+	if (files.empty ()) {
+		throw std::runtime_error ("read_process_files: process list is empty");
+	}
+	const auto nb_processes = files.size ();
+	const auto nb_regions = files[0].regions_to_extract.size ();
+	DataByProcessRegion<SortedVec<PointInterval>> intervals (nb_processes, nb_regions);
+
+	for (ProcessId m = 0; m < nb_processes; m++) {
+		const auto & file = files[m];
+		auto points_by_region = read_regions_from (file.filename, file.regions_to_extract);
+		if (points_by_region.size () != nb_regions) {
+			throw std::runtime_error (
+			    fmt::format ("read_process_files: process {} has wrong region number: got {}, expected {}", m,
+			                 points_by_region.size (), nb_regions));
 		}
-		return sum;
-	}();
-	// Degenerate case
-	if (sum_of_region_sizes == 0) {
-		return PointSpace (0);
-	}
-	// Build a vector containing the unsorted widths of all intervals from all regions
-	std::vector<PointSpace> all_widths;
-	all_widths.reserve (sum_of_region_sizes);
-	for (const auto & region : raw_process.regions) {
-		for (const auto & interval : region.unsorted_intervals) {
-			assert (interval.right >= interval.left);
-			all_widths.emplace_back (interval.right - interval.left);
+		for (RegionId r = 0; r < nb_regions; ++r) {
+			// Apply reversing if requested before sorting them in increasing order
+			if (file.direction == ProcessDirection::Backward) {
+				for (auto & interval : points_by_region[r].unsorted_intervals) {
+					interval.center = -interval.center;
+				}
+			}
+			intervals.data (m, r) =
+			    SortedVec<PointInterval>::from_unsorted (std::move (points_by_region[r].unsorted_intervals));
 		}
 	}
-	assert (all_widths.size () == sum_of_region_sizes);
-	// Compute the median in the naive way. In C++17 std::nth_element would be a better O(n) solution.
-	std::sort (all_widths.begin (), all_widths.end ());
-	assert (sum_of_region_sizes > 0);
-	if (sum_of_region_sizes % 2 == 1) {
-		const auto mid_point_index = sum_of_region_sizes / 2;
-		return all_widths[mid_point_index];
-	} else {
-		const auto above_mid_point_index = sum_of_region_sizes / 2;
-		assert (above_mid_point_index > 0);
-		return (all_widths[above_mid_point_index - 1] + all_widths[above_mid_point_index]) / 2.;
-	}
-}
-static std::vector<PointSpace> median_interval_widths (const std::vector<RawProcessData> & raw_processes) {
-	return map_to_vector (raw_processes, median_interval_width);
+	return intervals;
 }
 
-/******************************************************************************
- * Program entry point.
- */
+static DataByProcessRegion<SortedVec<Point>>
+extract_point_lists (const DataByProcessRegion<SortedVec<PointInterval>> & intervals) {
+	const auto nb_processes = intervals.nb_processes ();
+	const auto nb_regions = intervals.nb_regions ();
+	DataByProcessRegion<SortedVec<Point>> points (nb_processes, nb_regions);
+	for (ProcessId m = 0; m < nb_processes; ++m) {
+		for (RegionId r = 0; r < nb_regions; ++r) {
+			const auto & region_intervals = intervals.data (m, r);
+			const auto region_size = region_intervals.size ();
+			std::vector<Point> region_points (region_size);
+			for (size_t i = 0; i < region_size; ++i) {
+				region_points[i] = region_intervals[i].center;
+			}
+			points.data (m, r) = SortedVec<Point>::from_sorted (std::move (region_points));
+		}
+	}
+	return points;
+}
 
-enum class KernelConfig {
-	None,          // No Kernel, "ponctual" mode
-	Homogeneous,   // One kernel per process, chosen as median of BED interval widths by default
-	Heterogeneous, // One kernel per point, chosen as width of the BED interval from which the point was generated
-};
-enum class KernelType {
-	Interval,          // L2-normalized indicator function centered on 0
-	IntervalRightHalf, // L2-normalized indicator function on [0, width/2]
-};
+static std::vector<PointSpace>
+median_interval_widths (const DataByProcessRegion<SortedVec<PointInterval>> & intervals) {
+	const auto compute_median_width = [&intervals](ProcessId m) {
+		const auto sum_of_region_sizes = [&intervals, m]() {
+			size_t sum = 0;
+			for (RegionId r = 0; r < intervals.nb_regions (); ++r) {
+				sum += intervals.data (m, r).size ();
+			}
+			return sum;
+		}();
+		// Degenerate case
+		if (sum_of_region_sizes == 0) {
+			return PointSpace (0);
+		}
+		// Build a vector containing the unsorted widths of all intervals from all regions
+		std::vector<PointSpace> all_widths;
+		all_widths.reserve (sum_of_region_sizes);
+		for (RegionId r = 0; r < intervals.nb_regions (); ++r) {
+			const auto & region_intervals = intervals.data (m, r);
+			for (const auto & interval : region_intervals) {
+				all_widths.emplace_back (interval.width);
+			}
+		}
+		assert (all_widths.size () == sum_of_region_sizes);
+		// Compute the median in the naive way. In C++17 std::nth_element would be a better O(n) solution.
+		std::sort (all_widths.begin (), all_widths.end ());
+		assert (sum_of_region_sizes > 0);
+		if (sum_of_region_sizes % 2 == 1) {
+			const auto mid_point_index = sum_of_region_sizes / 2;
+			return all_widths[mid_point_index];
+		} else {
+			const auto above_mid_point_index = sum_of_region_sizes / 2;
+			assert (above_mid_point_index > 0);
+			return (all_widths[above_mid_point_index - 1] + all_widths[above_mid_point_index]) / 2.;
+		}
+	};
 
-using UncheckedBaseType = variant<None, HistogramBase>;
-using CheckedBaseType = variant<HistogramBase>;
+	std::vector<PointSpace> medians (intervals.nb_processes ());
+	for (ProcessId m = 0; m < intervals.nb_processes (); ++m) {
+		medians[m] = compute_median_width (m);
+	}
+	return medians;
+}
 
 int main (int argc, char * argv[]) {
 	bool verbose = false;
 	double gamma = 1.;
 
-	UncheckedBaseType base_type = None{}; // Base choice starts undefined and MUST be defined
+	BaseOption base_option = None{}; // Base choice starts undefined and MUST be defined
 	KernelConfig kernel_config = KernelConfig::None;
 	KernelType kernel_type = KernelType::Interval;
-
 	Optional<std::vector<PointSpace>> override_homogeneous_kernel_widths;
 
 	std::vector<string_view> current_region_names;
-	std::vector<RawProcessData> raw_processes;
+	std::vector<ProcessFile> process_files;
 
 	// Command line parsing setup
 	const auto command_line = CommandLineView (argc, argv);
@@ -153,10 +212,10 @@ int main (int argc, char * argv[]) {
 
 	// Base
 	parser.option2 ({"histogram"}, "K", "delta", "Use an histogram base (k > 0, delta > 0)",
-	                [&base_type](string_view k_value, string_view delta_value) {
+	                [&base_option](string_view k_value, string_view delta_value) {
 		                const auto base_size = size_t (parse_strict_positive_int (k_value, "histogram K"));
 		                const auto delta = PointSpace (parse_strict_positive_double (delta_value, "histogram delta"));
-		                base_type = HistogramBase{base_size, delta};
+		                base_option = HistogramBase{base_size, delta};
 	                });
 
 	// Kernel setup
@@ -189,7 +248,7 @@ int main (int argc, char * argv[]) {
 		               });
 	               });
 
-	// File parsing
+	// File parsing : generate a list of (file, options), read later.
 	parser.option ({"r", "regions"}, "r0[,r1,r2,...]", "Set region names extracted from next files",
 	               [&current_region_names](string_view regions) {
 		               auto region_names = split (',', regions);
@@ -201,50 +260,47 @@ int main (int argc, char * argv[]) {
 		               }
 		               current_region_names = std::move (region_names);
 	               });
-	auto add_process_from_file = [&current_region_names, &raw_processes](string_view filename,
-	                                                                     RawProcessData::Direction direction) {
+	auto add_process_file = [&current_region_names, &process_files](string_view filename, ProcessDirection direction) {
 		if (current_region_names.empty ()) {
 			throw std::runtime_error ("List of region names is empty: set region names before reading a file");
 		}
-		auto regions = read_regions_from (filename, make_span (current_region_names));
-		assert (regions.size () == current_region_names.size ());
-		raw_processes.emplace_back (RawProcessData{to_string (filename), std::move (regions), direction});
+		process_files.emplace_back (ProcessFile{filename, current_region_names, direction});
 	};
 	parser.option ({"f", "file-forward"}, "filename", "Add process regions from file",
-	               [add_process_from_file](string_view filename) {
-		               add_process_from_file (filename, RawProcessData::Direction::Forward);
-	               });
+	               [add_process_file](string_view filename) { add_process_file (filename, ProcessDirection::Forward); });
 	parser.option ({"b", "file-backward"}, "filename", "Add process regions (reversed) from file",
-	               [add_process_from_file](string_view filename) {
-		               add_process_from_file (filename, RawProcessData::Direction::Backward);
-	               });
+	               [add_process_file](string_view filename) { add_process_file (filename, ProcessDirection::Backward); });
 
 	try {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
 
-		// Check that base is not null
-		struct CheckBaseType {
-			CheckedBaseType operator() (const None &) const { throw std::runtime_error ("Function base is not defined"); }
-			CheckedBaseType operator() (const HistogramBase & base) const { return base; }
+		// Check that base is set
+		struct CheckBase {
+			BaseType operator() (const None &) const { throw std::runtime_error ("Function base is not defined"); }
+			BaseType operator() (const HistogramBase & base) const { return base; }
 		};
-		const CheckedBaseType base = visit (CheckBaseType{}, base_type);
+		const BaseType base = visit (CheckBase{}, base_option);
+
+		// Read input files
+		const auto intervals = read_process_files (process_files);
 
 		// Post processing: determine kernel setup, generate sorted points lists
 		const auto post_processing_start = instant ();
+		const auto points = extract_point_lists (intervals);
 		const auto kernels = [&]() -> variant<None, std::vector<IntervalKernel>> {
 			// Helper: choose the source of kernel widths (explicit or deduced).
 			// widths must be strictly positive.
 			auto get_kernel_widths = [&]() -> std::vector<PointSpace> {
 				if (override_homogeneous_kernel_widths) {
-					if (override_homogeneous_kernel_widths.value.size () != raw_processes.size ()) {
+					if (override_homogeneous_kernel_widths.value.size () != process_files.size ()) {
 						throw std::runtime_error (
 						    fmt::format ("Explicit kernel widths number does not match number of processes: expected {}, got {}",
-						                 raw_processes.size (), override_homogeneous_kernel_widths.value.size ()));
+						                 process_files.size (), override_homogeneous_kernel_widths.value.size ()));
 					}
 					return std::move (override_homogeneous_kernel_widths.value);
 				} else {
-					auto widths = median_interval_widths (raw_processes);
+					auto widths = median_interval_widths (intervals);
 					for (auto & w : widths) {
 						w = std::max (w, 1.); // FIXME cannot be zero, what should be a minimum ??
 					}
@@ -260,28 +316,16 @@ int main (int argc, char * argv[]) {
 				return None{};
 			}
 		}();
-		const auto point_processes = ProcessesRegionData::from_raw (raw_processes);
 		const auto post_processing_end = instant ();
 		fmt::print (stderr, "Post processing done: time = {}\n",
 		            duration_string (post_processing_end - post_processing_start));
 
-		if (verbose) {
-			Eigen::MatrixXi nb_points (point_processes.nb_processes (), point_processes.nb_regions ());
-			for (ProcessId m = 0; m < point_processes.nb_processes (); ++m) {
-				for (RegionId r = 0; r < point_processes.nb_regions (); ++r) {
-					nb_points (m, r) = point_processes.process_data (m, r).size ();
-				}
-			}
-			fmt::print (stderr, "NB POINTS\n");
-			fmt::print (stderr, "{}\n", nb_points);
-		}
-
 		// Compute base/kernel specific values: B, G, B_hat
 		const auto compute_b_g_start = instant ();
 		const auto intermediate_values = visit (
-		    [&point_processes](const auto & base, const auto & kernels) {
+		    [&points](const auto & base, const auto & kernels) {
 			    // Code to compute intermediate values for each combination of base and kernels.
-			    return compute_intermediate_values (point_processes, base, kernels);
+			    return compute_intermediate_values (points, base, kernels);
 		    },
 		    base, kernels);
 		const auto compute_b_g_end = instant ();
@@ -299,10 +343,10 @@ int main (int argc, char * argv[]) {
 		if (verbose) {
 			// Header
 			fmt::print ("# Processes = {{\n");
-			for (size_t i = 0; i < raw_processes.size (); ++i) {
-				const auto & p = raw_processes[i];
-				const string_view suffix = p.direction == RawProcessData::Direction::Backward ? " (backward)" : "";
-				fmt::print ("#  [{}] {}{}\n", i, p.name, suffix);
+			for (ProcessId m = 0; m < process_files.size (); ++m) {
+				const auto & p = process_files[m];
+				const string_view suffix = p.direction == ProcessDirection::Backward ? " (backward)" : "";
+				fmt::print ("#  [{}] {}{}\n", m, p.filename, suffix);
 			}
 			fmt::print ("# }}\n");
 
