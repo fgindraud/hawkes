@@ -19,23 +19,28 @@ all: hawkes
 fmtlib.o: src/external/fmt/format.cc $(wildcard src/external/fmt/*.h) Makefile
 	$(CXX) -c $(CXX_FLAGS_RELEASE) -I src/external -o $@ $<
 
-# All possible binaries
+# Debug and non-debug version of hawkes main program.
 hawkes: src/main.cpp fmtlib.o $(wildcard src/*.h) Makefile
 	$(CXX) $(CXX_FLAGS_RELEASE) -o $@ $< fmtlib.o
-
 hawkes_debug: src/main.cpp fmtlib.o $(wildcard src/*.h) Makefile
 	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
 
+# Unit test executable and 'test' target.
 unit_tests: src/unit_tests.cpp fmtlib.o $(wildcard src/*.h) Makefile
 	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
-
 test: unit_tests
 	./unit_tests
 
+# Small utility to plot various shapes, for debug purposes.
+dump_shape: src/dump_shape.cpp fmtlib.o $(wildcard src/*.h) Makefile
+	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
+
 clean:
+	$(RM) fmtlib.o
 	$(RM) hawkes
 	$(RM) hawkes_debug
 	$(RM) unit_tests
+	$(RM) dump_shape
 
 format:
-	clang-format -style=file -i -verbose src/main.cpp src/unit_tests.cpp $(wildcard src/*.h)
+	clang-format -style=file -i -verbose src/main.cpp src/unit_tests.cpp src/dump_shape.cpp $(wildcard src/*.h)

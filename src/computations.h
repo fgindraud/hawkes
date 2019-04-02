@@ -301,18 +301,18 @@ inline double g_ll2kk2_histogram_integral_denormalized (const SortedVec<Point> &
 }
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base, None /*kernels*/) {
-	const auto nb_processes = processes.size ();
+inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBase base, None /*kernels*/) {
+	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
 	const auto phi_normalization_factor = normalization_factor (base);
 	Matrix_M_MK1 b (nb_processes, base_size);
 
 	for (ProcessId m = 0; m < nb_processes; ++m) {
 		// b_0
-		b.set_0 (m, double(processes[m].size ()));
+		b.set_0 (m, double(points[m].size ()));
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
-			const auto counts = b_ml_histogram_counts_for_all_k_denormalized (processes[m], processes[l], base);
+			const auto counts = b_ml_histogram_counts_for_all_k_denormalized (points[m], points[l], base);
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
 				b.set_lk (m, l, k, double(counts[k]) * phi_normalization_factor);
 			}
@@ -322,17 +322,17 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 }
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase base, None /*kernels*/) {
-	const auto nb_processes = processes.size ();
+inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase base, None /*kernels*/) {
+	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
 	const auto sqrt_delta = std::sqrt (base.delta);
 	const auto inv_delta = 1. / base.delta;
 	MatrixG g (nb_processes, base_size);
 
-	g.set_tmax (tmax (processes));
+	g.set_tmax (tmax (points));
 
 	for (ProcessId l = 0; l < nb_processes; ++l) {
-		const auto g_lk = double(processes[l].size ()) * sqrt_delta;
+		const auto g_lk = double(points[l].size ()) * sqrt_delta;
 		for (FunctionBaseId k = 0; k < base_size; ++k) {
 			g.set_g (l, k, g_lk);
 		}
@@ -340,7 +340,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 
 	auto G_value = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
 		const auto integral =
-		    g_ll2kk2_histogram_integral_denormalized (processes[l], processes[l2], base.interval (k), base.interval (k2));
+		    g_ll2kk2_histogram_integral_denormalized (points[l], points[l2], base.interval (k), base.interval (k2));
 		return integral * inv_delta;
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
@@ -387,9 +387,10 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 
 // Complexity: O( M^2 * K + M * max(|N_m|) )
 // Computation is exact (sup can be evaluated perfectly).
-inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, HistogramBase base, None /*kernels*/) {
-	const auto nb_processes = processes.nb_processes ();
-	const auto nb_regions = processes.nb_regions ();
+inline Matrix_M_MK1 compute_b_hat (const DataByProcessRegion<SortedVec<Point>> & points, HistogramBase base,
+                                   None /*kernels*/) {
+	const auto nb_processes = points.nb_processes ();
+	const auto nb_regions = points.nb_regions ();
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b_hat (nb_processes, base_size);
 
@@ -402,7 +403,7 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 	for (ProcessId l = 0; l < nb_processes; ++l) {
 		double sum_of_region_sups = 0.;
 		for (RegionId r = 0; r < nb_regions; ++r) {
-			sum_of_region_sups += sup_of_sum_of_differences_to_points (processes.process_data (l, r), phi_0_interval);
+			sum_of_region_sups += sup_of_sum_of_differences_to_points (points.data (l, r), phi_0_interval);
 		}
 		const auto b_hat_l = sum_of_region_sups * phi_normalization_factor;
 
@@ -426,10 +427,10 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
  *
  * TODO doc.
  */
-inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, HistogramBase base,
+inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBase base,
                                const std::vector<IntervalKernel> & kernels) {
-	assert (kernels.size () == processes.size ());
-	const auto nb_processes = processes.size ();
+	assert (kernels.size () == points.size ());
+	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b (nb_processes, base_size);
 
@@ -440,11 +441,11 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 	};
 	for (ProcessId m = 0; m < nb_processes; ++m) {
 		// b0
-		b.set_0 (m, double(processes[m].size ()) * std::sqrt (kernels[m].width));
+		b.set_0 (m, double(points[m].size ()) * std::sqrt (kernels[m].width));
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
-				const auto v = b_mlk (processes[m], processes[l], base.interval (k), kernels[m], kernels[l]);
+				const auto v = b_mlk (points[m], points[l], base.interval (k), kernels[m], kernels[l]);
 				b.set_lk (m, l, k, v);
 			}
 		}
@@ -452,21 +453,21 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> processes, Histogram
 	return b;
 }
 
-inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase base,
+inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase base,
                           const std::vector<IntervalKernel> & kernels) {
-	assert (kernels.size () == processes.size ());
-	const auto nb_processes = processes.size ();
+	assert (kernels.size () == points.size ());
+	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
 	const auto sqrt_delta = std::sqrt (double(base.delta));
 	MatrixG g (nb_processes, base_size);
 
-	g.set_tmax (tmax (processes));
+	g.set_tmax (tmax (points));
 
 	for (ProcessId l = 0; l < nb_processes; ++l) {
 		/* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
 		 * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l sqrt(delta) = |N_m| eta_l sqrt(delta).
 		 */
-		const auto g_lk = double(processes[l].size ()) * std::sqrt (kernels[l].width) * sqrt_delta;
+		const auto g_lk = double(points[l].size ()) * std::sqrt (kernels[l].width) * sqrt_delta;
 		for (FunctionBaseId k = 0; k < base_size; ++k) {
 			g.set_g (l, k, g_lk);
 		}
@@ -487,7 +488,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 		const auto factorized_scaling = 1. / (base.delta * std::sqrt (kernels[l].width * kernels[l2].width));
 		const auto factorized_shift = base.delta * (PointSpace (k2) - PointSpace (k));
 		const auto final_shape = scaled (factorized_scaling, shifted (factorized_shift, shape));
-		return sum_of_point_differences (processes[l], processes[l2], final_shape);
+		return sum_of_point_differences (points[l], points[l2], final_shape);
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
 	 *
@@ -531,11 +532,11 @@ inline MatrixG compute_g (span<const SortedVec<Point>> processes, HistogramBase 
 	return g;
 }
 
-inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, HistogramBase base,
+inline Matrix_M_MK1 compute_b_hat (const DataByProcessRegion<SortedVec<Point>> & points, HistogramBase base,
                                    const std::vector<IntervalKernel> & kernels) {
-	assert (kernels.size () == processes.nb_processes ());
-	const auto nb_processes = processes.nb_processes ();
-	const auto nb_regions = processes.nb_regions ();
+	assert (kernels.size () == points.nb_processes ());
+	const auto nb_processes = points.nb_processes ();
+	const auto nb_regions = points.nb_regions ();
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b_hat (nb_processes, base_size);
 
@@ -552,156 +553,13 @@ inline Matrix_M_MK1 compute_b_hat (const ProcessesRegionData & processes, Histog
 
 				double sum_of_region_sups = 0;
 				for (RegionId r = 0; r < nb_regions; ++r) {
-					sum_of_region_sups += sup_of_sum_of_differences_to_points (processes.process_data (l, r), approx);
+					sum_of_region_sups += sup_of_sum_of_differences_to_points (points.data (l, r), approx);
 				}
 				b_hat.set_lk (m, l, k, sum_of_region_sups);
 			}
 		}
 	}
 	return b_hat;
-}
-
-/******************************************************************************
- * Computations common to all cases.
- */
-
-// This struct contains computed values specific to the chosen base and kernel.
-struct CommonIntermediateValues {
-	struct B_G {
-		Matrix_M_MK1 b;
-		MatrixG g;
-	};
-	std::vector<B_G> b_g_by_region;
-	Matrix_M_MK1 b_hat;
-};
-
-template <typename Kernels>
-inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegionData &, None /*base*/,
-                                                             const Kernels &) {
-	throw std::runtime_error ("Function base is not defined");
-}
-
-template <typename Base, typename Kernels>
-inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegionData & processes, const Base & base,
-                                                             const Kernels & kernels) {
-	const auto nb_regions = processes.nb_regions ();
-	using B_G = typename CommonIntermediateValues::B_G;
-	std::vector<B_G> b_g_by_region;
-	b_g_by_region.reserve (nb_regions);
-	for (RegionId r = 0; r < nb_regions; ++r) {
-		b_g_by_region.emplace_back (B_G{compute_b (processes.processes_data_for_region (r), base, kernels),
-		                                compute_g (processes.processes_data_for_region (r), base, kernels)});
-	}
-	return {std::move (b_g_by_region), compute_b_hat (processes, base, kernels)};
-}
-
-struct LassoParameters {
-	Matrix_M_MK1 sum_of_b;
-	MatrixG sum_of_g;
-	Matrix_M_MK1 d;
-};
-
-inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues & values, double gamma) {
-	const auto check_b_g = [](const Eigen::MatrixXd & m, const string_view what, RegionId r) {
-		if (!m.allFinite ()) {
-#ifndef NDEBUG
-			// Print matrix in debug mode
-			fmt::print (stderr, "##### Bad values for {}[region={:2}] #####\n", what, r);
-			fmt::print (stderr, "{}\n", m);
-			fmt::print (stderr, "#########################################\n");
-#endif
-			throw std::runtime_error (fmt::format ("{}[region={}] has non finite values", what, r));
-		}
-	};
-
-	const auto nb_regions = values.b_g_by_region.size ();
-	const auto nb_processes = values.b_hat.nb_processes;
-	const auto base_size = values.b_hat.base_size;
-
-	/* Generate values combining all regions:
-	 * - sums of B and G.
-	 * - V_hat = 1/R^2 * sum_r B[r]^2 (component-wise)
-	 */
-	Matrix_M_MK1 sum_of_b (nb_processes, base_size);
-	MatrixG sum_of_g (nb_processes, base_size);
-	Matrix_M_MK1 v_hat_r2 (nb_processes, base_size); // V_hat * R^2
-
-	sum_of_b.inner.setZero ();
-	sum_of_g.inner.setZero ();
-	v_hat_r2.m_lk_values ().setZero ();
-
-	for (RegionId r = 0; r < nb_regions; ++r) {
-		const auto & v = values.b_g_by_region[r];
-		check_b_g (v.b.inner, "B", r);
-		check_b_g (v.g.inner, "G", r);
-		sum_of_b.inner += v.b.inner;
-		v_hat_r2.m_lk_values ().array () += v.b.m_lk_values ().array ().square ();
-		sum_of_g.inner += v.g.inner;
-	}
-
-	/* Compute D, the penalty for the lassoshooting.
-	 * V_hat_mkl is computed without dividing by R^2 so add the division to factor.
-	 */
-	const auto log_factor = std::log (nb_processes + nb_processes * nb_processes * base_size);
-	const auto v_hat_factor = (1. / double(nb_regions * nb_regions)) * 2. * gamma * log_factor;
-	const auto b_hat_factor = gamma * log_factor / 3.;
-
-#ifndef NDEBUG
-	// Compare v_hat and b_hat parts of d.
-	{
-		auto v_hat_part = (v_hat_factor * v_hat_r2.m_lk_values ().array ()).sqrt ();
-		auto b_hat_part = b_hat_factor * values.b_hat.m_lk_values ().array ();
-		const Eigen::IOFormat format (3, 0, "\t"); // 3 = precision in digits, this is enough
-		fmt::print (stderr, "##### d = v_hat_part + b_hat_part: value of v_hat_part / b_hat_part #####\n");
-		fmt::print (stderr, "{}\n", (v_hat_part / b_hat_part).format (format));
-	}
-#endif
-
-	Matrix_M_MK1 d (nb_processes, base_size);
-	d.m_0_values ().setZero (); // No penalty for constant component of estimators
-	d.m_lk_values () =
-	    (v_hat_factor * v_hat_r2.m_lk_values ().array ()).sqrt () + b_hat_factor * values.b_hat.m_lk_values ().array ();
-
-	return {std::move (sum_of_b), std::move (sum_of_g), std::move (d)};
-}
-
-#ifndef NDEBUG
-#include <Eigen/LU> // We need extra Eigen includes for matrix inversion.
-#endif
-
-inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p) {
-	assert (p.sum_of_b.inner.allFinite ());
-	assert (p.sum_of_g.inner.allFinite ());
-	assert (p.d.inner.allFinite ());
-#ifndef NDEBUG
-	fmt::print (stderr, "############################### sum B ###################################\n");
-	fmt::print (stderr, "{}\n", p.sum_of_b.inner);
-	fmt::print (stderr, "############################### sum G ###################################\n");
-	fmt::print (stderr, "{}\n", p.sum_of_g.inner);
-	fmt::print (stderr, "################################# D #####################################\n");
-	fmt::print (stderr, "{}\n", p.d.inner);
-	fmt::print (stderr, "############################### G^-1*B ##################################\n");
-	const auto inverse_g = p.sum_of_g.inner.fullPivLu ();
-	if (inverse_g.isInvertible ()) {
-		const Eigen::MatrixXd solution = inverse_g.solve (p.sum_of_b.inner);
-		if ((p.sum_of_g.inner * solution).isApprox (p.sum_of_b.inner)) {
-			fmt::print (stderr, "{}\n", solution);
-		} else {
-			fmt::print (stderr, "G * a = B has no solution\n");
-		}
-	} else {
-		fmt::print (stderr, "G is not invertible\n");
-	}
-	fmt::print (stderr, "#########################################################################\n");
-#endif
-	const auto nb_processes = p.sum_of_b.nb_processes;
-	const auto base_size = p.sum_of_b.base_size;
-	Matrix_M_MK1 a (nb_processes, base_size);
-	for (ProcessId m = 0; m < nb_processes; ++m) {
-		const double lambda = 1.;
-		a.values_for_m (m) = lassoshooting (p.sum_of_g.inner, p.sum_of_b.values_for_m (m), p.d.values_for_m (m), lambda);
-	}
-	return a;
 }
 
 /******************************************************************************
@@ -870,4 +728,141 @@ inline CommonIntermediateValues compute_intermediate_values (const ProcessesRegi
 	b_hat.inner.setZero ();
 
 	return {std::move (b_g_by_region), std::move (b_hat)};
+}
+
+/******************************************************************************
+ * Computations common to all cases.
+ */
+
+// This struct contains computed values specific to the chosen base and kernel.
+struct CommonIntermediateValues {
+	struct B_G {
+		Matrix_M_MK1 b;
+		MatrixG g;
+	};
+	std::vector<B_G> b_g_by_region;
+	Matrix_M_MK1 b_hat;
+};
+
+template <typename Base, typename Kernels>
+inline CommonIntermediateValues compute_intermediate_values (const DataByProcessRegion<SortedVec<Point>> & points,
+                                                             const Base & base, const Kernels & kernels) {
+	const auto nb_regions = points.nb_regions ();
+	using B_G = typename CommonIntermediateValues::B_G;
+	std::vector<B_G> b_g_by_region;
+	b_g_by_region.reserve (nb_regions);
+	for (RegionId r = 0; r < nb_regions; ++r) {
+		b_g_by_region.emplace_back (B_G{compute_b (points.data_for_region (r), base, kernels),
+		                                compute_g (points.data_for_region (r), base, kernels)});
+	}
+	return {std::move (b_g_by_region), compute_b_hat (points, base, kernels)};
+}
+
+struct LassoParameters {
+	Matrix_M_MK1 sum_of_b;
+	MatrixG sum_of_g;
+	Matrix_M_MK1 d;
+};
+
+inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues & values, double gamma) {
+	const auto check_b_g = [](const Eigen::MatrixXd & m, const string_view what, RegionId r) {
+		if (!m.allFinite ()) {
+#ifndef NDEBUG
+			// Print matrix in debug mode
+			fmt::print (stderr, "##### Bad values for {}[region={:2}] #####\n", what, r);
+			fmt::print (stderr, "{}\n", m);
+			fmt::print (stderr, "#########################################\n");
+#endif
+			throw std::runtime_error (fmt::format ("{}[region={}] has non finite values", what, r));
+		}
+	};
+
+	const auto nb_regions = values.b_g_by_region.size ();
+	const auto nb_processes = values.b_hat.nb_processes;
+	const auto base_size = values.b_hat.base_size;
+
+	/* Generate values combining all regions:
+	 * - sums of B and G.
+	 * - V_hat = 1/R^2 * sum_r B[r]^2 (component-wise)
+	 */
+	Matrix_M_MK1 sum_of_b (nb_processes, base_size);
+	MatrixG sum_of_g (nb_processes, base_size);
+	Matrix_M_MK1 v_hat_r2 (nb_processes, base_size); // V_hat * R^2
+
+	sum_of_b.inner.setZero ();
+	sum_of_g.inner.setZero ();
+	v_hat_r2.m_lk_values ().setZero ();
+
+	for (RegionId r = 0; r < nb_regions; ++r) {
+		const auto & v = values.b_g_by_region[r];
+		check_b_g (v.b.inner, "B", r);
+		check_b_g (v.g.inner, "G", r);
+		sum_of_b.inner += v.b.inner;
+		v_hat_r2.m_lk_values ().array () += v.b.m_lk_values ().array ().square ();
+		sum_of_g.inner += v.g.inner;
+	}
+
+	/* Compute D, the penalty for the lassoshooting.
+	 * V_hat_mkl is computed without dividing by R^2 so add the division to factor.
+	 */
+	const auto log_factor = std::log (nb_processes + nb_processes * nb_processes * base_size);
+	const auto v_hat_factor = (1. / double(nb_regions * nb_regions)) * 2. * gamma * log_factor;
+	const auto b_hat_factor = gamma * log_factor / 3.;
+
+#ifndef NDEBUG
+	// Compare v_hat and b_hat parts of d.
+	{
+		auto v_hat_part = (v_hat_factor * v_hat_r2.m_lk_values ().array ()).sqrt ();
+		auto b_hat_part = b_hat_factor * values.b_hat.m_lk_values ().array ();
+		const Eigen::IOFormat format (3, 0, "\t"); // 3 = precision in digits, this is enough
+		fmt::print (stderr, "##### d = v_hat_part + b_hat_part: value of v_hat_part / b_hat_part #####\n");
+		fmt::print (stderr, "{}\n", (v_hat_part / b_hat_part).format (format));
+	}
+#endif
+
+	Matrix_M_MK1 d (nb_processes, base_size);
+	d.m_0_values ().setZero (); // No penalty for constant component of estimators
+	d.m_lk_values () =
+	    (v_hat_factor * v_hat_r2.m_lk_values ().array ()).sqrt () + b_hat_factor * values.b_hat.m_lk_values ().array ();
+
+	return {std::move (sum_of_b), std::move (sum_of_g), std::move (d)};
+}
+
+#ifndef NDEBUG
+#include <Eigen/LU> // We need extra Eigen includes for matrix inversion.
+#endif
+
+inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p) {
+	assert (p.sum_of_b.inner.allFinite ());
+	assert (p.sum_of_g.inner.allFinite ());
+	assert (p.d.inner.allFinite ());
+#ifndef NDEBUG
+	fmt::print (stderr, "############################### sum B ###################################\n");
+	fmt::print (stderr, "{}\n", p.sum_of_b.inner);
+	fmt::print (stderr, "############################### sum G ###################################\n");
+	fmt::print (stderr, "{}\n", p.sum_of_g.inner);
+	fmt::print (stderr, "################################# D #####################################\n");
+	fmt::print (stderr, "{}\n", p.d.inner);
+	fmt::print (stderr, "############################### G^-1*B ##################################\n");
+	const auto inverse_g = p.sum_of_g.inner.fullPivLu ();
+	if (inverse_g.isInvertible ()) {
+		const Eigen::MatrixXd solution = inverse_g.solve (p.sum_of_b.inner);
+		if ((p.sum_of_g.inner * solution).isApprox (p.sum_of_b.inner)) {
+			fmt::print (stderr, "{}\n", solution);
+		} else {
+			fmt::print (stderr, "G * a = B has no solution\n");
+		}
+	} else {
+		fmt::print (stderr, "G is not invertible\n");
+	}
+	fmt::print (stderr, "#########################################################################\n");
+#endif
+	const auto nb_processes = p.sum_of_b.nb_processes;
+	const auto base_size = p.sum_of_b.base_size;
+	Matrix_M_MK1 a (nb_processes, base_size);
+	for (ProcessId m = 0; m < nb_processes; ++m) {
+		const double lambda = 1.;
+		a.values_for_m (m) = lassoshooting (p.sum_of_g.inner, p.sum_of_b.values_for_m (m), p.d.values_for_m (m), lambda);
+	}
+	return a;
 }

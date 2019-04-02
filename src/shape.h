@@ -59,6 +59,9 @@ template <typename Inner> struct Reversed {
 	ClosedInterval non_zero_domain () const { return -inner.non_zero_domain (); }
 	double operator() (Point x) const { return inner (-x); }
 };
+template <typename Inner> inline auto reversed (const Inner & inner) {
+	return Reversed<Inner>{inner};
+}
 
 // Temporal shift of a shape: move it forward by 'shift'.
 template <typename Inner> struct Shifted {
@@ -68,6 +71,12 @@ template <typename Inner> struct Shifted {
 	ClosedInterval non_zero_domain () const { return shift + inner.non_zero_domain (); }
 	double operator() (Point x) const { return inner (x - shift); }
 };
+template <typename Inner> inline auto shifted (PointSpace shift, const Inner & inner) {
+	return Shifted<Inner>{shift, inner};
+}
+template <typename Inner> inline auto shifted (PointSpace shift, const Shifted<Inner> & s) {
+	return shifted (shift + s.shift, s.inner);
+}
 
 // Scale a shape on the vertical axis by 'scale'.
 template <typename Inner> struct Scaled {
@@ -77,6 +86,12 @@ template <typename Inner> struct Scaled {
 	ClosedInterval non_zero_domain () const { return inner.non_zero_domain (); }
 	double operator() (Point x) const { return scale * inner (x); }
 };
+template <typename Inner> inline auto scaled (double scale, const Inner & inner) {
+	return Scaled<Inner>{scale, inner};
+}
+template <typename Inner> inline auto scaled (double scale, const Scaled<Inner> & s) {
+	return scaled (scale * s.scale, s.inner);
+}
 
 // Addition of multiple sub-shapes
 inline double add_doubles (double x) {
@@ -104,39 +119,20 @@ template <typename... Shapes> struct Add {
 		}
 	}
 };
-
-/* Priority value for combinator application.
- * This is used to force order of simplifications in convolution(a,b) or other modificators.
- * Without it, we have multiple valid overloads and ambiguity, leading to a compile error.
- * The higher the priority, the quickest a rule is applied.
- * FIXME simplify with set of overloads ?
- */
-template <typename T> struct Priority { static constexpr int value = 0; };
-
-template <typename Inner> struct Priority<Shifted<Inner>> { static constexpr int value = 2; };
-template <typename Inner> struct Priority<Scaled<Inner>> { static constexpr int value = 3; };
-
-template <typename Inner> inline auto reversed (const Inner & inner) {
-	return Reversed<Inner>{inner};
-}
-
-template <typename Inner> inline auto shifted (PointSpace shift, const Inner & inner) {
-	return Shifted<Inner>{shift, inner};
-}
-template <typename Inner> inline auto shifted (PointSpace shift, const Shifted<Inner> & s) {
-	return shifted (shift + s.shift, s.inner);
-}
-
-template <typename Inner> inline auto scaled (double scale, const Inner & inner) {
-	return Scaled<Inner>{scale, inner};
-}
-template <typename Inner> inline auto scaled (double scale, const Scaled<Inner> & s) {
-	return scaled (scale * s.scale, s.inner);
-}
-
 template <typename... Shapes> inline auto add (const Shapes &... shapes) {
 	return Add<Shapes...> (shapes...);
 }
+
+/* Simplification of expressions.
+ *
+ * convolution(a,b) is defined for each specific shape pair.
+ * Shapeis modified by combinators are handled using the convolution rules, like:
+ * convolution(shifted(a), b) = shifted(convolution(a,b))
+ * convolution(a, scaled(b)) = scaled(convolution(a,b))
+ * etc,...
+ *
+ * Simplifications for other operations are defined in the same way, like for component().
+ */
 
 // Component decomposition
 template <typename Inner, typename ComponentTag> inline auto component (const Scaled<Inner> & shape, ComponentTag tag) {
@@ -155,21 +151,40 @@ template <typename Inner> inline auto interval_approximation (const Shifted<Inne
 	return shifted (shape.shift, interval_approximation (shape.inner));
 }
 
-// Convolution simplifications: propagate combinators to the outer levels
-template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 2)>>
+/* Priority system for simplification of convolution.
+ *
+ * Cases like convolution(shifted(a), scaled(b)) can cause overload conflicts.
+ * Both rules for simplifying shifted(a) or scaled(b) parts are valid.
+ * However the compiler needs to be told which one to apply first.
+ * This is done by defining a "priority" for combinators, and "disabling" rules if another one has higher priority.
+ */
+
+// Basic priorities. Scale has the highest, in order to be extracted to the outermost parts of expressions.
+constexpr int default_priority = 0;
+constexpr int shifted_priority = 1;
+constexpr int scaled_priority = 2;
+
+// Get the priority value of a shape type.
+template <typename T> struct Priority { static constexpr int value = default_priority; };
+template <typename Inner> struct Priority<Shifted<Inner>> { static constexpr int value = shifted_priority; };
+template <typename Inner> struct Priority<Scaled<Inner>> { static constexpr int value = scaled_priority; };
+
+// Convolution simplifications with shift.
+template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < shifted_priority)>>
 inline auto convolution (const Shifted<L> & lhs, const R & rhs) {
 	return shifted (lhs.shift, convolution (lhs.inner, rhs));
 }
-template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= 2)>>
+template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= shifted_priority)>>
 inline auto convolution (const L & lhs, const Shifted<R> & rhs) {
 	return shifted (rhs.shift, convolution (lhs, rhs.inner));
 }
 
-template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < 3)>>
+// Convolution simplifications with scaling.
+template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < scaled_priority)>>
 inline auto convolution (const Scaled<L> & lhs, const R & rhs) {
 	return scaled (lhs.scale, convolution (lhs.inner, rhs));
 }
-template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= 3)>>
+template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= scaled_priority)>>
 inline auto convolution (const L & lhs, const Scaled<R> & rhs) {
 	return scaled (rhs.scale, convolution (lhs, rhs.inner));
 }
