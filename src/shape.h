@@ -151,7 +151,7 @@ template <typename Inner> inline auto interval_approximation (const Shifted<Inne
 	return shifted (shape.shift, interval_approximation (shape.inner));
 }
 
-/* Priority system for simplification of convolution.
+/* Priority system for simplification of convolution/cross_correlation.
  *
  * Cases like convolution(shifted(a), scaled(b)) can cause overload conflicts.
  * Both rules for simplifying shifted(a) or scaled(b) parts are valid.
@@ -187,6 +187,26 @@ inline auto convolution (const Scaled<L> & lhs, const R & rhs) {
 template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= scaled_priority)>>
 inline auto convolution (const L & lhs, const Scaled<R> & rhs) {
 	return scaled (rhs.scale, convolution (lhs, rhs.inner));
+}
+
+// Cross-correlation simplifications with shift.
+template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < shifted_priority)>>
+inline auto cross_correlation (const Shifted<L> & lhs, const R & rhs) {
+	return shifted (-lhs.shift, cross_correlation (lhs.inner, rhs));
+}
+template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= shifted_priority)>>
+inline auto cross_correlation (const L & lhs, const Shifted<R> & rhs) {
+	return shifted (rhs.shift, cross_correlation (lhs, rhs.inner));
+}
+
+// Cross-correlation simplifications with scaling.
+template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < scaled_priority)>>
+inline auto cross_correlation (const Scaled<L> & lhs, const R & rhs) {
+	return scaled (lhs.scale, cross_correlation (lhs.inner, rhs));
+}
+template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= scaled_priority)>>
+inline auto cross_correlation (const L & lhs, const Scaled<R> & rhs) {
+	return scaled (rhs.scale, cross_correlation (lhs, rhs.inner));
 }
 
 /******************************************************************************
@@ -296,6 +316,9 @@ inline auto component (const Trapezoid & trapezoid, Trapezoid::RightTriangle) {
 
 inline Trapezoid convolution (const IntervalIndicator & left, const IntervalIndicator & right) {
 	return Trapezoid{std::min (left.half_width, right.half_width) * 2, std::abs (left.half_width - right.half_width)};
+}
+inline Trapezoid cross_correlation (const IntervalIndicator & left, const IntervalIndicator & right) {
+	return convolution (left, right); // Indicator is symmetric, identical by time inversion.
 }
 
 inline auto interval_approximation (const Trapezoid & trapezoid) {
@@ -472,5 +495,8 @@ inline auto convolution (const Trapezoid & lhs, const Trapezoid & rhs) {
 	    convolution (component (lhs, left_part), component (rhs, right_part)),
 	    convolution (component (lhs, central_part), component (rhs, right_part)),
 	    convolution (component (lhs, right_part), component (rhs, right_part)));
+}
+inline auto cross_correlation (const Trapezoid & lhs, const Trapezoid & rhs) {
+	return convolution (lhs, rhs); // Trapezoid is symmetric, identical by time inversion
 }
 } // namespace shape

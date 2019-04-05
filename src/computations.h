@@ -516,20 +516,9 @@ inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase bas
 
 	const auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
 		// V = sum_{x_l,x_l2} corr(conv(W_l,phi_k),conv(W_l2,phi_k2)) (x_l-x_l2)
-		// V = factorized_scaling * sum_{x_l,x_l2} shifted((k2-k)*delta, conv(trapezoid(l), trapezoid(l2))) (x_l-x_l2)
-
-		// compute the shape
-		const auto phi_indicator = shape::IntervalIndicator::with_width (base.delta);
-		const auto kernel_indicator = shape::IntervalIndicator::with_width (kernels[l].width);
-		const auto kernel2_indicator = shape::IntervalIndicator::with_width (kernels[l2].width);
-		const auto trapezoid = convolution (kernel_indicator, phi_indicator);
-		const auto trapezoid2 = convolution (kernel2_indicator, phi_indicator);
-		const auto shape = convolution (trapezoid, trapezoid2);
-		// Apply final transformations and compute sum
-		const auto factorized_scaling = 1. / (base.delta * std::sqrt (kernels[l].width * kernels[l2].width));
-		const auto factorized_shift = base.delta * (PointSpace (k2) - PointSpace (k));
-		const auto final_shape = scaled (factorized_scaling, shifted (factorized_shift, shape));
-		return sum_of_point_differences (points[l], points[l2], final_shape);
+		const auto shape = cross_correlation (convolution (to_shape (kernels[l]), to_shape (base.interval (k))),
+		                                      convolution (to_shape (kernels[l2]), to_shape (base.interval (k2))));
+		return sum_of_point_differences (points[l], points[l2], shape);
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
 	 *
@@ -700,18 +689,9 @@ inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase bas
 		double sum = 0.;
 		for (size_t li = 0; li < points[l].size (); ++li) {
 			for (size_t l2i = 0; l2i < points[l2].size (); ++l2i) {
-				// compute the shape
-				const auto phi_indicator = shape::IntervalIndicator::with_width (base.delta);
-				const auto kernel_indicator = shape::IntervalIndicator::with_width (kernels[l][li].width);
-				const auto kernel2_indicator = shape::IntervalIndicator::with_width (kernels[l2][l2i].width);
-				const auto trapezoid = convolution (kernel_indicator, phi_indicator);
-				const auto trapezoid2 = convolution (kernel2_indicator, phi_indicator);
-				const auto shape = convolution (trapezoid, trapezoid2);
-				// Apply final transformations and compute sum
-				const auto factorized_scaling = 1. / (base.delta * std::sqrt (kernels[l][li].width * kernels[l2][l2i].width));
-				const auto factorized_shift = base.delta * (PointSpace (k2) - PointSpace (k));
-				const auto final_shape = scaled (factorized_scaling, shifted (factorized_shift, shape));
-				sum += final_shape (points[l][li] - points[l2][l2i]);
+				const auto shape = cross_correlation (convolution (to_shape (kernels[l][li]), to_shape (base.interval (k))),
+				                                      convolution (to_shape (kernels[l2][l2i]), to_shape (base.interval (k2))));
+				sum += shape (points[l][li] - points[l2][l2i]);
 			}
 		}
 		return sum;
