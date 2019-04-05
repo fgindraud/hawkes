@@ -218,7 +218,8 @@ inline auto to_shape (HistogramBase::Interval i) {
 	return shape::scaled (1. / std::sqrt (delta), shape::shifted (center, shape::IntervalIndicator::with_width (delta)));
 }
 inline auto to_shape (IntervalKernel kernel) {
-	return shape::scaled (normalization_factor (kernel), shape::IntervalIndicator::with_width (kernel.width));
+	return shape::scaled (normalization_factor (kernel),
+	                      shape::shifted (kernel.center, shape::IntervalIndicator::with_width (kernel.width)));
 }
 
 /******************************************************************************

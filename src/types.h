@@ -98,16 +98,18 @@ inline double normalization_factor (HistogramBase base) {
  * Kernels.
  */
 
-// Interval kernel : 1_[-width/2, width/2](x) (L2-normalized)
+// Interval kernel : 1_[-width/2 + center, width/2 + center](x) (L2-normalized)
+// Center allow this one struct to support both centered (center = 0) and uncentered intervals.
 struct IntervalKernel {
 	PointSpace width; // ]0, inf[ due to the normalization factor
+	Point center;
 
-	IntervalKernel (PointSpace width) : width (width) { assert (width > 0.); }
+	IntervalKernel (PointSpace width, Point center) : width (width), center (center) { assert (width > 0.); }
+	IntervalKernel (PointSpace width) : IntervalKernel (width, 0) {}
 };
 inline double normalization_factor (IntervalKernel kernel) {
 	return 1. / std::sqrt (kernel.width);
 }
-// TODO extend to support both [-w/2,w/2] and [0,w/2]. center+shift ?
 
 /******************************************************************************
  * Computation matrices.
