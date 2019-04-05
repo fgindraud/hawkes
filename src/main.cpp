@@ -60,8 +60,9 @@ enum class KernelType {
 	IntervalRightHalf, // L2-normalized indicator function on [0, width/2]
 };
 
-using BaseOption = variant<None, HistogramBase>;
-using BaseType = variant<HistogramBase>;
+using BaseType = variant<HistogramBase // phi_k = L2-normalized indicator function for ]kd,(k+1)d]
+                         >;
+using BaseOption = variant<None, HistogramBase>; // Option type, maybe undefined (None).
 
 enum class ProcessDirection {
 	Forward,  // Keep points coordinates
@@ -137,6 +138,27 @@ extract_point_lists (const DataByProcessRegion<SortedVec<PointInterval>> & inter
 	return points;
 }
 
+template <typename WidthToKernelFunc>
+static auto get_heterogeneous_kernels (const DataByProcessRegion<SortedVec<PointInterval>> & intervals,
+                                       WidthToKernelFunc width_to_kernel) {
+	using KernelT = decltype (width_to_kernel (PointSpace ()));
+	const auto nb_processes = intervals.nb_processes ();
+	const auto nb_regions = intervals.nb_regions ();
+	DataByProcessRegion<std::vector<KernelT>> kernels (nb_processes, nb_regions);
+	for (ProcessId m = 0; m < nb_processes; ++m) {
+		for (RegionId r = 0; r < nb_regions; ++r) {
+			const auto & region_intervals = intervals.data (m, r);
+			std::vector<KernelT> region_kernels;
+			region_kernels.reserve (region_intervals.size ());
+			for (const auto & interval : region_intervals) {
+				region_kernels.emplace_back (width_to_kernel (interval.width));
+			}
+			kernels.data (m, r) = std::move (region_kernels);
+		}
+	}
+	return kernels;
+}
+
 static std::vector<PointSpace>
 median_interval_widths (const DataByProcessRegion<SortedVec<PointInterval>> & intervals) {
 	const auto compute_median_width = [&intervals](ProcessId m) {
@@ -181,13 +203,51 @@ median_interval_widths (const DataByProcessRegion<SortedVec<PointInterval>> & in
 	return medians;
 }
 
+static variant<None, std::vector<IntervalKernel>, DataByProcessRegion<std::vector<IntervalKernel>>>
+determine_kernel_setup (const DataByProcessRegion<SortedVec<PointInterval>> & intervals, KernelConfig config,
+                        KernelType kernel_type,
+                        Optional<std::vector<PointSpace>> & override_homogeneous_kernel_widths) {
+	if (kernel_type != KernelType::Interval) {
+		throw std::runtime_error ("interval is the only supported kernel type"); // FIXME
+	}
+
+	auto get_homogeneous_kernel_widths = [&]() {
+		// Use explicit widths, or the median of input data for each process.
+		if (override_homogeneous_kernel_widths) {
+			if (override_homogeneous_kernel_widths.value.size () != intervals.nb_processes ()) {
+				throw std::runtime_error (
+				    fmt::format ("Explicit kernel widths number does not match number of processes: expected {}, got {}",
+				                 intervals.nb_processes (), override_homogeneous_kernel_widths.value.size ()));
+			}
+			return std::move (override_homogeneous_kernel_widths.value);
+		} else {
+			auto widths = median_interval_widths (intervals);
+			for (auto & w : widths) {
+				w = std::max (w, 1.); // FIXME cannot be zero, use 1. as a minimum
+			}
+			fmt::print (stderr, "Using deduced kernel widths: {}\n", fmt::join (widths, ", "));
+			return widths;
+		}
+	};
+
+	if (config == KernelConfig::None) {
+		return None{};
+	} else if (config == KernelConfig::Homogeneous) {
+		return map_to_vector (get_homogeneous_kernel_widths (), [](PointSpace w) { return IntervalKernel (w); });
+	} else if (config == KernelConfig::Heterogeneous) {
+		return get_heterogeneous_kernels (intervals, [](PointSpace w) { return IntervalKernel (w); });
+	} else {
+		throw std::logic_error ("Unknown kernel config option");
+	}
+}
+
 int main (int argc, char * argv[]) {
 	bool verbose = false;
 	double gamma = 1.;
 
 	BaseOption base_option = None{}; // Base choice starts undefined and MUST be defined
 	KernelConfig kernel_config = KernelConfig::None;
-	KernelType kernel_type = KernelType::Interval;
+	KernelType kernel_type = KernelType::Interval; // Defaults to centered intervals
 	Optional<std::vector<PointSpace>> override_homogeneous_kernel_widths;
 
 	std::vector<string_view> current_region_names;
@@ -287,46 +347,20 @@ int main (int argc, char * argv[]) {
 		// Post processing: determine kernel setup, generate sorted points lists
 		const auto post_processing_start = instant ();
 		const auto points = extract_point_lists (intervals);
-		const auto kernels = [&]() -> variant<None, std::vector<IntervalKernel>> {
-			// Helper: choose the source of kernel widths (explicit or deduced).
-			// widths must be strictly positive.
-			auto get_kernel_widths = [&]() -> std::vector<PointSpace> {
-				if (override_homogeneous_kernel_widths) {
-					if (override_homogeneous_kernel_widths.value.size () != process_files.size ()) {
-						throw std::runtime_error (
-						    fmt::format ("Explicit kernel widths number does not match number of processes: expected {}, got {}",
-						                 process_files.size (), override_homogeneous_kernel_widths.value.size ()));
-					}
-					return std::move (override_homogeneous_kernel_widths.value);
-				} else {
-					auto widths = median_interval_widths (intervals);
-					for (auto & w : widths) {
-						w = std::max (w, 1.); // FIXME cannot be zero, what should be a minimum ??
-					}
-					fmt::print (stderr, "Using deduced kernel widths: {}\n", fmt::join (widths, ", "));
-					return widths;
-				}
-			};
-
-			if (kernel_type == KernelType::Interval) {
-				return map_to_vector (get_kernel_widths (),
-				                      [](PointSpace width) -> IntervalKernel { return IntervalKernel{width}; });
-			} else {
-				return None{};
-			}
-		}();
+		const auto kernels =
+		    determine_kernel_setup (intervals, kernel_config, kernel_type, override_homogeneous_kernel_widths);
 		const auto post_processing_end = instant ();
 		fmt::print (stderr, "Post processing done: time = {}\n",
 		            duration_string (post_processing_end - post_processing_start));
 
 		// Compute base/kernel specific values: B, G, B_hat
+		// Ths visit() call generates an if/else if/.../else block for all combinations of base and kernel setup.
+		// For each case, an overload of compute_intermediate_values indicated by its argument types does the computation.
 		const auto compute_b_g_start = instant ();
-		const auto intermediate_values = visit (
-		    [&points](const auto & base, const auto & kernels) {
-			    // Code to compute intermediate values for each combination of base and kernels.
-			    return compute_intermediate_values (points, base, kernels);
-		    },
-		    base, kernels);
+		const auto intermediate_values =
+		    visit ([&points](const auto & base,
+		                     const auto & kernels) { return compute_intermediate_values (points, base, kernels); },
+		           base, kernels);
 		const auto compute_b_g_end = instant ();
 		fmt::print (stderr, "Computing B and G matrice done: time = {}\n",
 		            duration_string (compute_b_g_end - compute_b_g_start));
@@ -356,6 +390,7 @@ int main (int argc, char * argv[]) {
 			};
 			visit (PrintBaseLine{}, base);
 
+#if 0
 			struct PrintKernelLine {
 				void operator() (None) const { fmt::print ("# kernels = None\n"); }
 				void operator() (const std::vector<IntervalKernel> & kernels) const {
@@ -364,6 +399,7 @@ int main (int argc, char * argv[]) {
 				}
 			};
 			visit (PrintKernelLine{}, kernels);
+#endif // FIXME restore
 
 			fmt::print ("# gamma = {}\n", gamma);
 

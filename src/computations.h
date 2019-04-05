@@ -2,10 +2,37 @@
 
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 
 #include "lassoshooting.h"
 #include "shape.h"
 #include "types.h"
+
+/******************************************************************************
+ * Compute B, G, B_hat intermediate values.
+ *
+ * This file defines overloads of compute_intermediate_values for many cases.
+ * Each case is defined by the type of arguments:
+ * - function base,
+ * - kernel width configuration,
+ * - kernel type.
+ * All cases returns the same type of values, but use the specific computation code for this case.
+ * A default version returns a "not implemented" error, but with no text for now.
+ */
+
+// Common struct storing computation results.
+struct CommonIntermediateValues {
+	std::vector<Matrix_M_MK1> b_by_region;
+	std::vector<MatrixG> g_by_region;
+	Matrix_M_MK1 b_hat;
+};
+
+// Default case for compute_intermediate_values
+template <typename Base, typename KernelWidths, typename KernelType>
+inline CommonIntermediateValues compute_intermediate_values (const DataByProcessRegion<SortedVec<Point>> & /*points*/,
+                                                             const Base &, const KernelWidths &, const KernelType &) {
+	throw std::runtime_error ("Unsupported base/kernel configuration combination");
+}
 
 /******************************************************************************
  * Generic building blocks useful for all cases.
@@ -194,16 +221,6 @@ inline auto to_shape (IntervalKernel kernel) {
 	return shape::scaled (normalization_factor (kernel), shape::IntervalIndicator::with_width (kernel.width));
 }
 
-// This struct contains computed values specific to the chosen base and kernel.
-struct CommonIntermediateValues {
-	struct B_G {
-		Matrix_M_MK1 b;
-		MatrixG g;
-	};
-	std::vector<B_G> b_g_by_region;
-	Matrix_M_MK1 b_hat;
-};
-
 /******************************************************************************
  * Basic histogram case.
  * Due to the simplicity of the functions involved, the computations can use efficient specialized algorithms.
@@ -311,7 +328,7 @@ inline double g_ll2kk2_histogram_integral_denormalized (const SortedVec<Point> &
 }
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBase base, None /*kernels*/) {
+inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBase base) {
 	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
 	const auto phi_normalization_factor = normalization_factor (base);
@@ -332,7 +349,7 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBas
 }
 
 // Complexity: O( M^2 * K * max(|N_m|) ).
-inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase base, None /*kernels*/) {
+inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase base) {
 	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
 	const auto sqrt_delta = std::sqrt (base.delta);
@@ -397,8 +414,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase bas
 
 // Complexity: O( M^2 * K + M * max(|N_m|) )
 // Computation is exact (sup can be evaluated perfectly).
-inline Matrix_M_MK1 compute_b_hat (const DataByProcessRegion<SortedVec<Point>> & points, HistogramBase base,
-                                   None /*kernels*/) {
+inline Matrix_M_MK1 compute_b_hat (const DataByProcessRegion<SortedVec<Point>> & points, HistogramBase base) {
 	const auto nb_processes = points.nb_processes ();
 	const auto nb_regions = points.nb_regions ();
 	const auto base_size = base.base_size;
@@ -424,6 +440,21 @@ inline Matrix_M_MK1 compute_b_hat (const DataByProcessRegion<SortedVec<Point>> &
 		}
 	}
 	return b_hat;
+}
+
+inline CommonIntermediateValues compute_intermediate_values (const DataByProcessRegion<SortedVec<Point>> & points,
+                                                             const HistogramBase & base, None /*kernels*/) {
+	const auto nb_regions = points.nb_regions ();
+	std::vector<Matrix_M_MK1> b_by_region;
+	std::vector<MatrixG> g_by_region;
+	b_by_region.reserve (nb_regions);
+	g_by_region.reserve (nb_regions);
+	for (RegionId r = 0; r < nb_regions; ++r) {
+		fmt::print (stderr, "Region {}/{}\n", r + 1, nb_regions);
+		b_by_region.emplace_back (compute_b (points.data_for_region (r), base));
+		g_by_region.emplace_back (compute_g (points.data_for_region (r), base));
+	}
+	return {std::move (b_by_region), std::move (g_by_region), compute_b_hat (points, base)};
 }
 
 /******************************************************************************
@@ -572,6 +603,22 @@ inline Matrix_M_MK1 compute_b_hat (const DataByProcessRegion<SortedVec<Point>> &
 	return b_hat;
 }
 
+inline CommonIntermediateValues compute_intermediate_values (const DataByProcessRegion<SortedVec<Point>> & points,
+                                                             const HistogramBase & base,
+                                                             const std::vector<IntervalKernel> & kernels) {
+	const auto nb_regions = points.nb_regions ();
+	std::vector<Matrix_M_MK1> b_by_region;
+	std::vector<MatrixG> g_by_region;
+	b_by_region.reserve (nb_regions);
+	g_by_region.reserve (nb_regions);
+	for (RegionId r = 0; r < nb_regions; ++r) {
+		fmt::print (stderr, "Region {}/{}\n", r + 1, nb_regions);
+		b_by_region.emplace_back (compute_b (points.data_for_region (r), base, kernels));
+		g_by_region.emplace_back (compute_g (points.data_for_region (r), base, kernels));
+	}
+	return {std::move (b_by_region), std::move (g_by_region), compute_b_hat (points, base, kernels)};
+}
+
 /******************************************************************************
  * FIXME experimental: heterogeneous kernels (kernel width for each point)
  * Data set is set of {point, kernel-width} instead of just points.
@@ -715,40 +762,24 @@ inline CommonIntermediateValues
 compute_intermediate_values (const DataByProcessRegion<SortedVec<Point>> & points, const HistogramBase & base,
                              const DataByProcessRegion<std::vector<IntervalKernel>> & kernels) {
 	const auto nb_regions = points.nb_regions ();
-	using B_G = typename CommonIntermediateValues::B_G;
-	std::vector<B_G> b_g_by_region;
-	b_g_by_region.reserve (nb_regions);
+	std::vector<Matrix_M_MK1> b_by_region;
+	std::vector<MatrixG> g_by_region;
+	b_by_region.reserve (nb_regions);
+	g_by_region.reserve (nb_regions);
 	for (RegionId r = 0; r < nb_regions; ++r) {
-		fmt::print (stderr, "Region {}...\n", r);
-		b_g_by_region.emplace_back (B_G{compute_b (points.data_for_region (r), base, kernels.data_for_region (r)),
-		                                compute_g (points.data_for_region (r), base, kernels.data_for_region (r))});
+		fmt::print (stderr, "Region {}/{}\n", r + 1, nb_regions); // Progress indicator (slow computation)
+		b_by_region.emplace_back (compute_b (points.data_for_region (r), base, kernels.data_for_region (r)));
+		g_by_region.emplace_back (compute_g (points.data_for_region (r), base, kernels.data_for_region (r)));
 	}
-
 	// B_hat too complex to compute
 	Matrix_M_MK1 b_hat (points.nb_processes (), base.base_size);
 	b_hat.inner.setZero ();
-
-	return {std::move (b_g_by_region), std::move (b_hat)};
+	return {std::move (b_by_region), std::move (g_by_region), std::move (b_hat)};
 }
 
 /******************************************************************************
  * Computations common to all cases.
  */
-
-template <typename Base, typename Kernels>
-inline CommonIntermediateValues compute_intermediate_values (const DataByProcessRegion<SortedVec<Point>> & points,
-                                                             const Base & base, const Kernels & kernels) {
-	const auto nb_regions = points.nb_regions ();
-	using B_G = typename CommonIntermediateValues::B_G;
-	std::vector<B_G> b_g_by_region;
-	b_g_by_region.reserve (nb_regions);
-	for (RegionId r = 0; r < nb_regions; ++r) {
-		b_g_by_region.emplace_back (B_G{compute_b (points.data_for_region (r), base, kernels),
-		                                compute_g (points.data_for_region (r), base, kernels)});
-	}
-	return {std::move (b_g_by_region), compute_b_hat (points, base, kernels)};
-}
-
 struct LassoParameters {
 	Matrix_M_MK1 sum_of_b;
 	MatrixG sum_of_g;
@@ -756,7 +787,7 @@ struct LassoParameters {
 };
 
 inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues & values, double gamma) {
-	const auto check_b_g = [](const Eigen::MatrixXd & m, const string_view what, RegionId r) {
+	const auto check_matrix = [](const Eigen::MatrixXd & m, const string_view what, RegionId r) {
 		if (!m.allFinite ()) {
 #ifndef NDEBUG
 			// Print matrix in debug mode
@@ -768,7 +799,8 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 		}
 	};
 
-	const auto nb_regions = values.b_g_by_region.size ();
+	assert (values.b_by_region.size () == values.g_by_region.size ());
+	const auto nb_regions = values.b_by_region.size ();
 	const auto nb_processes = values.b_hat.nb_processes;
 	const auto base_size = values.b_hat.base_size;
 
@@ -785,12 +817,13 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 	v_hat_r2.m_lk_values ().setZero ();
 
 	for (RegionId r = 0; r < nb_regions; ++r) {
-		const auto & v = values.b_g_by_region[r];
-		check_b_g (v.b.inner, "B", r);
-		check_b_g (v.g.inner, "G", r);
-		sum_of_b.inner += v.b.inner;
-		v_hat_r2.m_lk_values ().array () += v.b.m_lk_values ().array ().square ();
-		sum_of_g.inner += v.g.inner;
+		const auto & b = values.b_by_region[r];
+		const auto & g = values.g_by_region[r];
+		check_matrix (b.inner, "B", r);
+		check_matrix (g.inner, "G", r);
+		sum_of_b.inner += b.inner;
+		v_hat_r2.m_lk_values ().array () += b.m_lk_values ().array ().square ();
+		sum_of_g.inner += g.inner;
 	}
 
 	/* Compute D, the penalty for the lassoshooting.
