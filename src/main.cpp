@@ -207,10 +207,7 @@ static variant<None, std::vector<IntervalKernel>, DataByProcessRegion<std::vecto
 determine_kernel_setup (const DataByProcessRegion<SortedVec<PointInterval>> & intervals, KernelConfig config,
                         KernelType kernel_type,
                         Optional<std::vector<PointSpace>> & override_homogeneous_kernel_widths) {
-	if (kernel_type != KernelType::Interval) {
-		throw std::runtime_error ("interval is the only supported kernel type"); // FIXME
-	}
-
+	// Utils
 	auto get_homogeneous_kernel_widths = [&]() {
 		// Use explicit widths, or the median of input data for each process.
 		if (override_homogeneous_kernel_widths) {
@@ -229,16 +226,27 @@ determine_kernel_setup (const DataByProcessRegion<SortedVec<PointInterval>> & in
 			return widths;
 		}
 	};
+	const auto width_to_interval_kernel = [](PointSpace w) { return IntervalKernel (w); };
+	const auto width_to_interval_kernel_right_half = [](PointSpace w) { return IntervalKernel (w / 2., w / 2.); };
 
 	if (config == KernelConfig::None) {
 		return None{};
 	} else if (config == KernelConfig::Homogeneous) {
-		return map_to_vector (get_homogeneous_kernel_widths (), [](PointSpace w) { return IntervalKernel (w); });
+		auto widths = get_homogeneous_kernel_widths ();
+		if (kernel_type == KernelType::Interval) {
+			return map_to_vector (widths, width_to_interval_kernel);
+		} else if (kernel_type == KernelType::IntervalRightHalf) {
+			return map_to_vector (widths, width_to_interval_kernel_right_half);
+		}
 	} else if (config == KernelConfig::Heterogeneous) {
-		return get_heterogeneous_kernels (intervals, [](PointSpace w) { return IntervalKernel (w); });
-	} else {
-		throw std::logic_error ("Unknown kernel config option");
+		if (kernel_type == KernelType::Interval) {
+			return get_heterogeneous_kernels (intervals, width_to_interval_kernel);
+		} else if (kernel_type == KernelType::IntervalRightHalf) {
+			return get_heterogeneous_kernels (intervals, width_to_interval_kernel_right_half);
+		}
 	}
+	// Catch unimplemented cases
+	throw std::logic_error ("Unknown kernel config/type combination");
 }
 
 int main (int argc, char * argv[]) {
