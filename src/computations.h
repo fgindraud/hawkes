@@ -278,8 +278,8 @@ inline std::vector<int64_t> b_ml_histogram_counts_for_all_k_denormalized (const 
  * Thus we loop over all points of changes of this product.
  */
 inline double g_ll2kk2_histogram_integral_denormalized (const SortedVec<Point> & l_points,
-                                                        const SortedVec<Point> & l2_points,
                                                         HistogramBase::Interval interval,
+                                                        const SortedVec<Point> & l2_points,
                                                         HistogramBase::Interval interval2) {
 	struct SlidingInterval {
 		// Iterators over coordinates where points enter of exit the sliding interval
@@ -368,7 +368,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase bas
 
 	auto G_value = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
 		const auto integral =
-		    g_ll2kk2_histogram_integral_denormalized (points[l], points[l2], base.interval (k), base.interval (k2));
+		    g_ll2kk2_histogram_integral_denormalized (points[l], base.interval (k), points[l2], base.interval (k2));
 		return integral * inv_delta;
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
@@ -466,8 +466,6 @@ inline CommonIntermediateValues compute_intermediate_values (const DataByProcess
  * The convoluted shapes are computed using the template-expression strategy in shape.h.
  * Then the B and G values are computed using the shape expressions.
  * This is less efficient than the Histogram/no_kernel case.
- *
- * TODO doc.
  */
 inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBase base,
                                const std::vector<IntervalKernel> & kernels) {
@@ -476,8 +474,9 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBas
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b (nb_processes, base_size);
 
-	const auto b_mlk = [](const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
-	                      HistogramBase::Interval base_interval, IntervalKernel m_kernel, IntervalKernel l_kernel) {
+	const auto b_mlk = [](const SortedVec<Point> & m_points, IntervalKernel m_kernel, //
+	                      const SortedVec<Point> & l_points, IntervalKernel l_kernel, //
+	                      HistogramBase::Interval base_interval) {
 		const auto shape = convolution (to_shape (base_interval), convolution (to_shape (m_kernel), to_shape (l_kernel)));
 		return sum_of_point_differences (m_points, l_points, shape);
 	};
@@ -487,7 +486,7 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBas
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
-				const auto v = b_mlk (points[m], points[l], base.interval (k), kernels[m], kernels[l]);
+				const auto v = b_mlk (points[m], kernels[m], points[l], kernels[l], base.interval (k));
 				b.set_lk (m, l, k, v);
 			}
 		}
@@ -628,9 +627,9 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBas
 		}
 		return sum;
 	};
-	const auto b_mlk = [](const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
-	                      HistogramBase::Interval phi_k, const std::vector<IntervalKernel> & m_kernels,
-	                      const std::vector<IntervalKernel> & l_kernels) {
+	const auto b_mlk = [](const SortedVec<Point> & m_points, const std::vector<IntervalKernel> & m_kernels,
+	                      const SortedVec<Point> & l_points, const std::vector<IntervalKernel> & l_kernels,
+	                      HistogramBase::Interval phi_k) {
 		assert (m_points.size () == m_kernels.size ());
 		assert (l_points.size () == l_kernels.size ());
 		double sum = 0.;
@@ -650,7 +649,7 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBas
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
-				b.set_lk (m, l, k, b_mlk (points[m], points[l], base.interval (k), kernels[m], kernels[l]));
+				b.set_lk (m, l, k, b_mlk (points[m], kernels[m], points[l], kernels[l], base.interval (k)));
 			}
 		}
 	}
