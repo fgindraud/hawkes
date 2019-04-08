@@ -739,9 +739,9 @@ inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase bas
 	return g;
 }
 
-inline CommonIntermediateValues
-compute_intermediate_values (const DataByProcessRegion<SortedVec<Point>> & points, const HistogramBase & base,
-                             const DataByProcessRegion<std::vector<IntervalKernel>> & kernels) {
+inline CommonIntermediateValues compute_intermediate_values (const DataByProcessRegion<SortedVec<Point>> & points,
+                                                             const HistogramBase & base,
+                                                             const HeterogeneousKernels<IntervalKernel> & kernels) {
 	const auto nb_regions = points.nb_regions ();
 	std::vector<Matrix_M_MK1> b_by_region;
 	std::vector<MatrixG> g_by_region;
@@ -749,8 +749,9 @@ compute_intermediate_values (const DataByProcessRegion<SortedVec<Point>> & point
 	g_by_region.reserve (nb_regions);
 	for (RegionId r = 0; r < nb_regions; ++r) {
 		fmt::print (stderr, "Region {}/{}\n", r + 1, nb_regions); // Progress indicator (slow computation)
-		b_by_region.emplace_back (compute_b (points.data_for_region (r), base, kernels.data_for_region (r)));
-		g_by_region.emplace_back (compute_g (points.data_for_region (r), base, kernels.data_for_region (r)));
+		b_by_region.emplace_back (compute_b (points.data_for_region (r), base, kernels.kernels.data_for_region (r)));
+		g_by_region.emplace_back (compute_g (points.data_for_region (r), base, kernels.kernels.data_for_region (r)));
+		// FIXME use maximum kernels for faster computation
 	}
 	// B_hat too complex to compute
 	Matrix_M_MK1 b_hat (points.nb_processes (), base.base_size);

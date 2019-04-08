@@ -99,7 +99,7 @@ inline double normalization_factor (HistogramBase base) {
  */
 
 // Interval kernel : 1_[-width/2 + center, width/2 + center](x) (L2-normalized)
-// Center allow this one struct to support both centered (center = 0) and uncentered intervals.
+// 'center' allows this struct to support both centered (center = 0) and uncentered intervals.
 struct IntervalKernel {
 	PointSpace width; // ]0, inf[ due to the normalization factor
 	Point center;
@@ -110,6 +110,12 @@ struct IntervalKernel {
 inline double normalization_factor (IntervalKernel kernel) {
 	return 1. / std::sqrt (kernel.width);
 }
+
+// Store kernels and maximum width kernels for heterogeneous mode
+template <typename T> struct HeterogeneousKernels {
+	DataByProcessRegion<std::vector<T>> kernels;
+	std::vector<T> maximum_width_kernels; // For each process
+};
 
 /******************************************************************************
  * Computation matrices.

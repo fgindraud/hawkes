@@ -138,25 +138,32 @@ extract_point_lists (const DataByProcessRegion<SortedVec<PointInterval>> & inter
 	return points;
 }
 
+// Generate kernels and maximum width kernels from intervals
 template <typename WidthToKernelFunc>
 static auto get_heterogeneous_kernels (const DataByProcessRegion<SortedVec<PointInterval>> & intervals,
                                        WidthToKernelFunc width_to_kernel) {
 	using KernelT = decltype (width_to_kernel (PointSpace ()));
 	const auto nb_processes = intervals.nb_processes ();
 	const auto nb_regions = intervals.nb_regions ();
+
 	DataByProcessRegion<std::vector<KernelT>> kernels (nb_processes, nb_regions);
+	std::vector<KernelT> maximum_width_kernels;
+
 	for (ProcessId m = 0; m < nb_processes; ++m) {
+		PointSpace max_width = 0.;
 		for (RegionId r = 0; r < nb_regions; ++r) {
 			const auto & region_intervals = intervals.data (m, r);
 			std::vector<KernelT> region_kernels;
 			region_kernels.reserve (region_intervals.size ());
 			for (const auto & interval : region_intervals) {
 				region_kernels.emplace_back (width_to_kernel (interval.width));
+				max_width = std::max (max_width, interval.width);
 			}
 			kernels.data (m, r) = std::move (region_kernels);
 		}
+		maximum_width_kernels.emplace_back (width_to_kernel (max_width));
 	}
-	return kernels;
+	return HeterogeneousKernels<KernelT>{std::move (kernels), std::move (maximum_width_kernels)};
 }
 
 static std::vector<PointSpace>
@@ -203,7 +210,7 @@ median_interval_widths (const DataByProcessRegion<SortedVec<PointInterval>> & in
 	return medians;
 }
 
-static variant<None, std::vector<IntervalKernel>, DataByProcessRegion<std::vector<IntervalKernel>>>
+static variant<None, std::vector<IntervalKernel>, HeterogeneousKernels<IntervalKernel>>
 determine_kernel_setup (const DataByProcessRegion<SortedVec<PointInterval>> & intervals, KernelConfig config,
                         KernelType kernel_type,
                         Optional<std::vector<PointSpace>> & override_homogeneous_kernel_widths) {
