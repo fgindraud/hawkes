@@ -117,6 +117,16 @@ template <typename T> struct HeterogeneousKernels {
 	std::vector<T> maximum_width_kernels; // For each process
 };
 
+// Zero width kernels are not supported by computation, replace their width with a 'default' value.
+inline PointSpace fix_zero_width (PointSpace width) {
+	assert (width >= 0.);
+	if (width == 0.) {
+		return 1.;
+	} else {
+		return width;
+	}
+}
+
 /******************************************************************************
  * Computation matrices.
  */

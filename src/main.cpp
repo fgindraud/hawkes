@@ -156,8 +156,9 @@ static auto get_heterogeneous_kernels (const DataByProcessRegion<SortedVec<Point
 			std::vector<KernelT> region_kernels;
 			region_kernels.reserve (region_intervals.size ());
 			for (const auto & interval : region_intervals) {
-				region_kernels.emplace_back (width_to_kernel (interval.width));
-				max_width = std::max (max_width, interval.width);
+				const auto width = fix_zero_width (interval.width);
+				region_kernels.emplace_back (width_to_kernel (width));
+				max_width = std::max (max_width, width);
 			}
 			kernels.data (m, r) = std::move (region_kernels);
 		}
@@ -205,7 +206,7 @@ median_interval_widths (const DataByProcessRegion<SortedVec<PointInterval>> & in
 
 	std::vector<PointSpace> medians (intervals.nb_processes ());
 	for (ProcessId m = 0; m < intervals.nb_processes (); ++m) {
-		medians[m] = compute_median_width (m);
+		medians[m] = fix_zero_width (compute_median_width (m));
 	}
 	return medians;
 }
@@ -226,9 +227,6 @@ determine_kernel_setup (const DataByProcessRegion<SortedVec<PointInterval>> & in
 			return std::move (override_homogeneous_kernel_widths.value);
 		} else {
 			auto widths = median_interval_widths (intervals);
-			for (auto & w : widths) {
-				w = std::max (w, 1.); // FIXME cannot be zero, use 1. as a minimum
-			}
 			fmt::print (stderr, "Using deduced kernel widths: {}\n", fmt::join (widths, ", "));
 			return widths;
 		}
