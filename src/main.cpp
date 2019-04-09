@@ -394,6 +394,12 @@ int main (int argc, char * argv[]) {
 				const string_view suffix = p.direction == ProcessDirection::Backward ? " (backward)" : "";
 				fmt::print ("#  [{}] {}{}\n", m, p.filename, suffix);
 			}
+			fmt::print ("# }}\n"
+			            "# Regions = {{\n");
+			for (ProcessId m = 0; m < process_files.size (); ++m) {
+				const auto & r = process_files[m].regions_to_extract;
+				fmt::print ("#  [{}] {}\n", m, fmt::join (r.begin (), r.end (), ","));
+			}
 			fmt::print ("# }}\n");
 
 			struct PrintBaseLine {
@@ -403,16 +409,30 @@ int main (int argc, char * argv[]) {
 			};
 			visit (PrintBaseLine{}, base);
 
-#if 0
 			struct PrintKernelLine {
+				string_view kernel_type_text; // Distinguish interval types which are merged in variant<...> type.
+
 				void operator() (None) const { fmt::print ("# kernels = None\n"); }
 				void operator() (const std::vector<IntervalKernel> & kernels) const {
 					const auto widths = map_to_vector (kernels, [](IntervalKernel k) { return k.width; });
-					fmt::print ("# kernels = Intervals{{{}}}\n", fmt::join (widths, ", "));
+					fmt::print ("# kernels = homogeneous {} {{{}}}\n", kernel_type_text, fmt::join (widths, ", "));
+				}
+				void operator() (const HeterogeneousKernels<IntervalKernel> &) const {
+					// Do not print widths, too many to be useful
+					fmt::print ("# kernels = heterogeneous {}\n", kernel_type_text);
+				}
+
+				PrintKernelLine (KernelType type) {
+					if (type == KernelType::Interval) {
+						kernel_type_text = "centered intervals";
+					} else if (type == KernelType::IntervalRightHalf) {
+						kernel_type_text = "intervals (right half)";
+					} else {
+						throw std::logic_error ("unknown kernel type");
+					}
 				}
 			};
-			visit (PrintKernelLine{}, kernels);
-#endif // FIXME restore
+			visit (PrintKernelLine{kernel_type}, kernels);
 
 			fmt::print ("# gamma = {}\n", gamma);
 
