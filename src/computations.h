@@ -147,6 +147,57 @@ inline double sum_of_point_differences (const SortedVec<Point> & m_points, const
 	return shape.scale * sum_of_point_differences (m_points, l_points, shape.inner);
 }
 
+/* Compute sum_{x_m in N_m, x_l in N_l} shape_generator(W_{x_m}, W_{x_l})(x_m - x_l).
+ *
+ * shape_generator(i_m, i_l) must return the shape for W_{x_m}, W_{x_l} if x_m=N_m[i_m] and x_l=N_l[i_l].
+ *
+ * union_non_zero_domain must contain the union of non zero domains of shape_generator(i_m,i_l).
+ * In practice, this usually consists of considering the kernels of maximum widths in a convolution with phi_k.
+ * This non_zero_domain is used to filter out x_m/x_l where shape_gen(i_m,i_l)(x_m-x-l) is zero.
+ * This keeps the complexity down.
+ *
+ * The algorithm is an adaptation of the previous one, with shape generation for each (i_m/i_l).
+ * Worst case complexity: O(|N|^2).
+ * Average complexity: O(|N| * density(N) * width(non_zero_domain)) = O(|N|^2 * width(non_zero_domain) / Tmax).
+ */
+template <typename ShapeGenerator>
+inline double sum_of_point_differences (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
+                                        const ShapeGenerator & shape_generator,
+                                        shape::ClosedInterval union_non_zero_domain) {
+	double sum = 0.;
+	size_t starting_i_m = 0;
+	for (size_t i_l = 0; i_l < l_points.size (); ++i_l) {
+		// x_l = N_l[i_l], with N_l[x] a strictly increasing function of x.
+		// Compute shape(x_m - x_l) for all x_m in (x_l + non_zero_domain) interval.
+		const auto x_l = l_points[i_l];
+		const auto interval_i_l = x_l + union_non_zero_domain;
+
+		// starting_i_m = min{i_m, N_m[i_m] - N_l[i_l] >= non_zero_domain.left}.
+		// We can restrict the search by starting from:
+		// last_starting_i_m = min{i_m, N_m[i_m] - N_l[i_l - 1] >= non_zero_domain.left or i_m == 0}.
+		// We have: N_m[starting_i_m] >= N_l[i_l] + nzd.left > N_l[i_l - 1] + nzd.left.
+		// Because N_m is increasing and properties of the min, starting_i_m >= last_starting_i_m.
+		while (starting_i_m < m_points.size () && !(interval_i_l.left <= m_points[starting_i_m])) {
+			starting_i_m += 1;
+		}
+		if (starting_i_m == m_points.size ()) {
+			// starting_i_m is undefined because last(N_m) < N_l[i_l] + non_zero_domain.left.
+			// last(N_m) == max(x_m in N_m) because N_m[x] is strictly increasing.
+			// So for each j > i_l , max(x_m) < N[j] + non_zero_domain.left, and shape (x_m - N_l[j]) == 0.
+			// We can stop there as the sum is already complete.
+			break;
+		}
+		// Sum values of shape(x_m - x_l) as long as x_m is in interval_i_l.
+		// starting_i_m defined => for each i_m < starting_i_m, shape(N_m[i_m] - x_l) == 0.
+		// Thus we only scan from starting_i_m to the last i_m in interval.
+		// N_m[x] is strictly increasing so we only need to check the right bound of the interval.
+		for (size_t i_m = starting_i_m; i_m < m_points.size () && m_points[i_m] <= interval_i_l.right; i_m += 1) {
+			sum += shape_generator (i_m, i_l) (m_points[i_m] - x_l);
+		}
+	}
+	return sum;
+}
+
 /* Compute sup_{x} sum_{x_l in N_l} interval(x - x_l).
  * This is a building block for computation of B_hat, used in the computation of lasso penalties (d).
  *
@@ -609,13 +660,14 @@ inline CommonIntermediateValues compute_intermediate_values (const DataByProcess
 }
 
 /******************************************************************************
- * FIXME experimental: heterogeneous kernels (kernel width for each point)
- * Data set is set of {point, kernel-width} instead of just points.
- * Data sets are not sorted.
+ * Experimental: heterogeneous kernels (kernel width for each point).
+ * Data set is composed of points, kernels.
  */
 inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBase base,
-                               span<const std::vector<IntervalKernel>> kernels) {
+                               span<const std::vector<IntervalKernel>> kernels,
+                               const std::vector<IntervalKernel> & maximum_width_kernels) {
 	assert (points.size () == kernels.size ());
+	assert (points.size () == maximum_width_kernels.size ());
 	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b (nb_processes, base_size);
@@ -628,19 +680,24 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBas
 		return sum;
 	};
 	const auto b_mlk = [](const SortedVec<Point> & m_points, const std::vector<IntervalKernel> & m_kernels,
+	                      IntervalKernel m_maximum_width_kernel, //
 	                      const SortedVec<Point> & l_points, const std::vector<IntervalKernel> & l_kernels,
+	                      IntervalKernel l_maximum_width_kernel, //
 	                      HistogramBase::Interval phi_k) {
 		assert (m_points.size () == m_kernels.size ());
 		assert (l_points.size () == l_kernels.size ());
-		double sum = 0.;
 		const auto phi_shape = to_shape (phi_k);
-		for (size_t mi = 0; mi < m_points.size (); ++mi) {
-			for (size_t li = 0; li < l_points.size (); ++li) {
-				const auto shape = convolution (phi_shape, convolution (to_shape (m_kernels[mi]), to_shape (l_kernels[li])));
-				sum += shape (m_points[mi] - l_points[li]);
-			}
-		}
-		return sum;
+
+		const auto maximum_width_shape =
+		    convolution (phi_shape, convolution (to_shape (m_maximum_width_kernel), to_shape (l_maximum_width_kernel)));
+		const auto union_non_zero_domain = maximum_width_shape.non_zero_domain ();
+
+		const auto shape_generator = [&](size_t i_m, size_t i_l) {
+			assert (i_m < m_kernels.size ());
+			assert (i_l < l_kernels.size ());
+			return convolution (phi_shape, convolution (to_shape (m_kernels[i_m]), to_shape (l_kernels[i_l])));
+		};
+		return sum_of_point_differences (m_points, l_points, shape_generator, union_non_zero_domain);
 	};
 
 	for (ProcessId m = 0; m < nb_processes; ++m) {
@@ -649,7 +706,10 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBas
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
-				b.set_lk (m, l, k, b_mlk (points[m], kernels[m], points[l], kernels[l], base.interval (k)));
+				const auto v = b_mlk (points[m], kernels[m], maximum_width_kernels[m], //
+				                      points[l], kernels[l], maximum_width_kernels[l], //
+				                      base.interval (k));
+				b.set_lk (m, l, k, v);
 			}
 		}
 	}
@@ -657,8 +717,10 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBas
 }
 
 inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase base,
-                          span<const std::vector<IntervalKernel>> kernels) {
+                          span<const std::vector<IntervalKernel>> kernels,
+                          const std::vector<IntervalKernel> & maximum_width_kernels) {
 	assert (points.size () == kernels.size ());
+	assert (points.size () == maximum_width_kernels.size ());
 	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
 	const auto sqrt_delta = std::sqrt (base.delta);
@@ -686,15 +748,26 @@ inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase bas
 	const auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
 		assert (points[l].size () == kernels[l].size ());
 		assert (points[l2].size () == kernels[l2].size ());
-		double sum = 0.;
-		for (size_t li = 0; li < points[l].size (); ++li) {
-			for (size_t l2i = 0; l2i < points[l2].size (); ++l2i) {
-				const auto shape = cross_correlation (convolution (to_shape (kernels[l][li]), to_shape (base.interval (k))),
-				                                      convolution (to_shape (kernels[l2][l2i]), to_shape (base.interval (k2))));
-				sum += shape (points[l][li] - points[l2][l2i]);
-			}
-		}
-		return sum;
+		const auto & l_points = points[l];
+		const auto & l2_points = points[l2];
+		const auto & l_kernels = kernels[l];
+		const auto & l2_kernels = kernels[l2];
+
+		const auto phi_shape = to_shape (base.interval (k));
+		const auto phi_shape_2 = to_shape (base.interval (k2));
+
+		const auto maximum_width_shape =
+		    cross_correlation (convolution (to_shape (maximum_width_kernels[l]), phi_shape),
+		                       convolution (to_shape (maximum_width_kernels[l2]), phi_shape_2));
+		const auto union_non_zero_domain = maximum_width_shape.non_zero_domain ();
+
+		const auto shape_generator = [&](size_t i_l, size_t i_l2) {
+			assert (i_l < l_kernels.size ());
+			assert (i_l2 < l2_kernels.size ());
+			return cross_correlation (convolution (to_shape (l_kernels[i_l]), phi_shape),
+			                          convolution (to_shape (l2_kernels[i_l2]), phi_shape_2));
+		};
+		return sum_of_point_differences (l_points, l2_points, shape_generator, union_non_zero_domain);
 	};
 	/* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
 	 *
@@ -748,9 +821,10 @@ inline CommonIntermediateValues compute_intermediate_values (const DataByProcess
 	g_by_region.reserve (nb_regions);
 	for (RegionId r = 0; r < nb_regions; ++r) {
 		fmt::print (stderr, "Region {}/{}\n", r + 1, nb_regions); // Progress indicator (slow computation)
-		b_by_region.emplace_back (compute_b (points.data_for_region (r), base, kernels.kernels.data_for_region (r)));
-		g_by_region.emplace_back (compute_g (points.data_for_region (r), base, kernels.kernels.data_for_region (r)));
-		// FIXME use maximum kernels for faster computation
+		b_by_region.emplace_back (compute_b (points.data_for_region (r), base, kernels.kernels.data_for_region (r),
+		                                     kernels.maximum_width_kernels));
+		g_by_region.emplace_back (compute_g (points.data_for_region (r), base, kernels.kernels.data_for_region (r),
+		                                     kernels.maximum_width_kernels));
 	}
 	// B_hat too complex to compute
 	Matrix_M_MK1 b_hat (points.nb_processes (), base.base_size);
