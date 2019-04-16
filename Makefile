@@ -17,20 +17,14 @@ all: hawkes
 # Eigen C++ library configuration
 # Define an 'eigen' target representing a dependency to eigen code.
 ifdef EIGEN_INCLUDE_PATH
-# Using the system installed eigen, at the given path
-eigen:
-CXX_FLAGS_COMMON += -I $(EIGEN_INCLUDE_PATH)
+CXX_FLAGS_COMMON += -I $(EIGEN_INCLUDE_PATH) # Using the system installed eigen, at the given path
+eigen: # Eigen target is no-op
 else
-# Download and uncompress eigen in a subdirectory, then use it.
-# Version and directory names must be updated if the eigen version is changed!
+# Use pre-downloaded version: uncompress it if requested.
 EIGEN_TAR_DIR := eigen-eigen-323c052e1731
-
-eigen.tar.gz:
-	curl -L -o $@ "http://bitbucket.org/eigen/eigen/get/3.3.7.tar.gz"
-$(EIGEN_TAR_DIR): eigen.tar.gz
+$(EIGEN_TAR_DIR): $(EIGEN_TAR_DIR).tar.gz
 	tar xf $<
 eigen: $(EIGEN_TAR_DIR)
-
 CXX_FLAGS_COMMON += -I $(EIGEN_TAR_DIR)
 endif
 
