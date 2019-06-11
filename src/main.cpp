@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <chrono>
 #include <string>
+#include <unordered_set>
 
 #include <cassert>
 #include <random>
@@ -71,17 +72,16 @@ enum class ProcessDirection {
 
 struct ProcessFile {
 	string_view filename;
-	std::vector<string_view> regions_to_extract;
 	ProcessDirection direction;
 };
 
-static std::vector<BedRegion> read_regions_from (string_view filename, const std::vector<string_view> & region_names) {
+static BedFileRegions read_regions_from (string_view filename) {
 	try {
 		const auto start = instant ();
 		auto file = open_file (filename, "r");
-		auto regions = read_selected_from_bed_file (file.get (), region_names);
+		auto regions = BedFileRegions::read_from (file.get ());
 		const auto end = instant ();
-		fmt::print (stderr, "Process {} loaded: regions = {} ; time = {}\n", filename, regions.size (),
+		fmt::print (stderr, "Process {} loaded: regions = {} ; time = {}\n", filename, regions.nb_regions (),
 		            duration_string (end - start));
 		return regions;
 	} catch (const std::runtime_error & e) {
@@ -93,27 +93,44 @@ static DataByProcessRegion<SortedVec<PointInterval>> read_process_files (const s
 	if (files.empty ()) {
 		throw std::runtime_error ("read_process_files: process list is empty");
 	}
+	auto bed_files_content = map_to_vector (files, [](const ProcessFile & f) { return read_regions_from (f.filename); });
+
+	// Generate the list of all discovered region names (some may be missing from some files if empty).
+	// The list is returned as a vector to guarantee the same order of regions for all processes.
+	const std::vector<std::string> all_region_names = [&bed_files_content]() {
+		// Merge all seen names in a set to remove duplicates.
+		std::unordered_set<std::string> region_name_set;
+		for (const auto & bed_file : bed_files_content) {
+			for (const auto & region : bed_file.table) {
+				region_name_set.emplace (region.first);
+			}
+		}
+		return std::vector<std::string> (region_name_set.begin (), region_name_set.end ());
+	}();
+
+	// Fill a 2D matrix of lists of PointInterval with contents from bed files.
+	// Missing regions in some processes will lead to empty lists.
 	const auto nb_processes = files.size ();
-	const auto nb_regions = files[0].regions_to_extract.size ();
+	const auto nb_regions = all_region_names.size ();
 	DataByProcessRegion<SortedVec<PointInterval>> intervals (nb_processes, nb_regions);
 
 	for (ProcessId m = 0; m < nb_processes; m++) {
 		const auto & file = files[m];
-		auto points_by_region = read_regions_from (file.filename, file.regions_to_extract);
-		if (points_by_region.size () != nb_regions) {
-			throw std::runtime_error (
-			    fmt::format ("read_process_files: process {} has wrong region number: got {}, expected {}", m,
-			                 points_by_region.size (), nb_regions));
-		}
+		auto & content = bed_files_content[m];
 		for (RegionId r = 0; r < nb_regions; ++r) {
-			// Apply reversing if requested before sorting them in increasing order
-			if (file.direction == ProcessDirection::Backward) {
-				for (auto & interval : points_by_region[r].unsorted_intervals) {
-					interval.center = -interval.center;
+			auto region_entry = content.table.find (all_region_names[r]);
+			if (region_entry != content.table.end ()) {
+				auto & unsorted_intervals = region_entry->second;
+				// Apply reversing if requested before sorting them in increasing order
+				if (file.direction == ProcessDirection::Backward) {
+					for (auto & interval : unsorted_intervals) {
+						interval.center = -interval.center;
+					}
 				}
+				intervals.data (m, r) = SortedVec<PointInterval>::from_unsorted (std::move (unsorted_intervals));
+			} else {
+				// Do nothing, intervals.data(m,r) has been initialized to an empty list of points
 			}
-			intervals.data (m, r) =
-			    SortedVec<PointInterval>::from_unsorted (std::move (points_by_region[r].unsorted_intervals));
 		}
 	}
 	return intervals;
@@ -263,7 +280,6 @@ int main (int argc, char * argv[]) {
 	KernelType kernel_type = KernelType::Interval; // Defaults to centered intervals
 	Optional<std::vector<PointSpace>> override_homogeneous_kernel_widths;
 
-	std::vector<string_view> current_region_names;
 	std::vector<ProcessFile> process_files;
 
 	// Command line parsing setup
@@ -321,27 +337,14 @@ int main (int argc, char * argv[]) {
 	               });
 
 	// File parsing : generate a list of (file, options), read later.
-	parser.option ({"r", "regions"}, "r0[,r1,r2,...]", "Set region names extracted from next files",
-	               [&current_region_names](string_view regions) {
-		               auto region_names = split (',', regions);
-		               if (region_names.empty ()) {
-			               throw std::runtime_error ("List of region names is empty");
-		               }
-		               if (!current_region_names.empty () && current_region_names.size () != region_names.size ()) {
-			               throw std::runtime_error ("New region name set must have the same length as all previous ones");
-		               }
-		               current_region_names = std::move (region_names);
-	               });
-	auto add_process_file = [&current_region_names, &process_files](string_view filename, ProcessDirection direction) {
-		if (current_region_names.empty ()) {
-			throw std::runtime_error ("List of region names is empty: set region names before reading a file");
-		}
-		process_files.emplace_back (ProcessFile{filename, current_region_names, direction});
-	};
 	parser.option ({"f", "file-forward"}, "filename", "Add process regions from file",
-	               [add_process_file](string_view filename) { add_process_file (filename, ProcessDirection::Forward); });
+	               [&process_files](string_view filename) {
+		               process_files.emplace_back (ProcessFile{filename, ProcessDirection::Forward});
+	               });
 	parser.option ({"b", "file-backward"}, "filename", "Add process regions (reversed) from file",
-	               [add_process_file](string_view filename) { add_process_file (filename, ProcessDirection::Backward); });
+	               [&process_files](string_view filename) {
+		               process_files.emplace_back (ProcessFile{filename, ProcessDirection::Backward});
+	               });
 
 	try {
 		// Parse command line arguments. All actions declared to the parser will be called here.

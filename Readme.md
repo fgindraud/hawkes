@@ -15,9 +15,8 @@ There are no runtime library dependencies.
 
 Use `./hawkes -h` to access the list of command line options with a small description.
 
-Example of use: `./hawkes -r chr1,chr2,chr3 -f process_a.bed -f process_b.bed -histogram 10 10000 -kernel homogeneous > output_file`.
-- `-r reg1,reg2,...` specifies the region names that will be extracted from the next loaded files. Required before any file can be loaded.
-- `-f filename` loads the process from _filename_, extracting only the currently specified regions. Use once for each process to be loaded.
+Example of use: `./hawkes -f process_a.bed -f process_b.bed -histogram 10 10000 -kernel homogeneous > output_file`.
+- `-f filename` loads the process from _filename_. Use once for each process to be loaded.
 - `-b filename` loads the process but reverses the dimension (`x -> -x` on the positions).
 - `-histogram K delta` specifies the function base. Required.
 - `-kernel config` what kernel configuration to use, defaults to none if not specified.
@@ -29,12 +28,16 @@ General information and progress is printed on the _standard error output_, and 
 The _verbose_ mode adds a header to the output with the parameters used to generate the weights (process files, base, kernel setup).
 This header is prefixed with `#` so that programs like _R_ can ignore it and load the matrix without problems.
 
-The list of region names can be different between files, as long as they are of the same length (same number of regions).
-This can be useful if data files have different region names for the same objects.
-As this list can be quite long, it is often more practical to store it in a bash variable and reuse it:
-	regions=$(echo chr{1..22} | sed 's/ /,/g')
-	./hawkes -r $regions -f a.bed -f b.bed ...
-	./hawkes -r $regions -b a.bed -b b.bed ...
+The computations is splitted along _regions_, which represent independent spaces where points can exists.
+For each region, only points of each process belonging to the region will be considered in the computation step.
+Results are summed between regions afterwards, before the final LASSO step.
+The region of a point is determined by the text in the first column of bed files:
+	# region start end ; example with 2 regions (chr1, chr2)
+	chr1 1 42
+	chr1 78 102
+	chr2 0 34
+This program requires all points of a region to be in sequence (no interleaving of regions).
+Regions missing in some of the processes will be cosidered to be empty regions.
 
 See the BRP18 paper for the global model.
 See the pdf documentation in `doc/shapes` for computation details.

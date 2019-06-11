@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error> // io errors
+#include <unordered_map>
 
 #include "types.h"
 #include "utils.h"
@@ -107,15 +108,19 @@ inline bool LineByLineReader::read_next_line () {
 /******************************************************************************
  * BED format parsing.
  */
-struct BedRegion {
-	std::string name;
-	std::vector<PointInterval> unsorted_intervals;
+struct BedFileRegions {
+	std::unordered_map<std::string,
+	                   std::vector<PointInterval>> table; // region name -> region unsorted intervals
+
+	std::size_t nb_regions () const { return table.size (); }
+
+	static BedFileRegions read_from (std::FILE * file);
 };
 
-inline std::vector<BedRegion> read_all_from_bed_file (std::FILE * file) {
+inline BedFileRegions BedFileRegions::read_from (std::FILE * file) {
 	assert (file != nullptr);
-	std::vector<BedRegion> regions;
 	LineByLineReader reader (file);
+	BedFileRegions regions;
 
 	std::vector<PointInterval> current_region_intervals;
 	std::string current_region_name;
@@ -143,7 +148,7 @@ inline std::vector<BedRegion> read_all_from_bed_file (std::FILE * file) {
 					}
 					if (!empty (current_region_name)) {
 						// End current region and store its data
-						regions.emplace_back (BedRegion{std::move (current_region_name), std::move (current_region_intervals)});
+						regions.table.emplace (std::move (current_region_name), std::move (current_region_intervals));
 					}
 					current_region_intervals.clear ();
 					current_region_name = to_string (region_name);
@@ -161,31 +166,4 @@ inline std::vector<BedRegion> read_all_from_bed_file (std::FILE * file) {
 		throw std::runtime_error (
 		    fmt::format ("Parsing BED file at line {}: {}", reader.current_line_number () + 1, e.what ()));
 	}
-}
-
-inline std::vector<BedRegion> read_selected_from_bed_file (std::FILE * file,
-                                                           const std::vector<string_view> & region_names) {
-	assert (file != nullptr);
-	// Read all regions data, then copy them in the right order to the final vector of regions
-	std::vector<BedRegion> all_regions = read_all_from_bed_file (file);
-	std::vector<BedRegion> selected_regions;
-	selected_regions.reserve (region_names.size ());
-	for (auto name_it = region_names.begin (); name_it != region_names.end (); ++name_it) {
-		const auto wanted_name = *name_it;
-		auto it = std::find_if (all_regions.begin (), all_regions.end (),
-		                        [wanted_name](const auto & region) { return region.name == wanted_name; });
-		if (it != all_regions.end ()) {
-			const bool is_wanted_name_required_afterward =
-			    std::any_of (name_it + 1, region_names.end (),
-			                 [wanted_name](const string_view other_region_name) { return wanted_name == other_region_name; });
-			if (!is_wanted_name_required_afterward) {
-				selected_regions.emplace_back (std::move (*it)); // We can move data (avoid a copy).
-			} else {
-				selected_regions.emplace_back (*it);
-			}
-		} else {
-			throw std::runtime_error (fmt::format ("Required region was not found: {}", wanted_name));
-		}
-	}
-	return selected_regions;
 }
