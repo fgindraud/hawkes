@@ -820,7 +820,6 @@ inline CommonIntermediateValues compute_intermediate_values (const DataByProcess
 	b_by_region.reserve (nb_regions);
 	g_by_region.reserve (nb_regions);
 	for (RegionId r = 0; r < nb_regions; ++r) {
-		fmt::print (stderr, "Region {}/{}\n", r + 1, nb_regions); // Progress indicator (slow computation)
 		b_by_region.emplace_back (compute_b (points.data_for_region (r), base, kernels.kernels.data_for_region (r),
 		                                     kernels.maximum_width_kernels));
 		g_by_region.emplace_back (compute_g (points.data_for_region (r), base, kernels.kernels.data_for_region (r),

@@ -394,12 +394,6 @@ int main (int argc, char * argv[]) {
 				const string_view suffix = p.direction == ProcessDirection::Backward ? " (backward)" : "";
 				fmt::print ("#  [{}] {}{}\n", m, p.filename, suffix);
 			}
-			fmt::print ("# }}\n"
-			            "# Regions = {{\n");
-			for (ProcessId m = 0; m < process_files.size (); ++m) {
-				const auto & r = process_files[m].regions_to_extract;
-				fmt::print ("#  [{}] {}\n", m, fmt::join (r.begin (), r.end (), ","));
-			}
 			fmt::print ("# }}\n");
 
 			struct PrintBaseLine {
