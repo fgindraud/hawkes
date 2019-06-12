@@ -139,16 +139,20 @@ inline BedFileRegions BedFileRegions::read_from (std::FILE * file) {
 				const Point interval_start_position = parse_double (fields.value[1], "interval_position_start");
 				const Point interval_end_position = parse_double (fields.value[2], "interval_position_end");
 				if (!(interval_start_position <= interval_end_position)) {
-					throw std::runtime_error ("interval bounds are invalid");
+					throw std::runtime_error ("Interval bounds are invalid");
 				}
 				// Check is start of a new region
 				if (region_name != current_region_name) {
 					if (empty (region_name)) {
-						throw std::runtime_error ("empty string as a region name");
+						throw std::runtime_error ("Empty string as a region name");
 					}
 					if (!empty (current_region_name)) {
 						// End current region and store its data
-						regions.table.emplace (std::move (current_region_name), std::move (current_region_intervals));
+						auto p = regions.table.emplace (std::move (current_region_name), std::move (current_region_intervals));
+						if (!p.second) {
+							throw std::runtime_error (
+							    fmt::format ("Region name '{}' found twice, duplicates are not allowed", p.first->first));
+						}
 					}
 					current_region_intervals.clear ();
 					current_region_name = to_string (region_name);
