@@ -133,13 +133,16 @@ static DataByProcessRegion<SortedVec<PointInterval>> read_process_files (const s
 
 	// Fill a 2D matrix of lists of PointInterval with contents from bed files.
 	// Missing regions in some processes will lead to empty lists.
+	// Number of missing regions is tracked per process for information (if high, may indicate naming mismatch).
 	const auto nb_processes = files.size ();
 	const auto nb_regions = all_region_names.size ();
 	DataByProcessRegion<SortedVec<PointInterval>> intervals (nb_processes, nb_regions);
 
+	fmt::print (stderr, "Missing region ratio (per process):");
 	for (ProcessId m = 0; m < nb_processes; m++) {
 		const auto & file = files[m];
 		auto & content = bed_files_content[m];
+		std::size_t number_missing = 0;
 		for (RegionId r = 0; r < nb_regions; ++r) {
 			auto region_entry = content.table.find (all_region_names[r]);
 			if (region_entry != content.table.end ()) {
@@ -153,9 +156,12 @@ static DataByProcessRegion<SortedVec<PointInterval>> read_process_files (const s
 				intervals.data (m, r) = SortedVec<PointInterval>::from_unsorted (std::move (unsorted_intervals));
 			} else {
 				// Do nothing, intervals.data(m,r) has been initialized to an empty list of points
+				number_missing += 1;
 			}
 		}
+		fmt::print (stderr, "  {}%", double(number_missing) / double(nb_regions) * 100.);
 	}
+	fmt::print (stderr, "\n");
 	return intervals;
 }
 

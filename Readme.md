@@ -28,8 +28,8 @@ General information and progress is printed on the _standard error output_, and 
 The _verbose_ mode adds a header to the output with the parameters used to generate the weights (process files, base, kernel setup).
 This header is prefixed with `#` so that programs like _R_ can ignore it and load the matrix without problems.
 
-The computations is splitted along _regions_, which represent independent spaces where points can exists.
-For each region, only points of each process belonging to the region will be considered in the computation step.
+The computations is splitted along _regions_, which represent independent spaces where _marks_ can exists.
+For each region, the computation step will only consider marks from the region (for each process), and ignore others.
 Results are summed between regions afterwards, before the final LASSO step.
 The region of a point is determined by the text in the first column of bed files:
 	# region start end ; example with 2 regions (chr1, chr2)
@@ -37,7 +37,8 @@ The region of a point is determined by the text in the first column of bed files
 	chr1 78 102
 	chr2 0 34
 This program requires all points of a region to be in sequence (no interleaving of regions).
-Regions missing in some of the processes will be cosidered to be empty regions.
+Regions missing in some of the processes will be considered empty.
+A ratio of missing regions is printed; if too high, this may indicate a mismatch between region names accross processes.
 
 See the BRP18 paper for the global model.
 See the pdf documentation in `doc/shapes` for computation details.
