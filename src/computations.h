@@ -210,7 +210,7 @@ inline double sup_of_sum_of_differences_to_points (const SortedVec<Point> & poin
 	// These structs represent the sets of left and right interval bounds coordinates.
 	SlidingCursor left_interval_bounds (points, -indicator.half_width);
 	SlidingCursor right_interval_bounds (points, indicator.half_width);
-	double max = -std::numeric_limits<double>::infinity ();
+	double max = 0;
 	while (true) {
 		// Loop over all interval boundaries: x is a {left, right, both} interval bound.
 		const Point x = std::min (left_interval_bounds.current_x, right_interval_bounds.current_x);
@@ -232,7 +232,7 @@ inline double sup_of_sum_of_differences_to_points (const SortedVec<Point> & poin
 	// Same algorithm, but left bound is advanced after computing the sum due to the open left bound.
 	SlidingCursor left_interval_bounds (points, interval.left);
 	SlidingCursor right_interval_bounds (points, interval.right);
-	double max = -std::numeric_limits<double>::infinity ();
+	double max = 0;
 	while (true) {
 		const Point x = std::min (left_interval_bounds.current_x, right_interval_bounds.current_x);
 		if (x == SlidingCursor::inf) {
