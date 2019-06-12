@@ -89,24 +89,47 @@ static BedFileRegions read_regions_from (string_view filename) {
 	}
 }
 
+static std::vector<std::string> union_of_all_region_names (const std::vector<BedFileRegions> & bed_files_content) {
+	// Generate the list of all discovered region names (some may be missing from some files if empty).
+	// The list is returned as a vector to guarantee the same order of regions for all processes.
+	std::unordered_set<std::string> region_name_set;
+	for (const auto & bed_file : bed_files_content) {
+		for (const auto & region : bed_file.table) {
+			region_name_set.emplace (region.first);
+		}
+	}
+	return std::vector<std::string> (region_name_set.begin (), region_name_set.end ());
+}
+
+static void print_region_info (const std::vector<ProcessFile> & files) {
+	auto bed_files_content = map_to_vector (files, [](const ProcessFile & f) { return read_regions_from (f.filename); });
+	// Header
+	fmt::print ("region_name");
+	for (const auto & file : files) {
+		fmt::print ("\t{}", file.filename);
+	}
+	fmt::print ("\n");
+	// Table
+	for (const auto & region_name : union_of_all_region_names (bed_files_content)) {
+		fmt::print ("{}", region_name);
+		for (const auto & content : bed_files_content) {
+			auto region_entry = content.table.find (region_name);
+			if (region_entry != content.table.end ()) {
+				fmt::print ("\t{}", region_entry->second.size ());
+			} else {
+				fmt::print ("\tmissing");
+			}
+		}
+		fmt::print ("\n");
+	}
+}
+
 static DataByProcessRegion<SortedVec<PointInterval>> read_process_files (const std::vector<ProcessFile> & files) {
 	if (files.empty ()) {
 		throw std::runtime_error ("read_process_files: process list is empty");
 	}
 	auto bed_files_content = map_to_vector (files, [](const ProcessFile & f) { return read_regions_from (f.filename); });
-
-	// Generate the list of all discovered region names (some may be missing from some files if empty).
-	// The list is returned as a vector to guarantee the same order of regions for all processes.
-	const std::vector<std::string> all_region_names = [&bed_files_content]() {
-		// Merge all seen names in a set to remove duplicates.
-		std::unordered_set<std::string> region_name_set;
-		for (const auto & bed_file : bed_files_content) {
-			for (const auto & region : bed_file.table) {
-				region_name_set.emplace (region.first);
-			}
-		}
-		return std::vector<std::string> (region_name_set.begin (), region_name_set.end ());
-	}();
+	const std::vector<std::string> all_region_names = union_of_all_region_names (bed_files_content);
 
 	// Fill a 2D matrix of lists of PointInterval with contents from bed files.
 	// Missing regions in some processes will lead to empty lists.
@@ -281,6 +304,7 @@ int main (int argc, char * argv[]) {
 	Optional<std::vector<PointSpace>> override_homogeneous_kernel_widths;
 
 	std::vector<ProcessFile> process_files;
+	bool print_region_info_option = false;
 
 	// Command line parsing setup
 	const auto command_line = CommandLineView (argc, argv);
@@ -345,10 +369,18 @@ int main (int argc, char * argv[]) {
 	               [&process_files](string_view filename) {
 		               process_files.emplace_back (ProcessFile{filename, ProcessDirection::Backward});
 	               });
+	parser.flag ({"print-region-info"}, "Stop after parsing and print counts by region/process",
+	             [&print_region_info_option]() { print_region_info_option = true; });
 
 	try {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
+
+		// Print region point counts and stop if requested
+		if (print_region_info_option) {
+			print_region_info (process_files);
+			return EXIT_SUCCESS;
+		}
 
 		// Check that base is set
 		struct CheckBase {
