@@ -128,10 +128,8 @@ inline BedFileRegions BedFileRegions::read_from (std::FILE * file) {
 	auto add_region = [](BedFileRegions & regions, std::string && name, std::vector<PointInterval> && intervals) {
 		if (!empty (name)) {
 			auto p = regions.table.emplace (std::move (name), std::move (intervals));
-			if (!p.second) {
-				throw std::runtime_error (
-				    fmt::format ("Region name '{}' found twice, duplicates are not allowed", p.first->first));
-			}
+			assert (p.second);
+			static_cast<void> (p); // Avoid unused var warning in non debug mode.
 		}
 	};
 
@@ -151,14 +149,20 @@ inline BedFileRegions BedFileRegions::read_from (std::FILE * file) {
 				if (!(interval_start_position <= interval_end_position)) {
 					throw std::runtime_error ("Interval bounds are invalid");
 				}
-				// Check is start of a new region
+				// Check if start of a new region
 				if (region_name != current_region_name) {
-					if (empty (region_name)) {
-						throw std::runtime_error ("Empty string as a region name");
-					}
+					// Store previous region
 					add_region (regions, std::move (current_region_name), std::move (current_region_intervals));
 					current_region_intervals.clear ();
+					// Setup new region
 					current_region_name = to_string (region_name);
+					if (empty (current_region_name)) {
+						throw std::runtime_error ("Empty string as a region name");
+					}
+					if (regions.table.find (current_region_name) != regions.table.end ()) {
+						throw std::runtime_error (
+						    fmt::format ("Region '{}' found twice, duplicates are not allowed", current_region_name));
+					}
 				}
 				auto point_interval = PointInterval{
 				    (interval_start_position + interval_end_position) / 2.,
