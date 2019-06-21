@@ -109,10 +109,16 @@ inline bool LineByLineReader::read_next_line () {
  * BED format parsing.
  */
 struct BedFileRegions {
-	std::unordered_map<std::string,
-	                   std::vector<PointInterval>> table; // region name -> region unsorted intervals
+	struct BedFileRegion {
+		std::vector<PointInterval> unsorted_intervals;
 
-	std::size_t nb_regions () const { return table.size (); }
+		// Lines where region was defined (starts at 0)
+		std::size_t start_line;
+		std::size_t end_line;
+	};
+	std::unordered_map<std::string, BedFileRegion> region_by_name; // region name -> region data
+
+	std::size_t nb_regions () const { return region_by_name.size (); }
 
 	static BedFileRegions read_from (std::FILE * file);
 };
@@ -124,10 +130,17 @@ inline BedFileRegions BedFileRegions::read_from (std::FILE * file) {
 
 	std::vector<PointInterval> current_region_intervals;
 	std::string current_region_name;
+	std::size_t current_region_start_line = 0;
 
-	auto add_region = [](BedFileRegions & regions, std::string && name, std::vector<PointInterval> && intervals) {
-		if (!empty (name)) {
-			auto p = regions.table.emplace (std::move (name), std::move (intervals));
+	auto store_current_region = [&]() {
+		if (!empty (current_region_name)) {
+			// Store
+			auto p = regions.region_by_name.emplace (std::move (current_region_name), //
+			                                         BedFileRegion{
+			                                             std::move (current_region_intervals),
+			                                             current_region_start_line,
+			                                             reader.current_line_number () - 1,
+			                                         });
 			assert (p.second);
 			static_cast<void> (p); // Avoid unused var warning in non debug mode.
 		}
@@ -151,17 +164,20 @@ inline BedFileRegions BedFileRegions::read_from (std::FILE * file) {
 				}
 				// Check if start of a new region
 				if (region_name != current_region_name) {
-					// Store previous region
-					add_region (regions, std::move (current_region_name), std::move (current_region_intervals));
-					current_region_intervals.clear ();
+					store_current_region ();
 					// Setup new region
+					current_region_intervals.clear ();
 					current_region_name = to_string (region_name);
+					current_region_start_line = reader.current_line_number ();
 					if (empty (current_region_name)) {
 						throw std::runtime_error ("Empty string as a region name");
 					}
-					if (regions.table.find (current_region_name) != regions.table.end ()) {
-						throw std::runtime_error (
-						    fmt::format ("Region '{}' found twice, duplicates are not allowed", current_region_name));
+					auto it = regions.region_by_name.find (current_region_name);
+					if (it != regions.region_by_name.end ()) {
+						const auto & region = it->second;
+						throw std::runtime_error (fmt::format ("Region '{}' already defined from line {} to {}."
+						                                       " Regions must be defined in one contiguous block of lines.",
+						                                       current_region_name, region.start_line + 1, region.end_line + 1));
 					}
 				}
 				auto point_interval = PointInterval{
@@ -171,8 +187,7 @@ inline BedFileRegions BedFileRegions::read_from (std::FILE * file) {
 				current_region_intervals.emplace_back (point_interval);
 			}
 		}
-		// Add last region
-		add_region (regions, std::move (current_region_name), std::move (current_region_intervals));
+		store_current_region (); // Add last region
 		return regions;
 	} catch (const std::runtime_error & e) {
 		// Add some context to an error.

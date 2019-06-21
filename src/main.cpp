@@ -94,7 +94,7 @@ static std::vector<std::string> union_of_all_region_names (const std::vector<Bed
 	// The list is returned as a vector to guarantee the same order of regions for all processes.
 	std::unordered_set<std::string> region_name_set;
 	for (const auto & bed_file : bed_files_content) {
-		for (const auto & region : bed_file.table) {
+		for (const auto & region : bed_file.region_by_name) {
 			region_name_set.emplace (region.first);
 		}
 	}
@@ -113,9 +113,10 @@ static void print_region_info (const std::vector<ProcessFile> & files) {
 	for (const auto & region_name : union_of_all_region_names (bed_files_content)) {
 		fmt::print ("{}", region_name);
 		for (const auto & content : bed_files_content) {
-			auto region_entry = content.table.find (region_name);
-			if (region_entry != content.table.end ()) {
-				fmt::print ("\t{}", region_entry->second.size ());
+			auto region_entry = content.region_by_name.find (region_name);
+			if (region_entry != content.region_by_name.end ()) {
+				const auto & region = region_entry->second;
+				fmt::print ("\t{}", region.unsorted_intervals.size ());
 			} else {
 				fmt::print ("\tmissing");
 			}
@@ -144,9 +145,9 @@ static DataByProcessRegion<SortedVec<PointInterval>> read_process_files (const s
 		auto & content = bed_files_content[m];
 		std::size_t number_missing = 0;
 		for (RegionId r = 0; r < nb_regions; ++r) {
-			auto region_entry = content.table.find (all_region_names[r]);
-			if (region_entry != content.table.end ()) {
-				auto & unsorted_intervals = region_entry->second;
+			auto region_entry = content.region_by_name.find (all_region_names[r]);
+			if (region_entry != content.region_by_name.end ()) {
+				auto & unsorted_intervals = region_entry->second.unsorted_intervals;
 				// Apply reversing if requested before sorting them in increasing order
 				if (file.direction == ProcessDirection::Backward) {
 					for (auto & interval : unsorted_intervals) {
