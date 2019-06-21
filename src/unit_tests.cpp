@@ -257,8 +257,7 @@ TEST_SUITE ("computations") {
 		const auto interval = shape::IntervalIndicator::with_half_width (1);
 		SUBCASE ("no points") {
 			const auto vec = SortedVec<Point>::from_sorted ({});
-			const auto minus_inf = -std::numeric_limits<double>::infinity ();
-			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == minus_inf);
+			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 0);
 		}
 		SUBCASE ("non overlapping") {
 			const auto vec = SortedVec<Point>::from_sorted ({0, 3});
@@ -281,8 +280,7 @@ TEST_SUITE ("computations") {
 		const auto interval = HistogramBase::Interval{0, 3}; // ]0,3]
 		SUBCASE ("no points") {
 			const auto vec = SortedVec<Point>::from_sorted ({});
-			const auto minus_inf = -std::numeric_limits<double>::infinity ();
-			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == minus_inf);
+			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 0);
 		}
 		SUBCASE ("non overlapping") {
 			const auto vec = SortedVec<Point>::from_sorted ({0, 3, 6});
@@ -320,34 +318,34 @@ TEST_SUITE ("computations") {
 		const auto point = SortedVec<Point>::from_sorted ({0});
 		const auto points = SortedVec<Point>::from_sorted ({0, 1, 2});
 		// Empty
-		CHECK (g_ll2kk2_histogram_integral_denormalized (empty, empty, interval_0_1, interval_0_1) == 0);
-		CHECK (g_ll2kk2_histogram_integral_denormalized (point, empty, interval_0_1, interval_0_1) == 0);
-		CHECK (g_ll2kk2_histogram_integral_denormalized (empty, point, interval_0_1, interval_0_1) == 0);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (empty, interval_0_1, empty, interval_0_1) == 0);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (point, interval_0_1, empty, interval_0_1) == 0);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (empty, interval_0_1, point, interval_0_1) == 0);
 		// With phi=indicator(]0,1]), phi(x - x_l) * phi(x - x_m) = if x_m == x_l then 1 else 0
 		// Thus integral_x sum_{x_l,x_m} phi(x - x_m) phi(x - x_l) = sum_{x_m == x_l} 1
-		CHECK (g_ll2kk2_histogram_integral_denormalized (point, point, interval_0_1, interval_0_1) == 1);
-		CHECK (g_ll2kk2_histogram_integral_denormalized (point, points, interval_0_1, interval_0_1) == 1);
-		CHECK (g_ll2kk2_histogram_integral_denormalized (points, point, interval_0_1, interval_0_1) == 1);
-		CHECK (g_ll2kk2_histogram_integral_denormalized (points, points, interval_0_1, interval_0_1) == 3);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (point, interval_0_1, point, interval_0_1) == 1);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (point, interval_0_1, points, interval_0_1) == 1);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (points, interval_0_1, point, interval_0_1) == 1);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (points, interval_0_1, points, interval_0_1) == 3);
 		// Simple cases for interval ]0,2]
-		CHECK (g_ll2kk2_histogram_integral_denormalized (empty, empty, interval_0_2, interval_0_2) == 0);
-		CHECK (g_ll2kk2_histogram_integral_denormalized (point, empty, interval_0_2, interval_0_2) == 0);
-		CHECK (g_ll2kk2_histogram_integral_denormalized (point, point, interval_0_2, interval_0_2) == 2);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (empty, interval_0_2, empty, interval_0_2) == 0);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (point, interval_0_2, empty, interval_0_2) == 0);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (point, interval_0_2, point, interval_0_2) == 2);
 		// Results based on geometrical figures for more complex cases:
 		//                                       ##     #
 		// ##__ * (##__ + _##_ + __##) = ##__ * #### = ##__
-		CHECK (g_ll2kk2_histogram_integral_denormalized (point, points, interval_0_2, interval_0_2) == 3);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (point, interval_0_2, points, interval_0_2) == 3);
 		//                ##
 		//                ##
 		//  ##     ##     ##
 		// #### * #### = ####
-		CHECK (g_ll2kk2_histogram_integral_denormalized (points, points, interval_0_2, interval_0_2) == 10);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (points, interval_0_2, points, interval_0_2) == 10);
 		//                         ##            ##     ##
 		// (#___ + _#__ + __#_) * #### = ###_ * #### = ###_
-		CHECK (g_ll2kk2_histogram_integral_denormalized (points, points, interval_0_1, interval_0_2) == 5);
+		CHECK (g_ll2kk2_histogram_integral_denormalized (points, interval_0_1, points, interval_0_2) == 5);
 		// Check that value is invariant by common interval shifting
-		CHECK (g_ll2kk2_histogram_integral_denormalized (points, points, interval_0_2, interval_0_2) ==
-		       g_ll2kk2_histogram_integral_denormalized (points, points, interval_2_4, interval_2_4));
+		CHECK (g_ll2kk2_histogram_integral_denormalized (points, interval_0_2, points, interval_0_2) ==
+		       g_ll2kk2_histogram_integral_denormalized (points, interval_2_4, points, interval_2_4));
 	}
 	/*	TEST_CASE ("b_values") {
 	    const auto base = HistogramBase{2, 10}; // K=2, delta=10, intervals= ]0,10] ]10,20]
