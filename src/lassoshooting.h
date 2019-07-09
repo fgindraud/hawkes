@@ -92,3 +92,38 @@ inline Eigen::VectorXd lassoshooting (const Eigen::MatrixXd & xtx, Eigen::Vector
 	}
 	return beta;
 }
+
+inline Eigen::VectorXd lassoshooting_g (const Eigen::MatrixXd & g, const Eigen::VectorXd & b, Eigen::VectorXd d,
+                                        const double lambda) {
+	const auto p = b.size ();
+	assert (p == d.size ());
+	assert (g.cols () == p && g.rows () == p);
+
+	d *= lambda;
+
+	const auto minimized_expression = [&g, &b, &d](const Eigen::VectorXd & a) -> double {
+		return 0.5 * double(a.transpose () * g * a) - double(b.transpose () * a) + double(d.transpose () * a.cwiseAbs ());
+	};
+
+	const int max_iteration_count = 10000;
+	const double convergence_threshold = 1E-6;
+
+	Eigen::VectorXd a = Eigen::VectorXd::Zero (p);
+	for (int iteration = 0; iteration < max_iteration_count; ++iteration) {
+		const double previous_expression_value = minimized_expression (a);
+		for (int i = 0; i < p; ++i) {
+			const auto s = double(g.row (i) * a) - g (i, i) * a (i) - b (i);
+			if ((-s - d (i)) > 0) {
+				a (i) = (-s - d (i)) / g (i, i);
+			} else if ((-s + d (i)) < 0) {
+				a (i) = (-s + d (i)) / g (i, i);
+			} else {
+				a (i) = 0;
+			}
+		}
+		if (std::abs (minimized_expression (a) - previous_expression_value) < convergence_threshold) {
+			break;
+		}
+	}
+	return a;
+}
