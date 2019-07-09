@@ -78,3 +78,12 @@ License
 -------
 
 TODO
+
+TODO
+----
+
+* Use another lassoshooting to check current implementation
+* Add post-estimation of parameters after lasso (BOL stuff in BoxLassoV)
+* Options to print G / B / D in non-debug.
+* Use polynomial shape in master, factorize code.
+* Use PositiveSupport(shape) instead of interval\_right\_half.
