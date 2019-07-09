@@ -304,6 +304,7 @@ determine_kernel_setup (const DataByProcessRegion<SortedVec<PointInterval>> & in
 int main (int argc, char * argv[]) {
 	bool verbose = false;
 	double gamma = 1.;
+	double lambda = 1.;
 
 	BaseOption base_option = None{}; // Base choice starts undefined and MUST be defined
 	KernelConfig kernel_config = KernelConfig::None;
@@ -328,6 +329,8 @@ int main (int argc, char * argv[]) {
 	parser.option ({"g", "gamma"}, "value", "Set gamma value (double, positive)", [&gamma](string_view value) { //
 		gamma = parse_strict_positive_double (value, "gamma");
 	});
+	parser.option ({"lambda"}, "value", "Set global penalty multiplier (double, positive)",
+	               [&lambda](string_view value) { lambda = parse_strict_positive_double (value, "lambda"); });
 
 	// Base
 	parser.option2 ({"histogram"}, "K", "delta", "Use an histogram base (k > 0, delta > 0)",
@@ -423,7 +426,7 @@ int main (int argc, char * argv[]) {
 		// Perform lassoshooting
 		const auto lasso_start = instant ();
 		const auto lasso_parameters = compute_lasso_parameters (intermediate_values, gamma);
-		const auto estimated_a = compute_estimated_a_with_lasso (lasso_parameters);
+		const auto estimated_a = compute_estimated_a_with_lasso (lasso_parameters, lambda);
 		const auto lasso_end = instant ();
 		fmt::print (stderr, "Lassoshooting done: time = {}\n", duration_string (lasso_end - lasso_start));
 
@@ -470,7 +473,9 @@ int main (int argc, char * argv[]) {
 			};
 			visit (PrintKernelLine{kernel_type}, kernels);
 
-			fmt::print ("# gamma = {}\n", gamma);
+			fmt::print ("# gamma = {}\n"
+			            "# lambda = {}\n",
+			            gamma, lambda);
 
 			fmt::print ("# Rows = {{0}} U {{(l,k)}} (order = 0,(0,0),..,(0,K-1),(1,0),..,(1,K-1),...,(M-1,K-1))\n");
 			fmt::print ("# Columns = {{m}}\n");

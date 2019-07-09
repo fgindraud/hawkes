@@ -908,7 +908,7 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 #include <Eigen/LU> // We need extra Eigen includes for matrix inversion.
 #endif
 
-inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p) {
+inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p, double lambda) {
 	assert (p.sum_of_b.inner.allFinite ());
 	assert (p.sum_of_g.inner.allFinite ());
 	assert (p.d.inner.allFinite ());
@@ -937,7 +937,7 @@ inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p) {
 	const auto base_size = p.sum_of_b.base_size;
 	Matrix_M_MK1 a (nb_processes, base_size);
 	for (ProcessId m = 0; m < nb_processes; ++m) {
-		const double lambda = 1.;
+		// lambda is a global multiplier for penalty weights.
 		a.values_for_m (m) = lassoshooting (p.sum_of_g.inner, p.sum_of_b.values_for_m (m), p.d.values_for_m (m), lambda);
 	}
 	return a;
