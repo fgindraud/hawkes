@@ -93,7 +93,11 @@ inline Eigen::VectorXd lassoshooting (const Eigen::MatrixXd & xtx, Eigen::Vector
 	return beta;
 }
 
-inline Eigen::VectorXd lassoshooting_g (const Eigen::MatrixXd & g, const Eigen::VectorXd & b, Eigen::VectorXd d,
+#if 0
+/* Another implementation of lassoshooting, for comparison.
+ * This one is taken from the slides of Gilles Scarella.
+ */
+inline Eigen::VectorXd lassoshooting (const Eigen::MatrixXd & g, const Eigen::VectorXd & b, Eigen::VectorXd d,
                                         const double lambda) {
 	const auto p = b.size ();
 	assert (p == d.size ());
@@ -127,3 +131,4 @@ inline Eigen::VectorXd lassoshooting_g (const Eigen::MatrixXd & g, const Eigen::
 	}
 	return a;
 }
+#endif
