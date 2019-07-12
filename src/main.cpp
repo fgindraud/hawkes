@@ -315,6 +315,7 @@ int main (int argc, char * argv[]) {
 
 	std::vector<ProcessFile> process_files;
 
+	bool skip_reestimation = false;
 	bool dump_region_info_option = false;
 	bool dump_intermediate_values = false;
 
@@ -384,7 +385,9 @@ int main (int argc, char * argv[]) {
 		               process_files.emplace_back (ProcessFile{filename, ProcessDirection::Backward});
 	               });
 
-	// Printing of additional values
+	// Debugging options
+	parser.flag ({"skip-reestimation"}, "Do not perform re-estimation after Lasso",
+	             [&skip_reestimation]() { skip_reestimation = true; });
 	parser.flag ({"dump-region-info"}, "Stop after parsing and print region/process point counts",
 	             [&dump_region_info_option]() { dump_region_info_option = true; });
 	parser.flag ({"dump-intermediate-values"}, "Print the B,G,D matrices used in Lasso",
@@ -431,7 +434,7 @@ int main (int argc, char * argv[]) {
 		fmt::print (stderr, "Computing B and G matrice done: time = {}\n",
 		            duration_string (compute_b_g_end - compute_b_g_start));
 
-		// Perform lassoshooting
+		// Perform lassoshooting and final re-estimation
 		const auto lasso_start = instant ();
 		const auto lasso_parameters = compute_lasso_parameters (intermediate_values, gamma);
 		if (dump_intermediate_values) {
@@ -443,7 +446,10 @@ int main (int argc, char * argv[]) {
 			            lasso_parameters.d.inner.format (eigen_format));
 			fmt::print ("# Estimated A\n"); // Add a separator between D and A (when printed later).
 		}
-		const auto estimated_a = compute_estimated_a_with_lasso (lasso_parameters, lambda);
+		Matrix_M_MK1 estimated_a = compute_estimated_a_with_lasso (lasso_parameters, lambda);
+		if (!skip_reestimation) {
+			estimated_a = compute_reestimated_a (lasso_parameters, estimated_a);
+		}
 		const auto lasso_end = instant ();
 		fmt::print (stderr, "Lassoshooting done: time = {}\n", duration_string (lasso_end - lasso_start));
 
@@ -491,8 +497,9 @@ int main (int argc, char * argv[]) {
 			visit (PrintKernelLine{kernel_type}, kernels);
 
 			fmt::print ("# gamma = {}\n"
-			            "# lambda = {}\n",
-			            gamma, lambda);
+			            "# lambda = {}\n"
+			            "# re-estimation after Lasso = {}\n",
+			            gamma, lambda, !skip_reestimation);
 
 			fmt::print ("# Rows = {{0}} U {{(l,k)}} (order = 0,(0,0),..,(0,K-1),(1,0),..,(1,K-1),...,(M-1,K-1))\n");
 			fmt::print ("# Columns = {{m}}\n");

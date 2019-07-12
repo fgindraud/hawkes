@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Eigen/LU>
+#include <Eigen/Cholesky>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -919,17 +919,54 @@ inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p, d
 	return a;
 }
 
-// TODO re-estimate a using G^-1 B on non zero components
-#if 0
-	const auto inverse_g = p.sum_of_g.inner.fullPivLu ();
-	if (inverse_g.isInvertible ()) {
-		const Eigen::MatrixXd solution = inverse_g.solve (p.sum_of_b.inner);
-		if ((p.sum_of_g.inner * solution).isApprox (p.sum_of_b.inner)) {
-			fmt::print (stderr, "{}\n", solution);
-		} else {
-			fmt::print (stderr, "G * a = B has no solution\n");
+inline Matrix_M_MK1 compute_reestimated_a (const LassoParameters & p, const Matrix_M_MK1 & estimated_a) {
+	const auto compute_non_zero_index_table = [](const auto & eigen_vec) {
+		const Eigen::Index nb_non_zero = eigen_vec.count ();
+		Eigen::VectorXi table (nb_non_zero);
+		Eigen::Index non_zero_seen = 0;
+		for (Eigen::Index i = 0; i < eigen_vec.size (); ++i) {
+			if (eigen_vec[i] != 0) {
+				assert (non_zero_seen < nb_non_zero);
+				table[non_zero_seen] = i;
+				non_zero_seen += 1;
+			}
 		}
-	} else {
-		fmt::print (stderr, "G is not invertible\n");
+		return table;
+	};
+
+	const auto nb_processes = p.sum_of_b.nb_processes;
+	const auto base_size = p.sum_of_b.base_size;
+	Matrix_M_MK1 a (nb_processes, base_size);
+	a.inner.setZero ();
+	for (ProcessId m = 0; m < nb_processes; ++m) {
+		const auto non_zero_indexes = compute_non_zero_index_table (estimated_a.values_for_m (m));
+		const auto nb_non_zero = non_zero_indexes.size ();
+		if (nb_non_zero > 0) {
+			// Build B and G without rows/cols for zeros in a_m.
+			const auto b_m = p.sum_of_b.values_for_m (m);
+			Eigen::VectorXd restricted_b (nb_non_zero);
+			for (Eigen::Index i = 0; i < nb_non_zero; ++i) {
+				restricted_b[i] = b_m[non_zero_indexes[i]];
+			}
+			Eigen::MatrixXd restricted_g (nb_non_zero, nb_non_zero);
+			for (Eigen::Index i = 0; i < nb_non_zero; ++i) {
+				for (Eigen::Index j = 0; j < nb_non_zero; ++j) {
+					restricted_g (i, j) = p.sum_of_g.inner (non_zero_indexes[i], non_zero_indexes[j]);
+				}
+			}
+			// Solve linear system without components in 0. Using Cholesky as G is semi-definite positive.
+			Eigen::VectorXd restricted_a_m = restricted_g.llt ().solve (restricted_b);
+			if ((restricted_g * restricted_a_m).isApprox (restricted_b)) {
+				// Solution is valid, store it
+				auto a_m = a.values_for_m (m);
+				for (Eigen::Index i = 0; i < nb_non_zero; ++i) {
+					a_m[non_zero_indexes[i]] = restricted_a_m[i];
+				}
+			} else {
+				throw std::runtime_error (
+				    fmt::format ("Re-estimation: unable to solve restricted linear system (process {})", m));
+			}
+		}
 	}
-#endif
+	return a;
+}

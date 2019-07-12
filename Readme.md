@@ -81,6 +81,5 @@ TODO
 TODO
 ----
 
-* Add post-estimation of parameters after lasso (BOL stuff in BoxLassoV)
 * Use polynomial shape in master, factorize code.
 * Use PositiveSupport(shape) instead of interval\_right\_half.
