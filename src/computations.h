@@ -931,6 +931,7 @@ inline Matrix_M_MK1 compute_reestimated_a (const LassoParameters & p, const Matr
 				non_zero_seen += 1;
 			}
 		}
+		assert (non_zero_seen == nb_non_zero);
 		return table;
 	};
 
@@ -944,9 +945,9 @@ inline Matrix_M_MK1 compute_reestimated_a (const LassoParameters & p, const Matr
 		if (nb_non_zero > 0) {
 			// Build B and G without rows/cols for zeros in a_m.
 			const auto b_m = p.sum_of_b.values_for_m (m);
-			Eigen::VectorXd restricted_b (nb_non_zero);
+			Eigen::VectorXd restricted_b_m (nb_non_zero);
 			for (Eigen::Index i = 0; i < nb_non_zero; ++i) {
-				restricted_b[i] = b_m[non_zero_indexes[i]];
+				restricted_b_m[i] = b_m[non_zero_indexes[i]];
 			}
 			Eigen::MatrixXd restricted_g (nb_non_zero, nb_non_zero);
 			for (Eigen::Index i = 0; i < nb_non_zero; ++i) {
@@ -955,8 +956,8 @@ inline Matrix_M_MK1 compute_reestimated_a (const LassoParameters & p, const Matr
 				}
 			}
 			// Solve linear system without components in 0. Using Cholesky as G is semi-definite positive.
-			Eigen::VectorXd restricted_a_m = restricted_g.llt ().solve (restricted_b);
-			if ((restricted_g * restricted_a_m).isApprox (restricted_b)) {
+			Eigen::VectorXd restricted_a_m = restricted_g.llt ().solve (restricted_b_m);
+			if ((restricted_g * restricted_a_m).isApprox (restricted_b_m)) {
 				// Solution is valid, store it
 				auto a_m = a.values_for_m (m);
 				for (Eigen::Index i = 0; i < nb_non_zero; ++i) {
