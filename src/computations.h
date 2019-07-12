@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Eigen/LU>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -904,22 +905,22 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 	return {std::move (sum_of_b), std::move (sum_of_g), std::move (d)};
 }
 
-#ifndef NDEBUG
-#include <Eigen/LU> // We need extra Eigen includes for matrix inversion.
-#endif
-
 inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p, double lambda) {
 	assert (p.sum_of_b.inner.allFinite ());
 	assert (p.sum_of_g.inner.allFinite ());
 	assert (p.d.inner.allFinite ());
-#ifndef NDEBUG
-	fmt::print (stderr, "############################### sum B ###################################\n");
-	fmt::print (stderr, "{}\n", p.sum_of_b.inner);
-	fmt::print (stderr, "############################### sum G ###################################\n");
-	fmt::print (stderr, "{}\n", p.sum_of_g.inner);
-	fmt::print (stderr, "################################# D #####################################\n");
-	fmt::print (stderr, "{}\n", p.d.inner);
-	fmt::print (stderr, "############################### G^-1*B ##################################\n");
+	const auto nb_processes = p.sum_of_b.nb_processes;
+	const auto base_size = p.sum_of_b.base_size;
+	Matrix_M_MK1 a (nb_processes, base_size);
+	for (ProcessId m = 0; m < nb_processes; ++m) {
+		// lambda is a global multiplier for penalty weights.
+		a.values_for_m (m) = lassoshooting (p.sum_of_g.inner, p.sum_of_b.values_for_m (m), p.d.values_for_m (m), lambda);
+	}
+	return a;
+}
+
+// TODO re-estimate a using G^-1 B on non zero components
+#if 0
 	const auto inverse_g = p.sum_of_g.inner.fullPivLu ();
 	if (inverse_g.isInvertible ()) {
 		const Eigen::MatrixXd solution = inverse_g.solve (p.sum_of_b.inner);
@@ -931,14 +932,4 @@ inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p, d
 	} else {
 		fmt::print (stderr, "G is not invertible\n");
 	}
-	fmt::print (stderr, "#########################################################################\n");
 #endif
-	const auto nb_processes = p.sum_of_b.nb_processes;
-	const auto base_size = p.sum_of_b.base_size;
-	Matrix_M_MK1 a (nb_processes, base_size);
-	for (ProcessId m = 0; m < nb_processes; ++m) {
-		// lambda is a global multiplier for penalty weights.
-		a.values_for_m (m) = lassoshooting (p.sum_of_g.inner, p.sum_of_b.values_for_m (m), p.d.values_for_m (m), lambda);
-	}
-	return a;
-}

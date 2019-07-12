@@ -62,8 +62,7 @@ Advanced compilation:
 Developer corner
 ----------------
 
-`make hawkes_debug` will compile the program in debug mode, with some assertions enabled and debug informations generated.
-This can be useful to investigate a bug with gdb, or print intermediate values (B/G matrices).
+`make hawkes_debug` will compile the program in debug mode, with assertions enabled and debug informations generated.
 
 `make test` will compile and run a file with a lot of small tests of parts of the code.
 
@@ -83,6 +82,5 @@ TODO
 ----
 
 * Add post-estimation of parameters after lasso (BOL stuff in BoxLassoV)
-* Options to print G / B / D in non-debug.
 * Use polynomial shape in master, factorize code.
 * Use PositiveSupport(shape) instead of interval\_right\_half.

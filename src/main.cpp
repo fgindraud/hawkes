@@ -302,6 +302,8 @@ determine_kernel_setup (const DataByProcessRegion<SortedVec<PointInterval>> & in
 }
 
 int main (int argc, char * argv[]) {
+	const Eigen::IOFormat eigen_format (Eigen::FullPrecision, 0, "\t"); // Matrix printing format, used later
+
 	bool verbose = false;
 	double gamma = 1.;
 	double lambda = 1.;
@@ -312,7 +314,9 @@ int main (int argc, char * argv[]) {
 	Optional<std::vector<PointSpace>> override_homogeneous_kernel_widths;
 
 	std::vector<ProcessFile> process_files;
-	bool print_region_info_option = false;
+
+	bool dump_region_info_option = false;
+	bool dump_intermediate_values = false;
 
 	// Command line parsing setup
 	const auto command_line = CommandLineView (argc, argv);
@@ -379,15 +383,19 @@ int main (int argc, char * argv[]) {
 	               [&process_files](string_view filename) {
 		               process_files.emplace_back (ProcessFile{filename, ProcessDirection::Backward});
 	               });
-	parser.flag ({"print-region-info"}, "Stop after parsing and print counts by region/process",
-	             [&print_region_info_option]() { print_region_info_option = true; });
+
+	// Printing of additional values
+	parser.flag ({"dump-region-info"}, "Stop after parsing and print region/process point counts",
+	             [&dump_region_info_option]() { dump_region_info_option = true; });
+	parser.flag ({"dump-intermediate-values"}, "Print the B,G,D matrices used in Lasso",
+	             [&dump_intermediate_values]() { dump_intermediate_values = true; });
 
 	try {
 		// Parse command line arguments. All actions declared to the parser will be called here.
 		parser.parse (command_line);
 
 		// Print region point counts and stop if requested
-		if (print_region_info_option) {
+		if (dump_region_info_option) {
 			print_region_info (process_files);
 			return EXIT_SUCCESS;
 		}
@@ -426,6 +434,15 @@ int main (int argc, char * argv[]) {
 		// Perform lassoshooting
 		const auto lasso_start = instant ();
 		const auto lasso_parameters = compute_lasso_parameters (intermediate_values, gamma);
+		if (dump_intermediate_values) {
+			fmt::print ("# B matrix (rows = {{0}} U {{(l,k)}}, cols = {{m}})\n{}\n",
+			            lasso_parameters.sum_of_b.inner.format (eigen_format));
+			fmt::print ("# G matrix (rows & cols = {{0}} U {{(l,k)}})\n{}\n",
+			            lasso_parameters.sum_of_g.inner.format (eigen_format));
+			fmt::print ("# D matrix (rows = {{0}} U {{(l,k)}}, cols = {{m}})\n{}\n",
+			            lasso_parameters.d.inner.format (eigen_format));
+			fmt::print ("# Estimated A\n"); // Add a separator between D and A (when printed later).
+		}
 		const auto estimated_a = compute_estimated_a_with_lasso (lasso_parameters, lambda);
 		const auto lasso_end = instant ();
 		fmt::print (stderr, "Lassoshooting done: time = {}\n", duration_string (lasso_end - lasso_start));
@@ -480,7 +497,6 @@ int main (int argc, char * argv[]) {
 			fmt::print ("# Rows = {{0}} U {{(l,k)}} (order = 0,(0,0),..,(0,K-1),(1,0),..,(1,K-1),...,(M-1,K-1))\n");
 			fmt::print ("# Columns = {{m}}\n");
 		}
-		const Eigen::IOFormat eigen_format (Eigen::FullPrecision, 0, "\t");
 		fmt::print ("{}\n", estimated_a.inner.format (eigen_format));
 
 	} catch (const CommandLineParser::Exception & exc) {
