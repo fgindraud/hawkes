@@ -295,7 +295,7 @@ TEST_SUITE ("computations") {
 			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 3);
 		}
 	}
-	TEST_CASE ("b_ml_histogram_counts_for_all_k_denormalized") {
+	/*TEST_CASE ("b_ml_histogram_counts_for_all_k_denormalized") {
 		const auto base = HistogramBase{3, 1}; // K=3, delta=1, so intervals=]0,1] ]1,2] ]2,3]
 		const auto empty = SortedVec<Point>::from_sorted ({});
 		const auto point = SortedVec<Point>::from_sorted ({0});
@@ -347,7 +347,7 @@ TEST_SUITE ("computations") {
 		CHECK (g_ll2kk2_histogram_integral_denormalized (points, interval_0_2, points, interval_0_2) ==
 		       g_ll2kk2_histogram_integral_denormalized (points, interval_2_4, points, interval_2_4));
 	}
-	/*	TEST_CASE ("b_values") {
+		TEST_CASE ("b_values") {
 	    const auto base = HistogramBase{2, 10}; // K=2, delta=10, intervals= ]0,10] ]10,20]
 	    const auto norm_factor = normalization_factor (base);
 	    const SortedVec<Point> points[] = {
