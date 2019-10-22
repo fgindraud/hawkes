@@ -35,6 +35,34 @@ template <> struct StringMaker<string_view> {
 } // namespace doctest
 
 /******************************************************************************
+ * Types definitions
+ */
+TEST_SUITE ("types") {
+	TEST_CASE ("haar_base_k_mapping") {
+		const auto base = HaarBase (4, 100.);
+		// Some values
+		const auto sp_0 = base.scale_and_position (0);
+		CHECK (sp_0.scale == 0);
+		CHECK (sp_0.position == 0);
+		const auto sp_1 = base.scale_and_position (1);
+		CHECK (sp_1.scale == 1);
+		CHECK (sp_1.position == 0);
+		const auto sp_2 = base.scale_and_position (2);
+		CHECK (sp_2.scale == 1);
+		CHECK (sp_2.position == 1);
+		const auto sp_3 = base.scale_and_position (3);
+		CHECK (sp_3.scale == 2);
+		CHECK (sp_3.position == 0);
+		// Check bijection on all values.
+		for (FunctionBaseId k = 0; k < base.base_size (); ++k) {
+			const auto sp = base.scale_and_position (k);
+			const auto k2 = base.base_id (sp.scale, sp.position);
+			CHECK (k == k2);
+		}
+	}
+}
+
+/******************************************************************************
  * Shape tests.
  */
 TEST_SUITE ("shape") {
@@ -576,6 +604,21 @@ TEST_SUITE ("utils") {
 		CHECK (sorted.size () == 2);
 		CHECK (sorted[0] == 0);
 		CHECK (sorted[1] == 1);
+	}
+	TEST_CASE ("power_of_2") {
+		CHECK (power_of_2 (0) == 1);
+		CHECK (power_of_2 (1) == 2);
+		CHECK (power_of_2 (2) == 4);
+	}
+	TEST_CASE ("floor_log2") {
+		CHECK (floor_log2 (1) == 0);
+		CHECK (floor_log2 (2) == 1);
+		CHECK (floor_log2 (3) == 1);
+		CHECK (floor_log2 (4) == 2);
+		CHECK (floor_log2 (5) == 2);
+		CHECK (floor_log2 (7) == 2);
+		CHECK (floor_log2 (8) == 3);
+		CHECK (floor_log2 (9) == 3);
 	}
 }
 

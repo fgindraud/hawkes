@@ -364,3 +364,26 @@ template <typename Range, typename Function> auto map_to_vector (const Range & r
 	}
 	return vec;
 }
+
+/*******************************************************************************
+ * Power of 2 utils. For Haar base.
+ */
+
+// 2^n
+inline size_t power_of_2 (size_t n) {
+	assert (n < size_t (std::numeric_limits<size_t>::digits));
+	return size_t (1) << n;
+}
+
+// floor(log2(n)) for n > 0
+inline size_t floor_log2 (size_t n) {
+	// iterative version : find higher 1 bit position in n.
+	// maps to x86 builtin instruction in clang and -O3, no need for compiler builtins.
+	assert (n > 0);
+	size_t log = 0;
+	while (n > 0) {
+		n = n >> 1;
+		log += 1;
+	}
+	return log - 1;
+}

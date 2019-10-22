@@ -101,8 +101,8 @@ Interval<left_type, right_type> operator+ (PointSpace offset, Interval<left_type
  * Function bases.
  */
 
-/* Histogram(base_size, D)
- * For k in [0, base_size[ : phi_k = 1/sqrt(D) * IndicatorFunction_]k * D, (k + 1) * D]
+/* Histogram(base_size, D) : shifted indicator functions, with L2-norm of 1
+ * For k in [0, base_size[ : phi_k(x) = 1/sqrt(D) * IndicatorFunction_]k * D, (k + 1) * D](x)
  */
 struct HistogramBase {
 	size_t base_size; // [1, inf[
@@ -116,15 +116,90 @@ struct HistogramBase {
 		normalization_factor = 1. / std::sqrt (delta);
 	}
 
+	Interval<Bound::Open, Bound::Closed> total_span () const { return {0., PointSpace (base_size) * delta}; }
+
 	Interval<Bound::Open, Bound::Closed> interval (FunctionBaseId k) const {
 		assert (k < base_size);
 		return {PointSpace (k) * delta, PointSpace (k + 1) * delta};
 	}
-
-	Interval<Bound::Open, Bound::Closed> total_span () const { return {0., PointSpace (base_size) * delta}; }
 };
 
+/** Haar(nb_scales, delta) : haar square wavelets, L2-norm of 1
+ * For:
+ * s = scale in [0, nb_scales[
+ * p = position in [0, 2^s[
+ * On ]0, 1], this is the set of function f_{s,p}(x) = sqrt(2)^s * (
+ *   IndicatorFunction_] 2p / 2^(s+1), (2p + 1) / 2^(s+1) ](x) -
+ *   IndicatorFunction_] (2p + 1) / 2^(s+1), (2p + 2) / 2^(s+1) ](x)
+ * )
+ * With delta scaling, on ]0, delta] this is the set of g_{s,p}(x) = (1 / sqrt(delta)) * f_{s,p}(x / delta).
+ *
+ * Mapping to phi_k:
+ * Scale s has 2^s functions, so for [0, nb_scales[ : base_size = sum_s 2^s = 2^nb_scales - 1.
+ * For k in [0, 2^nb_scales - 1[ : phi_k = g_{s,p} with 2^s + p == k + 1
+ * Thus for a given k, s = floor(log2(k + 1)) and p = k + 1 - 2^s
+ */
+struct HaarBase {
+	size_t nb_scales; // [1, inf[
+	PointSpace delta; // ]0, inf[
 
+	double delta_normalization_factor;
+
+	// Cannot represent more than max_nb_scales due to base_size = 2^nb_scales - 1.
+	// High scaling number should not be used due to computation requirements anyway.
+	static constexpr size_t max_nb_scales = size_t (std::numeric_limits<FunctionBaseId>::digits - 1);
+
+	HaarBase (size_t nb_scales, PointSpace delta) : nb_scales (nb_scales), delta (delta) {
+		assert (nb_scales > 0);
+		assert (nb_scales < max_nb_scales);
+		assert (delta > 0.);
+		delta_normalization_factor = 1. / std::sqrt (delta);
+	}
+
+	size_t base_size () const { return power_of_2 (nb_scales) - 1; }
+
+	Interval<Bound::Open, Bound::Closed> total_span () const { return {0., delta}; }
+
+	struct ScalePosition {
+		size_t scale;
+		size_t position;
+	};
+	ScalePosition scale_and_position (FunctionBaseId k) const {
+		assert (k < base_size ());
+		const size_t scale = floor_log2 (k + 1);
+		const size_t position = k + 1 - power_of_2 (scale);
+		return {scale, position};
+	}
+	FunctionBaseId base_id (size_t scale, size_t position) const {
+		assert (scale < nb_scales);
+		assert (position < power_of_2 (scale));
+		return power_of_2 (scale) - 1 + position;
+	}
+
+	struct Wavelet {
+		Interval<Bound::Open, Bound::Closed> up_part;
+		Interval<Bound::Open, Bound::Closed> down_part;
+		double normalization_factor;
+	};
+	Wavelet wavelet (size_t scale, size_t position) const {
+		assert (scale < nb_scales);
+		assert (position < power_of_2 (scale));
+		const double scale_factor = delta / double (power_of_2 (scale + 1));
+		const PointSpace left = (2 * position) * scale_factor;
+		const PointSpace mid = (2 * position + 1) * scale_factor;
+		const PointSpace right = (2 * position + 2) * scale_factor;
+		const double normalization = delta_normalization_factor * std::pow (2, double (scale) / 2.);
+		return {
+		    {left, mid},
+		    {mid, right},
+		    normalization,
+		};
+	}
+	Wavelet wavelet (FunctionBaseId k) const {
+		const ScalePosition sp = scale_and_position (k);
+		return wavelet (sp.scale, sp.position);
+	}
+};
 
 /******************************************************************************
  * Kernels.
