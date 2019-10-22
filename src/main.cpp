@@ -61,9 +61,8 @@ enum class KernelType {
     IntervalRightHalf, // L2-normalized indicator function on [0, width/2]
 };
 
-using BaseType = variant<HistogramBase // phi_k = L2-normalized indicator function for ]kd,(k+1)d]
-                         >;
-using BaseOption = variant<None, HistogramBase>; // Option type, maybe undefined (None).
+using BaseType = variant<HistogramBase, HaarBase>;
+using BaseOption = variant<None, HistogramBase, HaarBase>; // Option type, maybe undefined (None).
 
 enum class ProcessDirection {
     Forward,  // Keep points coordinates
@@ -329,14 +328,14 @@ int main(int argc, char * argv[]) {
     auto parser = CommandLineParser();
 
     // Common
-    parser.flag({"h", "help"}, "Display this help", [&]() { //
+    parser.flag({"h", "help"}, "Display this help", [&]() {
         parser.usage(stderr, command_line.program_name());
         std::exit(EXIT_SUCCESS);
     });
     parser.flag({"v", "verbose"}, "Enable verbose output", [&]() { verbose = true; });
 
     // Hyper-parameters
-    parser.option({"g", "gamma"}, "value", "Set gamma value (double, positive)", [&gamma](string_view value) { //
+    parser.option({"g", "gamma"}, "value", "Set gamma value (double, positive)", [&gamma](string_view value) {
         gamma = parse_strict_positive_double(value, "gamma");
     });
     parser.option(
@@ -354,6 +353,19 @@ int main(int argc, char * argv[]) {
             const auto base_size = size_t(parse_strict_positive_int(k_value, "histogram K"));
             const auto delta = PointSpace(parse_strict_positive_double(delta_value, "histogram delta"));
             base_option = HistogramBase{base_size, delta};
+        });
+    parser.option2(
+        {"haar"},
+        "nb_scales",
+        "delta",
+        "Use Haar square wavelets (nb_scales > 0, delta > 0)",
+        [&base_option](string_view k_value, string_view delta_value) {
+            const auto nb_scales = size_t(parse_strict_positive_int(k_value, "haar nb_scales"));
+            if(!(nb_scales <= HaarBase::max_nb_scales)) {
+                throw std::runtime_error(fmt::format("Haar nb_scales is limited to {}", HaarBase::max_nb_scales));
+            }
+            const auto delta = PointSpace(parse_strict_positive_double(delta_value, "haar delta"));
+            base_option = HaarBase{nb_scales, delta};
         });
 
     // Kernel setup
@@ -431,6 +443,7 @@ int main(int argc, char * argv[]) {
         struct CheckBase {
             BaseType operator()(const None &) const { throw std::runtime_error("Function base is not defined"); }
             BaseType operator()(const HistogramBase & base) const { return base; }
+            BaseType operator()(const HaarBase & base) const { return base; }
         };
         const BaseType base = visit(CheckBase{}, base_option);
 
@@ -451,7 +464,7 @@ int main(int argc, char * argv[]) {
         // For each case, an overload of compute_intermediate_values indicated by its argument types does the
         // computation.
         const auto compute_b_g_start = instant();
-        const auto intermediate_values = visit(
+        const CommonIntermediateValues intermediate_values = visit(
             [&points](const auto & base, const auto & kernels) {
                 return compute_intermediate_values(points, base, kernels);
             },
@@ -465,7 +478,7 @@ int main(int argc, char * argv[]) {
 
         // Perform lassoshooting and final re-estimation
         const auto lasso_start = instant();
-        const auto lasso_parameters = compute_lasso_parameters(intermediate_values, gamma);
+        const LassoParameters lasso_parameters = compute_lasso_parameters(intermediate_values, gamma);
         if(dump_intermediate_values) {
             fmt::print(
                 "# B matrix (rows = {{0}} U {{(l,k)}}, cols = {{m}})\n{}\n",
@@ -497,8 +510,11 @@ int main(int argc, char * argv[]) {
             fmt::print("# }}\n");
 
             struct PrintBaseLine {
-                void operator()(HistogramBase b) const {
+                void operator()(const HistogramBase & b) const {
                     fmt::print("# base = Histogram(K = {}, delta = {})\n", b.base_size, b.delta);
+                }
+                void operator()(const HaarBase & b) const {
+                    fmt::print("# base = Haar(nb_scales = {}, delta = {})\n", b.nb_scales, b.delta);
                 }
             };
             visit(PrintBaseLine{}, base);

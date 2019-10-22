@@ -29,9 +29,9 @@ struct CommonIntermediateValues {
 };
 
 // Default case for compute_intermediate_values
-template <typename Base, typename KernelWidths, typename KernelType>
-inline CommonIntermediateValues compute_intermediate_values(
-    const DataByProcessRegion<SortedVec<Point>> & /*points*/, const Base &, const KernelWidths &, const KernelType &) {
+template <typename Base, typename Kernels>
+inline CommonIntermediateValues
+compute_intermediate_values(const DataByProcessRegion<SortedVec<Point>> & /*points*/, const Base &, const Kernels &) {
     throw std::runtime_error("Unsupported base/kernel configuration combination");
 }
 
