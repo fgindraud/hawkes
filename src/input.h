@@ -110,7 +110,7 @@ inline bool LineByLineReader::read_next_line () {
  */
 struct BedFileRegions {
 	struct BedFileRegion {
-		std::vector<PointInterval> unsorted_intervals;
+		std::vector<DataPoint> unsorted_points;
 
 		// Lines where region was defined (starts at 0)
 		std::size_t start_line;
@@ -128,19 +128,18 @@ inline BedFileRegions BedFileRegions::read_from (std::FILE * file) {
 	LineByLineReader reader (file);
 	BedFileRegions regions;
 
-	std::vector<PointInterval> current_region_intervals;
+	std::vector<DataPoint> current_region_points;
 	std::string current_region_name;
 	std::size_t current_region_start_line = 0;
 
-	auto store_current_region = [&]() {
+	auto store_current_region = [&] () {
 		if (!empty (current_region_name)) {
 			// Store
-			auto p = regions.region_by_name.emplace (std::move (current_region_name), //
-			                                         BedFileRegion{
-			                                             std::move (current_region_intervals),
-			                                             current_region_start_line,
-			                                             reader.current_line_number () - 1,
-			                                         });
+			auto p = regions.region_by_name.emplace (std::move (current_region_name), BedFileRegion{
+			                                                                              std::move (current_region_points),
+			                                                                              current_region_start_line,
+			                                                                              reader.current_line_number () - 1,
+			                                                                          });
 			assert (p.second);
 			static_cast<void> (p); // Avoid unused var warning in non debug mode.
 		}
@@ -166,7 +165,7 @@ inline BedFileRegions BedFileRegions::read_from (std::FILE * file) {
 				if (region_name != current_region_name) {
 					store_current_region ();
 					// Setup new region
-					current_region_intervals.clear ();
+					current_region_points.clear ();
 					current_region_name = to_string (region_name);
 					current_region_start_line = reader.current_line_number ();
 					if (empty (current_region_name)) {
@@ -180,11 +179,11 @@ inline BedFileRegions BedFileRegions::read_from (std::FILE * file) {
 						                                       current_region_name, region.start_line + 1, region.end_line + 1));
 					}
 				}
-				auto point_interval = PointInterval{
+				auto data_point = DataPoint{
 				    (interval_start_position + interval_end_position) / 2.,
 				    interval_end_position - interval_start_position,
 				};
-				current_region_intervals.emplace_back (point_interval);
+				current_region_points.emplace_back (data_point);
 			}
 		}
 		store_current_region (); // Add last region

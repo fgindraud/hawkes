@@ -38,16 +38,16 @@ using RegionId = size_t;       // [0; nb_regions[
 using Point = double;
 using PointSpace = double;
 
-// Interval for a point with uncertainty : center + width of uncertainty
-struct PointInterval {
+// A point from input data : center + width of uncertainty
+struct DataPoint {
 	Point center;
 	PointSpace width; // >= 0
 };
 
-inline bool operator< (const PointInterval & lhs, const PointInterval & rhs) {
+inline bool operator< (const DataPoint & lhs, const DataPoint & rhs) {
 	return lhs.center < rhs.center;
 }
-inline bool operator== (const PointInterval & lhs, const PointInterval & rhs) {
+inline bool operator== (const DataPoint & lhs, const DataPoint & rhs) {
 	return lhs.center == rhs.center && lhs.width == rhs.width;
 }
 
@@ -70,13 +70,20 @@ template <typename T> struct DataByProcessRegion {
 /******************************************************************************
  * Function bases.
  */
+
+/* Histogram(base_size, D)
+ * For k in [0, base_size[ : phi_k = 1/sqrt(D) * IndicatorFunction_]k * D, (k + 1) * D]
+ */
 struct HistogramBase {
 	size_t base_size; // [1, inf[
 	PointSpace delta; // ]0, inf[
 
+	double normalization_factor;
+
 	HistogramBase (size_t base_size, PointSpace delta) : base_size (base_size), delta (delta) {
 		assert (base_size > 0);
 		assert (delta > 0.);
+		normalization_factor = 1. / std::sqrt (delta);
 	}
 
 	// ]left; right]
@@ -89,10 +96,11 @@ struct HistogramBase {
 		assert (k < base_size);
 		return {PointSpace (k) * delta, PointSpace (k + 1) * delta};
 	}
+
+	Interval total_span () const { return {0., PointSpace (base_size) * delta}; }
 };
-inline double normalization_factor (HistogramBase base) {
-	return 1. / std::sqrt (base.delta);
-}
+
+
 
 /******************************************************************************
  * Kernels.
