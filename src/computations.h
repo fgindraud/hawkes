@@ -229,7 +229,8 @@ inline double sup_of_sum_of_differences_to_points (const SortedVec<Point> & poin
 	}
 	return max;
 }
-inline double sup_of_sum_of_differences_to_points (const SortedVec<Point> & points, HistogramBase::Interval interval) {
+inline double sup_of_sum_of_differences_to_points (const SortedVec<Point> & points,
+                                                   Interval<Bound::Open, Bound::Closed> interval) {
 	// Same algorithm, but left bound is advanced after computing the sum due to the open left bound.
 	SlidingCursor left_interval_bounds (points, interval.left);
 	SlidingCursor right_interval_bounds (points, interval.right);
@@ -262,7 +263,8 @@ inline double sup_of_sum_of_differences_to_points (const SortedVec<Point> & poin
 }
 
 // Conversion of objects to shapes (shape.h)
-inline auto to_shape (HistogramBase::Interval i) {
+inline auto to_shape (Interval<Bound::Open, Bound::Closed> i) {
+	// FIXME convert to better system
 	// Histo::Interval is ]left; right], but shape::Interval is [left; right].
 	// This conversion is only valid if used in a convolution, where the type of interval bound does not matter !
 	const auto delta = i.right - i.left;
@@ -282,14 +284,14 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBas
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b (nb_processes, base_size);
 
-	const auto b_mlk = [](const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
-	                      HistogramBase::Interval base_interval) {
+	const auto b_mlk = [] (const SortedVec<Point> & m_points, const SortedVec<Point> & l_points,
+	                       Interval<Bound::Open, Bound::Closed> base_interval) {
 		const auto shape = to_shape (base_interval);
 		return sum_of_point_differences (m_points, l_points, shape);
 	};
 	for (ProcessId m = 0; m < nb_processes; ++m) {
 		// b_0
-		b.set_0 (m, double(points[m].size ()));
+		b.set_0 (m, double (points[m].size ()));
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
@@ -310,13 +312,13 @@ inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase bas
 	g.set_tmax (tmax (points));
 
 	for (ProcessId l = 0; l < nb_processes; ++l) {
-		const auto g_lk = double(points[l].size ()) * sqrt_delta;
+		const auto g_lk = double (points[l].size ()) * sqrt_delta;
 		for (FunctionBaseId k = 0; k < base_size; ++k) {
 			g.set_g (l, k, g_lk);
 		}
 	}
 
-	auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
+	auto G_ll2kk2 = [&] (ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
 		const auto shape = cross_correlation (to_shape (base.interval (k)), to_shape (base.interval (k2)));
 		return sum_of_point_differences (points[l], points[l2], shape);
 	};
@@ -417,15 +419,15 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBas
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b (nb_processes, base_size);
 
-	const auto b_mlk = [](const SortedVec<Point> & m_points, IntervalKernel m_kernel, //
-	                      const SortedVec<Point> & l_points, IntervalKernel l_kernel, //
-	                      HistogramBase::Interval base_interval) {
+	const auto b_mlk = [] (const SortedVec<Point> & m_points, IntervalKernel m_kernel, //
+	                       const SortedVec<Point> & l_points, IntervalKernel l_kernel, //
+	                       Interval<Bound::Open, Bound::Closed> base_interval) {
 		const auto shape = convolution (to_shape (base_interval), convolution (to_shape (m_kernel), to_shape (l_kernel)));
 		return sum_of_point_differences (m_points, l_points, shape);
 	};
 	for (ProcessId m = 0; m < nb_processes; ++m) {
 		// b0
-		b.set_0 (m, double(points[m].size ()) * std::sqrt (kernels[m].width));
+		b.set_0 (m, double (points[m].size ()) * std::sqrt (kernels[m].width));
 		// b_lk
 		for (ProcessId l = 0; l < nb_processes; ++l) {
 			for (FunctionBaseId k = 0; k < base_size; ++k) {
@@ -442,7 +444,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase bas
 	assert (kernels.size () == points.size ());
 	const auto nb_processes = points.size ();
 	const auto base_size = base.base_size;
-	const auto sqrt_delta = std::sqrt (double(base.delta));
+	const auto sqrt_delta = std::sqrt (double (base.delta));
 	MatrixG g (nb_processes, base_size);
 
 	g.set_tmax (tmax (points));
@@ -451,13 +453,13 @@ inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase bas
 		/* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
 		 * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l sqrt(delta) = |N_m| eta_l sqrt(delta).
 		 */
-		const auto g_lk = double(points[l].size ()) * std::sqrt (kernels[l].width) * sqrt_delta;
+		const auto g_lk = double (points[l].size ()) * std::sqrt (kernels[l].width) * sqrt_delta;
 		for (FunctionBaseId k = 0; k < base_size; ++k) {
 			g.set_g (l, k, g_lk);
 		}
 	}
 
-	const auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
+	const auto G_ll2kk2 = [&] (ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
 		// V = sum_{x_l,x_l2} corr(conv(W_l,phi_k),conv(W_l2,phi_k2)) (x_l-x_l2)
 		const auto shape = cross_correlation (convolution (to_shape (kernels[l]), to_shape (base.interval (k))),
 		                                      convolution (to_shape (kernels[l2]), to_shape (base.interval (k2))));
@@ -563,18 +565,18 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBas
 	const auto base_size = base.base_size;
 	Matrix_M_MK1 b (nb_processes, base_size);
 
-	const auto sum_sqrt_kernel_width = [](const std::vector<IntervalKernel> & kernels) {
+	const auto sum_sqrt_kernel_width = [] (const std::vector<IntervalKernel> & kernels) {
 		double sum = 0.;
 		for (const auto & kernel : kernels) {
 			sum += std::sqrt (kernel.width);
 		}
 		return sum;
 	};
-	const auto b_mlk = [](const SortedVec<Point> & m_points, const std::vector<IntervalKernel> & m_kernels,
-	                      IntervalKernel m_maximum_width_kernel, //
-	                      const SortedVec<Point> & l_points, const std::vector<IntervalKernel> & l_kernels,
-	                      IntervalKernel l_maximum_width_kernel, //
-	                      HistogramBase::Interval phi_k) {
+	const auto b_mlk = [] (const SortedVec<Point> & m_points, const std::vector<IntervalKernel> & m_kernels,
+	                       IntervalKernel m_maximum_width_kernel, //
+	                       const SortedVec<Point> & l_points, const std::vector<IntervalKernel> & l_kernels,
+	                       IntervalKernel l_maximum_width_kernel, //
+	                       Interval<Bound::Open, Bound::Closed> phi_k) {
 		assert (m_points.size () == m_kernels.size ());
 		assert (l_points.size () == l_kernels.size ());
 		const auto phi_shape = to_shape (phi_k);
@@ -583,7 +585,7 @@ inline Matrix_M_MK1 compute_b (span<const SortedVec<Point>> points, HistogramBas
 		    convolution (phi_shape, convolution (to_shape (m_maximum_width_kernel), to_shape (l_maximum_width_kernel)));
 		const auto union_non_zero_domain = maximum_width_shape.non_zero_domain ();
 
-		const auto shape_generator = [&](size_t i_m, size_t i_l) {
+		const auto shape_generator = [&] (size_t i_m, size_t i_l) {
 			assert (i_m < m_kernels.size ());
 			assert (i_l < l_kernels.size ());
 			return convolution (phi_shape, convolution (to_shape (m_kernels[i_m]), to_shape (l_kernels[i_l])));
@@ -619,7 +621,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase bas
 
 	g.set_tmax (tmax (points));
 
-	const auto sum_sqrt_kernel_width = [](const std::vector<IntervalKernel> & kernels) {
+	const auto sum_sqrt_kernel_width = [] (const std::vector<IntervalKernel> & kernels) {
 		double sum = 0.;
 		for (const auto & kernel : kernels) {
 			sum += std::sqrt (kernel.width);
@@ -636,7 +638,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase bas
 		}
 	}
 
-	const auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
+	const auto G_ll2kk2 = [&] (ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
 		assert (points[l].size () == kernels[l].size ());
 		assert (points[l2].size () == kernels[l2].size ());
 		const auto & l_points = points[l];
@@ -652,7 +654,7 @@ inline MatrixG compute_g (span<const SortedVec<Point>> points, HistogramBase bas
 		                       convolution (to_shape (maximum_width_kernels[l2]), phi_shape_2));
 		const auto union_non_zero_domain = maximum_width_shape.non_zero_domain ();
 
-		const auto shape_generator = [&](size_t i_l, size_t i_l2) {
+		const auto shape_generator = [&] (size_t i_l, size_t i_l2) {
 			assert (i_l < l_kernels.size ());
 			assert (i_l2 < l2_kernels.size ());
 			return cross_correlation (convolution (to_shape (l_kernels[i_l]), phi_shape),
@@ -732,7 +734,7 @@ struct LassoParameters {
 };
 
 inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues & values, double gamma) {
-	const auto check_matrix = [](const Eigen::MatrixXd & m, const string_view what, RegionId r) {
+	const auto check_matrix = [] (const Eigen::MatrixXd & m, const string_view what, RegionId r) {
 		if (!m.allFinite ()) {
 #ifndef NDEBUG
 			// Print matrix in debug mode
@@ -775,7 +777,7 @@ inline LassoParameters compute_lasso_parameters (const CommonIntermediateValues 
 	 * V_hat_mkl is computed without dividing by R^2 so add the division to factor.
 	 */
 	const auto log_factor = std::log (nb_processes + nb_processes * nb_processes * base_size);
-	const auto v_hat_factor = (1. / double(nb_regions * nb_regions)) * 2. * gamma * log_factor;
+	const auto v_hat_factor = (1. / double (nb_regions * nb_regions)) * 2. * gamma * log_factor;
 	const auto b_hat_factor = gamma * log_factor / 3.;
 
 #ifndef NDEBUG
@@ -812,7 +814,7 @@ inline Matrix_M_MK1 compute_estimated_a_with_lasso (const LassoParameters & p, d
 }
 
 inline Matrix_M_MK1 compute_reestimated_a (const LassoParameters & p, const Matrix_M_MK1 & estimated_a) {
-	const auto compute_non_zero_index_table = [](const auto & eigen_vec) {
+	const auto compute_non_zero_index_table = [] (const auto & eigen_vec) {
 		const Eigen::Index nb_non_zero = eigen_vec.count ();
 		Eigen::VectorXi table (nb_non_zero);
 		Eigen::Index non_zero_seen = 0;

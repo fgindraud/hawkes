@@ -276,8 +276,8 @@ TEST_SUITE ("computations") {
 			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 3);
 		}
 	}
-	TEST_CASE ("sup_of_sum_of_differences_to_points: HistogramBase::Interval") {
-		const auto interval = HistogramBase::Interval{0, 3}; // ]0,3]
+	TEST_CASE ("sup_of_sum_of_differences_to_points: Interval<Open, Closed>") {
+		const auto interval = Interval<Bound::Open, Bound::Closed>{0, 3}; // ]0,3]
 		SUBCASE ("no points") {
 			const auto vec = SortedVec<Point>::from_sorted ({});
 			CHECK (sup_of_sum_of_differences_to_points (vec, interval) == 0);

@@ -67,6 +67,36 @@ template <typename T> struct DataByProcessRegion {
 	span<const T> data_for_region (RegionId r) const { return data_.row (r); }
 };
 
+/* Interval with configurable bounds.
+ */
+enum class Bound { Open, Closed };
+
+template <Bound type> struct BoundCompare;
+template <> struct BoundCompare<Bound::Open> {
+	bool operator() (Point l, Point r) const noexcept { return l < r; }
+};
+template <> struct BoundCompare<Bound::Closed> {
+	bool operator() (Point l, Point r) const noexcept { return l <= r; }
+};
+
+template <Bound left_type, Bound right_type> struct Interval {
+	Point left{};
+	Point right{};
+
+	Interval () = default;
+	Interval (PointSpace left_, PointSpace right_) : left (left_), right (right_) { assert (left <= right); }
+
+	bool contains (Point x) const noexcept {
+		return BoundCompare<left_type> () (left, x) && BoundCompare<right_type> () (x, right);
+	}
+	PointSpace width () const noexcept { return right - left; }
+};
+
+template <Bound left_type, Bound right_type>
+Interval<left_type, right_type> operator+ (PointSpace offset, Interval<left_type, right_type> i) {
+	return {i.left + offset, i.right + offset};
+}
+
 /******************************************************************************
  * Function bases.
  */
@@ -86,18 +116,12 @@ struct HistogramBase {
 		normalization_factor = 1. / std::sqrt (delta);
 	}
 
-	// ]left; right]
-	struct Interval {
-		PointSpace left;
-		PointSpace right;
-	};
-
-	Interval interval (FunctionBaseId k) const {
+	Interval<Bound::Open, Bound::Closed> interval (FunctionBaseId k) const {
 		assert (k < base_size);
 		return {PointSpace (k) * delta, PointSpace (k + 1) * delta};
 	}
 
-	Interval total_span () const { return {0., PointSpace (base_size) * delta}; }
+	Interval<Bound::Open, Bound::Closed> total_span () const { return {0., PointSpace (base_size) * delta}; }
 };
 
 
