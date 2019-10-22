@@ -40,31 +40,31 @@ using PointSpace = double;
 
 // A point from input data : center + width of uncertainty
 struct DataPoint {
-	Point center;
-	PointSpace width; // >= 0
+    Point center;
+    PointSpace width; // >= 0
 };
 
-inline bool operator< (const DataPoint & lhs, const DataPoint & rhs) {
-	return lhs.center < rhs.center;
+inline bool operator<(const DataPoint & lhs, const DataPoint & rhs) {
+    return lhs.center < rhs.center;
 }
-inline bool operator== (const DataPoint & lhs, const DataPoint & rhs) {
-	return lhs.center == rhs.center && lhs.width == rhs.width;
+inline bool operator==(const DataPoint & lhs, const DataPoint & rhs) {
+    return lhs.center == rhs.center && lhs.width == rhs.width;
 }
 
 template <typename T> struct DataByProcessRegion {
-	Vector2d<T> data_; // Rows = regions, cols = processes.
+    Vector2d<T> data_; // Rows = regions, cols = processes.
 
-	DataByProcessRegion (size_t nb_processes, size_t nb_regions) : data_ (nb_regions, nb_processes) {
-		assert (nb_processes > 0);
-		assert (nb_regions > 0);
-	}
+    DataByProcessRegion(size_t nb_processes, size_t nb_regions) : data_(nb_regions, nb_processes) {
+        assert(nb_processes > 0);
+        assert(nb_regions > 0);
+    }
 
-	size_t nb_regions () const { return data_.nb_rows (); }
-	size_t nb_processes () const { return data_.nb_cols (); }
+    size_t nb_regions() const { return data_.nb_rows(); }
+    size_t nb_processes() const { return data_.nb_cols(); }
 
-	const T & data (ProcessId m, RegionId r) const { return data_ (r, m); }
-	T & data (ProcessId m, RegionId r) { return data_ (r, m); }
-	span<const T> data_for_region (RegionId r) const { return data_.row (r); }
+    const T & data(ProcessId m, RegionId r) const { return data_(r, m); }
+    T & data(ProcessId m, RegionId r) { return data_(r, m); }
+    span<const T> data_for_region(RegionId r) const { return data_.row(r); }
 };
 
 /* Interval with configurable bounds.
@@ -73,28 +73,28 @@ enum class Bound { Open, Closed };
 
 template <Bound type> struct BoundCompare;
 template <> struct BoundCompare<Bound::Open> {
-	bool operator() (Point l, Point r) const noexcept { return l < r; }
+    bool operator()(Point l, Point r) const noexcept { return l < r; }
 };
 template <> struct BoundCompare<Bound::Closed> {
-	bool operator() (Point l, Point r) const noexcept { return l <= r; }
+    bool operator()(Point l, Point r) const noexcept { return l <= r; }
 };
 
 template <Bound left_type, Bound right_type> struct Interval {
-	Point left{};
-	Point right{};
+    Point left{};
+    Point right{};
 
-	Interval () = default;
-	Interval (PointSpace left_, PointSpace right_) : left (left_), right (right_) { assert (left <= right); }
+    Interval() = default;
+    Interval(PointSpace left_, PointSpace right_) : left(left_), right(right_) { assert(left <= right); }
 
-	bool contains (Point x) const noexcept {
-		return BoundCompare<left_type> () (left, x) && BoundCompare<right_type> () (x, right);
-	}
-	PointSpace width () const noexcept { return right - left; }
+    bool contains(Point x) const noexcept {
+        return BoundCompare<left_type>()(left, x) && BoundCompare<right_type>()(x, right);
+    }
+    PointSpace width() const noexcept { return right - left; }
 };
 
 template <Bound left_type, Bound right_type>
-Interval<left_type, right_type> operator+ (PointSpace offset, Interval<left_type, right_type> i) {
-	return {i.left + offset, i.right + offset};
+Interval<left_type, right_type> operator+(PointSpace offset, Interval<left_type, right_type> i) {
+    return {i.left + offset, i.right + offset};
 }
 
 /******************************************************************************
@@ -105,23 +105,23 @@ Interval<left_type, right_type> operator+ (PointSpace offset, Interval<left_type
  * For k in [0, base_size[ : phi_k(x) = 1/sqrt(D) * IndicatorFunction_]k * D, (k + 1) * D](x)
  */
 struct HistogramBase {
-	size_t base_size; // [1, inf[
-	PointSpace delta; // ]0, inf[
+    size_t base_size; // [1, inf[
+    PointSpace delta; // ]0, inf[
 
-	double normalization_factor;
+    double normalization_factor;
 
-	HistogramBase (size_t base_size, PointSpace delta) : base_size (base_size), delta (delta) {
-		assert (base_size > 0);
-		assert (delta > 0.);
-		normalization_factor = 1. / std::sqrt (delta);
-	}
+    HistogramBase(size_t base_size, PointSpace delta) : base_size(base_size), delta(delta) {
+        assert(base_size > 0);
+        assert(delta > 0.);
+        normalization_factor = 1. / std::sqrt(delta);
+    }
 
-	Interval<Bound::Open, Bound::Closed> total_span () const { return {0., PointSpace (base_size) * delta}; }
+    Interval<Bound::Open, Bound::Closed> total_span() const { return {0., PointSpace(base_size) * delta}; }
 
-	Interval<Bound::Open, Bound::Closed> interval (FunctionBaseId k) const {
-		assert (k < base_size);
-		return {PointSpace (k) * delta, PointSpace (k + 1) * delta};
-	}
+    Interval<Bound::Open, Bound::Closed> interval(FunctionBaseId k) const {
+        assert(k < base_size);
+        return {PointSpace(k) * delta, PointSpace(k + 1) * delta};
+    }
 };
 
 /** Haar(nb_scales, delta) : haar square wavelets, L2-norm of 1
@@ -132,7 +132,7 @@ struct HistogramBase {
  *   IndicatorFunction_] 2p / 2^(s+1), (2p + 1) / 2^(s+1) ](x) -
  *   IndicatorFunction_] (2p + 1) / 2^(s+1), (2p + 2) / 2^(s+1) ](x)
  * )
- * With delta scaling, on ]0, delta] this is the set of g_{s,p}(x) = (1 / sqrt(delta)) * f_{s,p}(x / delta).
+ * With delta scaling, on ]0, delta] this is the set: g_{s,p}(x) = (1 / sqrt(delta)) * f_{s,p}(x / delta).
  *
  * Mapping to phi_k:
  * Scale s has 2^s functions, so for [0, nb_scales[ : base_size = sum_s 2^s = 2^nb_scales - 1.
@@ -140,65 +140,65 @@ struct HistogramBase {
  * Thus for a given k, s = floor(log2(k + 1)) and p = k + 1 - 2^s
  */
 struct HaarBase {
-	size_t nb_scales; // [1, inf[
-	PointSpace delta; // ]0, inf[
+    size_t nb_scales; // [1, inf[
+    PointSpace delta; // ]0, inf[
 
-	double delta_normalization_factor;
+    double delta_normalization_factor;
 
-	// Cannot represent more than max_nb_scales due to base_size = 2^nb_scales - 1.
-	// High scaling number should not be used due to computation requirements anyway.
-	static constexpr size_t max_nb_scales = size_t (std::numeric_limits<FunctionBaseId>::digits - 1);
+    // Cannot represent more than max_nb_scales due to base_size = 2^nb_scales - 1.
+    // High scaling number should not be used due to computation requirements anyway.
+    static constexpr size_t max_nb_scales = size_t(std::numeric_limits<FunctionBaseId>::digits - 1);
 
-	HaarBase (size_t nb_scales, PointSpace delta) : nb_scales (nb_scales), delta (delta) {
-		assert (nb_scales > 0);
-		assert (nb_scales < max_nb_scales);
-		assert (delta > 0.);
-		delta_normalization_factor = 1. / std::sqrt (delta);
-	}
+    HaarBase(size_t nb_scales, PointSpace delta) : nb_scales(nb_scales), delta(delta) {
+        assert(nb_scales > 0);
+        assert(nb_scales < max_nb_scales);
+        assert(delta > 0.);
+        delta_normalization_factor = 1. / std::sqrt(delta);
+    }
 
-	size_t base_size () const { return power_of_2 (nb_scales) - 1; }
+    size_t base_size() const { return power_of_2(nb_scales) - 1; }
 
-	Interval<Bound::Open, Bound::Closed> total_span () const { return {0., delta}; }
+    Interval<Bound::Open, Bound::Closed> total_span() const { return {0., delta}; }
 
-	struct ScalePosition {
-		size_t scale;
-		size_t position;
-	};
-	ScalePosition scale_and_position (FunctionBaseId k) const {
-		assert (k < base_size ());
-		const size_t scale = floor_log2 (k + 1);
-		const size_t position = k + 1 - power_of_2 (scale);
-		return {scale, position};
-	}
-	FunctionBaseId base_id (size_t scale, size_t position) const {
-		assert (scale < nb_scales);
-		assert (position < power_of_2 (scale));
-		return power_of_2 (scale) - 1 + position;
-	}
+    struct ScalePosition {
+        size_t scale;
+        size_t position;
+    };
+    ScalePosition scale_and_position(FunctionBaseId k) const {
+        assert(k < base_size());
+        const size_t scale = floor_log2(k + 1);
+        const size_t position = k + 1 - power_of_2(scale);
+        return {scale, position};
+    }
+    FunctionBaseId base_id(size_t scale, size_t position) const {
+        assert(scale < nb_scales);
+        assert(position < power_of_2(scale));
+        return power_of_2(scale) - 1 + position;
+    }
 
-	struct Wavelet {
-		Interval<Bound::Open, Bound::Closed> up_part;
-		Interval<Bound::Open, Bound::Closed> down_part;
-		double normalization_factor;
-	};
-	Wavelet wavelet (size_t scale, size_t position) const {
-		assert (scale < nb_scales);
-		assert (position < power_of_2 (scale));
-		const double scale_factor = delta / double (power_of_2 (scale + 1));
-		const PointSpace left = (2 * position) * scale_factor;
-		const PointSpace mid = (2 * position + 1) * scale_factor;
-		const PointSpace right = (2 * position + 2) * scale_factor;
-		const double normalization = delta_normalization_factor * std::pow (2, double (scale) / 2.);
-		return {
-		    {left, mid},
-		    {mid, right},
-		    normalization,
-		};
-	}
-	Wavelet wavelet (FunctionBaseId k) const {
-		const ScalePosition sp = scale_and_position (k);
-		return wavelet (sp.scale, sp.position);
-	}
+    struct Wavelet {
+        Interval<Bound::Open, Bound::Closed> up_part;
+        Interval<Bound::Open, Bound::Closed> down_part;
+        double normalization_factor;
+    };
+    Wavelet wavelet(size_t scale, size_t position) const {
+        assert(scale < nb_scales);
+        assert(position < power_of_2(scale));
+        const double scale_factor = delta / double(power_of_2(scale + 1));
+        const PointSpace left = (2 * position) * scale_factor;
+        const PointSpace mid = (2 * position + 1) * scale_factor;
+        const PointSpace right = (2 * position + 2) * scale_factor;
+        const double normalization = delta_normalization_factor * std::pow(2, double(scale) / 2.);
+        return {
+            {left, mid},
+            {mid, right},
+            normalization,
+        };
+    }
+    Wavelet wavelet(FunctionBaseId k) const {
+        const ScalePosition sp = scale_and_position(k);
+        return wavelet(sp.scale, sp.position);
+    }
 };
 
 /******************************************************************************
@@ -208,30 +208,30 @@ struct HaarBase {
 // Interval kernel : 1_[-width/2 + center, width/2 + center](x) (L2-normalized)
 // 'center' allows this struct to support both centered (center = 0) and uncentered intervals.
 struct IntervalKernel {
-	PointSpace width; // ]0, inf[ due to the normalization factor
-	Point center;
+    PointSpace width; // ]0, inf[ due to the normalization factor
+    Point center;
 
-	IntervalKernel (PointSpace width, Point center) : width (width), center (center) { assert (width > 0.); }
-	IntervalKernel (PointSpace width) : IntervalKernel (width, 0) {}
+    IntervalKernel(PointSpace width, Point center) : width(width), center(center) { assert(width > 0.); }
+    IntervalKernel(PointSpace width) : IntervalKernel(width, 0) {}
 };
-inline double normalization_factor (IntervalKernel kernel) {
-	return 1. / std::sqrt (kernel.width);
+inline double normalization_factor(IntervalKernel kernel) {
+    return 1. / std::sqrt(kernel.width);
 }
 
 // Store kernels and maximum width kernels for heterogeneous mode
 template <typename T> struct HeterogeneousKernels {
-	DataByProcessRegion<std::vector<T>> kernels;
-	std::vector<T> maximum_width_kernels; // For each process
+    DataByProcessRegion<std::vector<T>> kernels;
+    std::vector<T> maximum_width_kernels; // For each process
 };
 
 // Zero width kernels are not supported by computation, replace their width with a 'default' value.
-inline PointSpace fix_zero_width (PointSpace width) {
-	assert (width >= 0.);
-	if (width == 0.) {
-		return 1.;
-	} else {
-		return width;
-	}
+inline PointSpace fix_zero_width(PointSpace width) {
+    assert(width >= 0.);
+    if(width == 0.) {
+        return 1.;
+    } else {
+        return width;
+    }
 }
 
 /******************************************************************************
@@ -246,51 +246,51 @@ inline PointSpace fix_zero_width (PointSpace width) {
  * Handles conversions of indexes to Eigen indexes (int).
  */
 struct Matrix_M_MK1 {
-	size_t nb_processes; // M
-	size_t base_size;    // K
-	Eigen::MatrixXd inner;
+    size_t nb_processes; // M
+    size_t base_size;    // K
+    Eigen::MatrixXd inner;
 
-	Matrix_M_MK1 (size_t nb_processes, size_t base_size) : nb_processes (nb_processes), base_size (base_size) {
-		assert (nb_processes > 0);
-		assert (base_size > 0);
-		const auto size = 1 + base_size * nb_processes;
-		inner = Eigen::MatrixXd::Constant (int(size), int(nb_processes), std::numeric_limits<double>::quiet_NaN ());
-	}
+    Matrix_M_MK1(size_t nb_processes, size_t base_size) : nb_processes(nb_processes), base_size(base_size) {
+        assert(nb_processes > 0);
+        assert(base_size > 0);
+        const auto size = 1 + base_size * nb_processes;
+        inner = Eigen::MatrixXd::Constant(int(size), int(nb_processes), std::numeric_limits<double>::quiet_NaN());
+    }
 
-	// b_m,0
-	double get_0 (ProcessId m) const {
-		assert (m < nb_processes);
-		return inner (0, int(m));
-	}
-	void set_0 (ProcessId m, double v) {
-		assert (m < nb_processes);
-		inner (0, int(m)) = v;
-	}
+    // b_m,0
+    double get_0(ProcessId m) const {
+        assert(m < nb_processes);
+        return inner(0, int(m));
+    }
+    void set_0(ProcessId m, double v) {
+        assert(m < nb_processes);
+        inner(0, int(m)) = v;
+    }
 
-	// b_m,l,k
-	int lk_index (ProcessId l, FunctionBaseId k) const {
-		assert (l < nb_processes);
-		assert (k < base_size);
-		return int(1 + l * base_size + k);
-	}
-	double get_lk (ProcessId m, ProcessId l, FunctionBaseId k) const {
-		assert (m < nb_processes);
-		return inner (lk_index (l, k), int(m));
-	}
-	void set_lk (ProcessId m, ProcessId l, FunctionBaseId k, double v) {
-		assert (m < nb_processes);
-		inner (lk_index (l, k), int(m)) = v;
-	}
+    // b_m,l,k
+    int lk_index(ProcessId l, FunctionBaseId k) const {
+        assert(l < nb_processes);
+        assert(k < base_size);
+        return int(1 + l * base_size + k);
+    }
+    double get_lk(ProcessId m, ProcessId l, FunctionBaseId k) const {
+        assert(m < nb_processes);
+        return inner(lk_index(l, k), int(m));
+    }
+    void set_lk(ProcessId m, ProcessId l, FunctionBaseId k, double v) {
+        assert(m < nb_processes);
+        inner(lk_index(l, k), int(m)) = v;
+    }
 
-	// Access vector (m,0) for all m.
-	auto m_0_values () const { return inner.row (0); }
-	auto m_0_values () { return inner.row (0); }
-	// Access sub-matrix (m,{(l,k)}) for all m,l,k
-	auto m_lk_values () const { return inner.bottomRows (nb_processes * base_size); }
-	auto m_lk_values () { return inner.bottomRows (nb_processes * base_size); }
-	// Access vector of (m,{0}U{(l,k)}) for a given m.
-	auto values_for_m (ProcessId m) const { return inner.col (m); }
-	auto values_for_m (ProcessId m) { return inner.col (m); }
+    // Access vector (m,0) for all m.
+    auto m_0_values() const { return inner.row(0); }
+    auto m_0_values() { return inner.row(0); }
+    // Access sub-matrix (m,{(l,k)}) for all m,l,k
+    auto m_lk_values() const { return inner.bottomRows(nb_processes * base_size); }
+    auto m_lk_values() { return inner.bottomRows(nb_processes * base_size); }
+    // Access vector of (m,{0}U{(l,k)}) for a given m.
+    auto values_for_m(ProcessId m) const { return inner.col(m); }
+    auto values_for_m(ProcessId m) { return inner.col(m); }
 };
 
 /* Stores value of the G matrix (symmetric).
@@ -300,44 +300,44 @@ struct Matrix_M_MK1 {
  * Handles conversions of indexes to Eigen indexes (int).
  */
 struct MatrixG {
-	size_t nb_processes; // M
-	size_t base_size;    // K
-	Eigen::MatrixXd inner;
+    size_t nb_processes; // M
+    size_t base_size;    // K
+    Eigen::MatrixXd inner;
 
-	MatrixG (size_t nb_processes, size_t base_size)
-	    : nb_processes (nb_processes),
-	      base_size (base_size),
-	      inner (1 + base_size * nb_processes, 1 + base_size * nb_processes) {
-		assert (nb_processes > 0);
-		assert (base_size > 0);
-		const auto size = 1 + base_size * nb_processes;
-		inner = Eigen::MatrixXd::Constant (int(size), size, std::numeric_limits<double>::quiet_NaN ());
-	}
+    MatrixG(size_t nb_processes, size_t base_size)
+        : nb_processes(nb_processes),
+          base_size(base_size),
+          inner(1 + base_size * nb_processes, 1 + base_size * nb_processes) {
+        assert(nb_processes > 0);
+        assert(base_size > 0);
+        const auto size = 1 + base_size * nb_processes;
+        inner = Eigen::MatrixXd::Constant(int(size), size, std::numeric_limits<double>::quiet_NaN());
+    }
 
-	int lk_index (ProcessId l, FunctionBaseId k) const {
-		assert (l < nb_processes);
-		assert (k < base_size);
-		return int(1 + l * base_size + k);
-	}
+    int lk_index(ProcessId l, FunctionBaseId k) const {
+        assert(l < nb_processes);
+        assert(k < base_size);
+        return int(1 + l * base_size + k);
+    }
 
-	// Tmax
-	double get_tmax () const { return inner (0, 0); }
-	void set_tmax (double v) { inner (0, 0) = v; }
+    // Tmax
+    double get_tmax() const { return inner(0, 0); }
+    void set_tmax(double v) { inner(0, 0) = v; }
 
-	// g_l,k (duplicated with transposition)
-	double get_g (ProcessId l, FunctionBaseId k) const { return inner (0, lk_index (l, k)); }
-	void set_g (ProcessId l, FunctionBaseId k, double v) {
-		const auto i = lk_index (l, k);
-		inner (0, i) = inner (i, 0) = v;
-	}
+    // g_l,k (duplicated with transposition)
+    double get_g(ProcessId l, FunctionBaseId k) const { return inner(0, lk_index(l, k)); }
+    void set_g(ProcessId l, FunctionBaseId k, double v) {
+        const auto i = lk_index(l, k);
+        inner(0, i) = inner(i, 0) = v;
+    }
 
-	// G_l,l2_k,k2 (symmetric, only need to be set for (l,k) <= [or >=] (l2,k2))
-	double get_G (ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) const {
-		return inner (lk_index (l, k), lk_index (l2, k2));
-	}
-	void set_G (ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2, double v) {
-		const auto i = lk_index (l, k);
-		const auto i2 = lk_index (l2, k2);
-		inner (i, i2) = inner (i2, i) = v;
-	}
+    // G_l,l2_k,k2 (symmetric, only need to be set for (l,k) <= [or >=] (l2,k2))
+    double get_G(ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) const {
+        return inner(lk_index(l, k), lk_index(l2, k2));
+    }
+    void set_G(ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2, double v) {
+        const auto i = lk_index(l, k);
+        const auto i2 = lk_index(l2, k2);
+        inner(i, i2) = inner(i2, i) = v;
+    }
 };
