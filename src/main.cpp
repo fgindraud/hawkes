@@ -365,6 +365,12 @@ int main(int argc, char * argv[]) {
                 throw std::runtime_error(fmt::format("Haar nb_scales is limited to {}", HaarBase::max_nb_scales));
             }
             const auto delta = PointSpace(parse_strict_positive_double(delta_value, "haar delta"));
+            if(delta <= double(power_of_2(nb_scales))) {
+                fmt::print(
+                    stderr,
+                    "Warning: Haar wavelet base: smallest scale is less than 1.\n"
+                    "This may be an error for integer data coordinates.\n");
+            }
             base_option = HaarBase{nb_scales, delta};
         });
 
