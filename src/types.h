@@ -110,7 +110,7 @@ struct HistogramBase {
 
     double normalization_factor;
 
-    HistogramBase(size_t base_size, PointSpace delta) : base_size(base_size), delta(delta) {
+    HistogramBase(size_t base_size_, PointSpace delta_) : base_size(base_size_), delta(delta_) {
         assert(base_size > 0);
         assert(delta > 0.);
         normalization_factor = 1. / std::sqrt(delta);
@@ -149,7 +149,7 @@ struct HaarBase {
     // High scaling number should not be used due to computation requirements anyway.
     static constexpr size_t max_nb_scales = size_t(std::numeric_limits<FunctionBaseId>::digits - 1);
 
-    HaarBase(size_t nb_scales, PointSpace delta) : nb_scales(nb_scales), delta(delta) {
+    HaarBase(size_t nb_scales_, PointSpace delta_) : nb_scales(nb_scales_), delta(delta_) {
         assert(nb_scales > 0);
         assert(nb_scales < max_nb_scales);
         assert(delta > 0.);
