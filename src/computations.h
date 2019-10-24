@@ -270,11 +270,19 @@ inline auto to_shape(IntervalKernel kernel) {
         shape::shifted(kernel.center, shape::IntervalIndicator::with_width(kernel.width)));
 }
 // Lossy (]l,r] -> [l,r]), but ok if used in convolution.
+template <Bound l, Bound r> inline auto lossy_interval_shape(Interval<l, r> i) {
+    const PointSpace width = i.right - i.left;
+    const Point center = (i.left + i.right) / 2.;
+    return shape::shifted(center, shape::IntervalIndicator::with_width(width));
+}
 inline auto phi_k_shape(const HistogramBase & base, FunctionBaseId k) {
-    const auto i = base.interval(k);
-    const auto center = (i.left + i.right) / 2.;
-    return shape::scaled(
-        base.normalization_factor, shape::shifted(center, shape::IntervalIndicator::with_width(base.delta)));
+    return shape::scaled(base.normalization_factor, lossy_interval_shape(base.interval(k)));
+}
+inline auto up_shape(const HaarBase::Wavelet & w) {
+    return shape::scaled(w.normalization_factor, lossy_interval_shape(w.up_part));
+}
+inline auto down_shape(const HaarBase::Wavelet & w) {
+    return shape::scaled(w.normalization_factor, lossy_interval_shape(w.down_part));
 }
 
 /******************************************************************************
@@ -734,6 +742,99 @@ inline CommonIntermediateValues compute_intermediate_values(
     return {std::move(b_by_region), std::move(g_by_region), std::move(b_hat)};
 }
 
+/******************************************************************************
+ * Haar base, no kernel, not optimized.
+ * TODO improve
+ */
+inline Matrix_M_MK1 compute_b(span<const SortedVec<Point>> points, const HaarBase & base) {
+    const size_t nb_processes = points.size();
+    const size_t base_size = base.base_size();
+    Matrix_M_MK1 b(nb_processes, base_size);
+
+    const auto b_mlk =
+        [](const SortedVec<Point> & m_points, const SortedVec<Point> & l_points, const HaarBase::Wavelet & wavelet) {
+            // Using linear properties of sum_of_point_differences
+            // TODO can be optimized as down_part(scale, pos) = -up_part(scale, pos + 1)
+            return sum_of_point_differences(m_points, l_points, up_shape(wavelet)) -
+                   sum_of_point_differences(m_points, l_points, down_shape(wavelet));
+        };
+    for(ProcessId m = 0; m < nb_processes; ++m) {
+        // b_0
+        b.set_0(m, double(points[m].size()));
+        // b_lk
+        for(ProcessId l = 0; l < nb_processes; ++l) {
+            for(FunctionBaseId k = 0; k < base_size; ++k) {
+                const auto v = b_mlk(points[m], points[l], base.wavelet(k));
+                b.set_lk(m, l, k, v);
+            }
+        }
+    }
+    return b;
+}
+
+inline MatrixG compute_g(span<const SortedVec<Point>> points, const HaarBase & base) {
+    const size_t nb_processes = points.size();
+    const size_t base_size = base.base_size();
+    MatrixG g(nb_processes, base_size);
+
+    g.set_tmax(tmax(points));
+
+    for(ProcessId l = 0; l < nb_processes; ++l) {
+        for(FunctionBaseId k = 0; k < base_size; ++k) {
+            g.set_g(l, k, 0.); // integral_R phi_k = 0
+        }
+    }
+
+    auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
+        const auto wavelet1 = base.wavelet(k);
+        const auto wavelet2 = base.wavelet(k2);
+        // Decompose shape by cross_correlation
+        const auto shape_uu = cross_correlation(up_shape(wavelet1), up_shape(wavelet2));
+        const auto shape_ud = cross_correlation(up_shape(wavelet1), down_shape(wavelet2));
+        const auto shape_du = cross_correlation(down_shape(wavelet1), up_shape(wavelet2));
+        const auto shape_dd = cross_correlation(down_shape(wavelet1), down_shape(wavelet2));
+        return sum_of_point_differences(points[l], points[l2], shape_uu) +
+               sum_of_point_differences(points[l], points[l2], shape_ud) +
+               sum_of_point_differences(points[l], points[l2], shape_du) +
+               sum_of_point_differences(points[l], points[l2], shape_dd);
+    };
+    // G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
+    for(ProcessId l = 0; l < nb_processes; ++l) {
+        // Case l2 == l: compute for k2 >= k:
+        for(FunctionBaseId k = 0; k < base_size; ++k) {
+            for(FunctionBaseId k2 = k; k2 < base_size; ++k2) {
+                g.set_G(l, l, k, k2, G_ll2kk2(l, l, k, k2));
+            }
+        }
+        // Case l2 > l: compute for all (k,k2):
+        for(ProcessId l2 = l; l2 < nb_processes; ++l2) {
+            for(FunctionBaseId k = 0; k < base_size; ++k) {
+                for(FunctionBaseId k2 = 0; k2 < base_size; ++k2) {
+                    g.set_G(l, l2, k, k2, G_ll2kk2(l, l2, k, k2));
+                }
+            }
+        }
+    }
+    return g;
+}
+
+inline CommonIntermediateValues compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & points, const HaarBase & base, None /*kernels*/) {
+    const auto nb_regions = points.nb_regions();
+    std::vector<Matrix_M_MK1> b_by_region;
+    std::vector<MatrixG> g_by_region;
+    b_by_region.reserve(nb_regions);
+    g_by_region.reserve(nb_regions);
+    for(RegionId r = 0; r < nb_regions; ++r) {
+        b_by_region.emplace_back(compute_b(points.data_for_region(r), base));
+        g_by_region.emplace_back(compute_g(points.data_for_region(r), base));
+    }
+
+    // For now ignore the sup part
+    Matrix_M_MK1 b_hat(points.nb_processes(), base.base_size());
+    b_hat.inner.setZero();
+    return {std::move(b_by_region), std::move(g_by_region), std::move(b_hat)};
+}
 
 /******************************************************************************
  * Computations common to all cases.
