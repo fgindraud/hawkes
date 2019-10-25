@@ -96,6 +96,14 @@ template <Bound left_type, Bound right_type>
 Interval<left_type, right_type> operator+(PointSpace offset, Interval<left_type, right_type> i) {
     return {i.left + offset, i.right + offset};
 }
+template <Bound left_type, Bound right_type>
+Interval<right_type, left_type> operator-(Interval<left_type, right_type> i) {
+    return {-i.right, -i.left};
+}
+template <Bound left_type, Bound right_type>
+bool operator==(Interval<left_type, right_type> lhs, Interval<left_type, right_type> rhs) {
+    return lhs.left == rhs.left && lhs.right == rhs.right;
+}
 
 /******************************************************************************
  * Function bases.

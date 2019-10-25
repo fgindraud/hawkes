@@ -19,25 +19,7 @@ inline double cube(double x) {
     return x * square(x);
 }
 
-// [left, right]
-struct ClosedInterval {
-    Point left;
-    Point right;
-    ClosedInterval() = default;
-    ClosedInterval(Point left, Point right) : left(left), right(right) { assert(left <= right); }
-};
-inline ClosedInterval operator+(PointSpace offset, const ClosedInterval i) {
-    return {offset + i.left, offset + i.right};
-}
-inline ClosedInterval operator-(const ClosedInterval & i) {
-    return {-i.right, -i.left};
-}
-inline bool operator==(const ClosedInterval & lhs, const ClosedInterval & rhs) {
-    return lhs.left == rhs.left && lhs.right == rhs.right;
-}
-inline bool contains(const ClosedInterval & i, Point value) {
-    return i.left <= value && value <= i.right;
-}
+using ClosedInterval = Interval<Bound::Closed, Bound::Closed>;
 
 // tuple-only equivalent of std::apply, used in add.
 template <typename F, size_t... Is, typename... Types>
@@ -112,7 +94,7 @@ template <typename... Shapes> struct Add {
 
     ClosedInterval non_zero_domain() const { return non_zero_domain_; }
     double operator()(Point x) const {
-        if(!contains(non_zero_domain_, x)) {
+        if(!non_zero_domain_.contains(x)) {
             return 0.;
         } else {
             return tuple_apply([x](const Shapes &... shapes) { return add_doubles(shapes(x)...); }, shapes);
@@ -224,7 +206,7 @@ struct IntervalIndicator {
 
     ClosedInterval non_zero_domain() const { return {-half_width, half_width}; }
     double operator()(Point x) const {
-        if(contains(non_zero_domain(), x)) {
+        if(non_zero_domain().contains(x)) {
             return 1.;
         } else {
             return 0.;
@@ -241,7 +223,7 @@ struct PositiveTriangle {
 
     ClosedInterval non_zero_domain() const { return {0., side}; }
     double operator()(Point x) const {
-        if(contains(non_zero_domain(), x)) {
+        if(non_zero_domain().contains(x)) {
             return x;
         } else {
             return 0.;
@@ -258,7 +240,7 @@ struct NegativeTriangle {
 
     ClosedInterval non_zero_domain() const { return {-side, 0.}; }
     double operator()(Point x) const {
-        if(contains(non_zero_domain(), x)) {
+        if(non_zero_domain().contains(x)) {
             return -x;
         } else {
             return 0.;
@@ -285,7 +267,7 @@ struct Trapezoid {
 
     ClosedInterval non_zero_domain() const { return {-half_len, half_len}; }
     double operator()(Point x) const {
-        if(!contains(non_zero_domain(), x)) {
+        if(!non_zero_domain().contains(x)) {
             return 0.;
         } else if(x < -half_base) {
             return x + half_len; // Left triangle
@@ -345,7 +327,7 @@ struct ConvolutionIntervalPositiveTriangle {
 
     ClosedInterval non_zero_domain() const { return {-half_l, c + half_l}; }
     double operator()(Point x) const {
-        if(!contains(non_zero_domain(), x)) {
+        if(!non_zero_domain().contains(x)) {
             return 0.;
         } else if(x < central_section_left) {
             return square(x + half_l) / 2.; // Quadratic left part
@@ -400,7 +382,7 @@ struct ConvolutionPositiveTrianglePositiveTriangle {
 
     ClosedInterval non_zero_domain() const { return {0., a_plus_b}; }
     double operator()(Point x) const {
-        if(!contains(non_zero_domain(), x)) {
+        if(!non_zero_domain().contains(x)) {
             return 0.;
         } else if(x < A) {
             return cube(x) / 6.; // Cubic left part
@@ -443,7 +425,7 @@ struct ConvolutionNegativeTrianglePositiveTriangle {
 
     ClosedInterval non_zero_domain() const { return {-a, b}; }
     double operator()(Point x) const {
-        if(!contains(non_zero_domain(), x)) {
+        if(!non_zero_domain().contains(x)) {
             return 0.;
         } else if(x < A) {
             return square(x + a) * (2. * a - x) / 6.; // Cubic left part

@@ -71,9 +71,9 @@ TEST_SUITE("shape") {
         const auto interval = IntervalIndicator::with_half_width(1); // [-1, 1]
         const auto nzd = interval.non_zero_domain();
         CHECK(nzd == ClosedInterval{-1, 1});
-        CHECK(contains(nzd, 0));
-        CHECK(contains(nzd, 1));
-        CHECK(!contains(nzd, 2));
+        CHECK(nzd.contains(0));
+        CHECK(nzd.contains(1));
+        CHECK(!nzd.contains(2));
         CHECK(interval(-2) == 0);
         CHECK(interval(-1) == 1);
         CHECK(interval(0) == 1);
