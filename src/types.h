@@ -68,10 +68,11 @@ template <typename T> struct DataByProcessRegion {
 };
 
 /* Interval with configurable bounds.
+ * This is a lightweight struct, it should be passed by value.
  */
 enum class Bound { Open, Closed };
 
-template <Bound type> struct BoundCompare;
+template <Bound bound_type> struct BoundCompare;
 template <> struct BoundCompare<Bound::Open> {
     bool operator()(Point l, Point r) const noexcept { return l < r; }
 };
@@ -79,29 +80,24 @@ template <> struct BoundCompare<Bound::Closed> {
     bool operator()(Point l, Point r) const noexcept { return l <= r; }
 };
 
-template <Bound left_type, Bound right_type> struct Interval {
+template <Bound lb, Bound rb> struct Interval {
     Point left{};
     Point right{};
 
     Interval() = default;
     Interval(PointSpace left_, PointSpace right_) : left(left_), right(right_) { assert(left <= right); }
 
-    bool contains(Point x) const noexcept {
-        return BoundCompare<left_type>()(left, x) && BoundCompare<right_type>()(x, right);
-    }
+    bool contains(Point x) const noexcept { return BoundCompare<lb>()(left, x) && BoundCompare<rb>()(x, right); }
     PointSpace width() const noexcept { return right - left; }
 };
 
-template <Bound left_type, Bound right_type>
-Interval<left_type, right_type> operator+(PointSpace offset, Interval<left_type, right_type> i) {
+template <Bound lb, Bound rb> inline Interval<lb, rb> operator+(PointSpace offset, Interval<lb, rb> i) {
     return {i.left + offset, i.right + offset};
 }
-template <Bound left_type, Bound right_type>
-Interval<right_type, left_type> operator-(Interval<left_type, right_type> i) {
+template <Bound lb, Bound rb> inline Interval<rb, lb> operator-(Interval<lb, rb> i) {
     return {-i.right, -i.left};
 }
-template <Bound left_type, Bound right_type>
-bool operator==(Interval<left_type, right_type> lhs, Interval<left_type, right_type> rhs) {
+template <Bound lb, Bound rb> inline bool operator==(Interval<lb, rb> lhs, Interval<lb, rb> rhs) {
     return lhs.left == rhs.left && lhs.right == rhs.right;
 }
 

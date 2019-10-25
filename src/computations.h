@@ -61,37 +61,6 @@ inline PointSpace tmax(span<const SortedVec<Point>> processes) {
     }
 }
 
-/* A sliding cursor is an iterator over the coordinates of points, all shifted by the given shift.
- * This is a tool used in some computations below.
- */
-struct SlidingCursor {
-    const SortedVec<Point> & points; // Points to slide on
-    const PointSpace shift;          // Shifting from points
-
-    static constexpr PointSpace inf = std::numeric_limits<PointSpace>::infinity();
-
-    // Indexes of next point to be visited, and shifted value (or inf)
-    size_t current_i = 0;
-    Point current_x;
-
-    SlidingCursor(const SortedVec<Point> & points, PointSpace shift) : points(points), shift(shift) {
-        current_x = get_shifted_point(0);
-    }
-    Point get_shifted_point(size_t i) const {
-        if(i < points.size()) {
-            return points[i] + shift;
-        } else {
-            return inf;
-        }
-    }
-    void advance_if_equal(Point new_x) {
-        if(new_x == current_x) {
-            current_i += 1;
-            current_x = get_shifted_point(current_i);
-        }
-    }
-};
-
 /* Compute sum_{x_m in N_m, x_l in N_l} shape(x_m - x_l).
  * Shape must be any shape from the shape namespace:
  * - with a method non_zero_domain() returning the interval where the shape is non zero.
@@ -200,67 +169,6 @@ inline double sum_of_point_differences(
         }
     }
     return sum;
-}
-
-/* Compute sup_{x} sum_{x_l in N_l} interval(x - x_l).
- * This is a building block for computation of B_hat, used in the computation of lasso penalties (d).
- *
- * For an indicator interval, the sum is a piecewise constant function of x.
- * This function has at maximum 2*|N_l| points of change, so the number of different values is finite.
- * Thus the sup over x is a max over all these possible values.
- */
-inline double sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, shape::IntervalIndicator indicator) {
-    // These structs represent the sets of left and right interval bounds coordinates.
-    SlidingCursor left_interval_bounds(points, -indicator.half_width);
-    SlidingCursor right_interval_bounds(points, indicator.half_width);
-    double max = 0;
-    while(true) {
-        // Loop over all interval boundaries: x is a {left, right, both} interval bound.
-        const Point x = std::min(left_interval_bounds.current_x, right_interval_bounds.current_x);
-        if(x == SlidingCursor::inf) {
-            break; // No more points to process.
-        }
-        // The sum of intervals at x is the number of entered intervals minus the number of exited intervals.
-        // Thus the sum is the difference between the indexes of the left bound iterator and the right one.
-        // Because the interval is a closed one, we advance the entering bound before computing the sum.
-        left_interval_bounds.advance_if_equal(x);
-        assert(left_interval_bounds.current_i >= right_interval_bounds.current_i);
-        const auto sum_value_for_x = PointSpace(left_interval_bounds.current_i - right_interval_bounds.current_i);
-        max = std::max(max, sum_value_for_x);
-        right_interval_bounds.advance_if_equal(x);
-    }
-    return max;
-}
-inline double
-sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, Interval<Bound::Open, Bound::Closed> interval) {
-    // Same algorithm, but left bound is advanced after computing the sum due to the open left bound.
-    SlidingCursor left_interval_bounds(points, interval.left);
-    SlidingCursor right_interval_bounds(points, interval.right);
-    double max = 0;
-    while(true) {
-        const Point x = std::min(left_interval_bounds.current_x, right_interval_bounds.current_x);
-        if(x == SlidingCursor::inf) {
-            break;
-        }
-        assert(left_interval_bounds.current_i >= right_interval_bounds.current_i);
-        const auto sum_value_for_x = PointSpace(left_interval_bounds.current_i - right_interval_bounds.current_i);
-        max = std::max(max, sum_value_for_x);
-        left_interval_bounds.advance_if_equal(x);
-        right_interval_bounds.advance_if_equal(x);
-    }
-    return max;
-}
-
-// Scaling can be moved out
-template <typename Inner>
-inline double sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, const shape::Scaled<Inner> & shape) {
-    return shape.scale * sup_of_sum_of_differences_to_points(points, shape.inner);
-}
-// Shifting has no effect on the sup value.
-template <typename Inner>
-inline double
-sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, const shape::Shifted<Inner> & shape) {
-    return sup_of_sum_of_differences_to_points(points, shape.inner);
 }
 
 // Conversion of objects to shapes (shape.h) TODO improve

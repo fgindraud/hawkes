@@ -5,10 +5,29 @@
 #include <type_traits> // enable_if
 #include <utility>
 
+#include <limits>
+
 #include "types.h"
 
+/******************************************************************************
+ * Shape definitions, manipulation, and computations on shapes.
+ *
+ * A shape is a function f : R -> R with a finite support (non zero domain).
+ * The non zero domain of f is an interval of R where f may be non null.
+ * For all x in R - nzd(f), f(x) = 0.
+ *
+ * Shapes are represented by C++ structs with the given methods :
+ * - double operator()(Point x) const : computes f(x) for any x in R.
+ * - Interval<?, ?> non_zero_domain() const : returns the non_zero_domain.
+ *
+ * With these definitions, convolution and other similar operations can be defined as:
+ * convolution(ShapeA, ShapeB) -> ShapeC
+ * The type of ShapeC depends on ShapeA & ShapeB, the choice is done by overloading.
+ */
 namespace shape {
 
+using ::Bound;
+using ::Interval;
 using ::Point;
 using ::PointSpace;
 
@@ -19,6 +38,7 @@ inline double cube(double x) {
     return x * square(x);
 }
 
+// TODO remove
 using ClosedInterval = Interval<Bound::Closed, Bound::Closed>;
 
 // tuple-only equivalent of std::apply, used in add.
@@ -481,4 +501,152 @@ inline auto convolution(const Trapezoid & lhs, const Trapezoid & rhs) {
 inline auto cross_correlation(const Trapezoid & lhs, const Trapezoid & rhs) {
     return convolution(lhs, rhs); // Trapezoid is symmetric, identical by time inversion
 }
+
+/******************************************************************************
+ * NEW SHAPE impl
+ */
+
+/******************************************************************************
+ * Base shapes.
+ */
+
+/* Indicator function for an interval.
+ * Returns 1 if x in interval, 0 if outside.
+ * non_zero_domain is exactly the interval.
+ */
+template <Bound lb, Bound rb> struct Indicator {
+    Interval<lb, rb> interval;
+
+    Interval<lb, rb> non_zero_domain() const { return interval; }
+    double operator()(Point x) const {
+        if(interval.contains(x)) {
+            return 1.;
+        } else {
+            return 0.;
+        }
+    }
+};
+
+/******************************************************************************
+ * Shape manipulation functions and combinators.
+ * Combinators : modify a shape, like x/y translation, x/y scaling, ...
+ *
+ * Strategy :
+ * Define explicit cases for base shapes.
+ * Define simplifications when combinators are found.
+ *
+ * TODO conventional combinator order ?
+ */
+
+/* Combinator: Reverse x dimension
+ * reverse(f(x)) = f(-x)
+ */
+template <Bound lb, Bound rb> Indicator<rb, lb> reverse(const Indicator<lb, rb> & indicator) {
+    return {-indicator.interval};
+}
+
+/******************************************************************************
+ * Computations with shapes.
+ */
+
+/* ShiftedPoints iteration tool.
+ * This is an iterator over the coordinates of points, all shifted by the given shift.
+ *
+ * Typical usage:
+ * Have multiple instances with various shifts to represent sets of interesting Point positions.
+ * At each step, find the next interesting point by taking the minimum of point() values.
+ * Do computation for the point.
+ * Advance all iterators using next_if_equal : iterators which were at this exact point will advance.
+ */
+class ShiftedPoints {
+  public:
+    static constexpr PointSpace inf = std::numeric_limits<PointSpace>::infinity();
+
+    ShiftedPoints(const SortedVec<Point> & points, PointSpace shift) : points_(points), shift_(shift) {
+        set_current(0);
+    }
+
+    size_t index() const { return index_; }
+    Point point() const { return shifted_point_; }
+
+    void next_if_equal(Point processed_point) {
+        if(processed_point == shifted_point_) {
+            set_current(index_ + 1);
+        }
+    }
+
+  private:
+    const SortedVec<Point> & points_; // Points to iterate on
+    PointSpace shift_;                // Shifting from points
+
+    // Iterator current index and shifted point value (or inf if out of points)
+    size_t index_;
+    Point shifted_point_;
+
+    void set_current(size_t i) {
+        index_ = i;
+        shifted_point_ = i < points_.size() ? points_[i] + shift_ : inf;
+    }
+};
+
+/* Compute sup_{x} sum_{y in points} shape(x - y).
+ * This is a building block for computation of B_hat, used in the computation of lasso penalties (d).
+ */
+template <Bound lb, Bound rb>
+double sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, const Indicator<lb, rb> & indicator) {
+    /* For an indicator function, the sum is a piecewise constant function of x.
+     * This function has at maximum 2*|N_l| points of change, so the number of different values is finite.
+     * Thus the sup over x is a max over all these possible values.
+     *
+     * Assuming a closed interval (but similar for other bound types):
+     * x in interval for y <=> left <= x - y <= right <=> left + y <= x <= right + x.
+     * Thus we iterate on the sets of points {left + y} and {right + y} where the sum changes of value (+1 and -1).
+     */
+    ShiftedPoints left_bounds(points, indicator.interval.left);
+    ShiftedPoints right_bounds(points, indicator.interval.right);
+    double max = 0;
+    while(true) {
+        // x is the next left / right / both interval bound.
+        const Point x = std::min(left_bounds.point(), right_bounds.point());
+        if(x == ShiftedPoints::inf) {
+            break; // No more points to process.
+        }
+        // The sum of indicator at x is the number of entered intervals minus the number of exited intervals.
+        // Thus the sum is the difference between the indexes of the left bound iterator and the right one.
+        if(lb == Bound::Closed && rb == Bound::Closed) {
+            // If both bounds are Closed, we look at exactly x, iterating the left points before looking.
+            // sum(x) >= sum(x-) as we could overlap an entering and exiting interval.
+            left_bounds.next_if_equal(x);
+        }
+        assert(left_bounds.index() >= right_bounds.index());
+        const auto sum_value_for_x = PointSpace(left_bounds.index() - right_bounds.index());
+        max = std::max(max, sum_value_for_x);
+        if(!(lb == Bound::Closed && rb == Bound::Closed)) {
+            // If any of the bounds is Open, we look at x- (before iterating after x).
+            // sum(x-) >= sum(x) due to open bounds.
+            left_bounds.next_if_equal(x);
+        }
+        right_bounds.next_if_equal(x);
+    }
+    return max;
+}
+
+// Legacy wrapper TODO remove
+inline double
+sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, const IntervalIndicator & indicator) {
+    return sup_of_sum_of_differences_to_points(
+        points, Indicator<Bound::Closed, Bound::Closed>{indicator.non_zero_domain()});
+}
+
+// Scaling can be moved out
+template <typename Inner>
+inline double sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, const Scaled<Inner> & shape) {
+    return shape.scale * sup_of_sum_of_differences_to_points(points, shape.inner);
+}
+// Shifting has no effect on the sup value.
+template <typename Inner>
+inline double sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, const Shifted<Inner> & shape) {
+    return sup_of_sum_of_differences_to_points(points, shape.inner);
+}
+
 } // namespace shape

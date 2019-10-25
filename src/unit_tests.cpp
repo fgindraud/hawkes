@@ -67,6 +67,39 @@ TEST_SUITE("types") {
  */
 TEST_SUITE("shape") {
     using namespace shape;
+
+    TEST_CASE("sup_of_sum_of_differences_to_points_indicators") {
+        const auto vec_empty = SortedVec<Point>::from_sorted({});
+        const auto vec_0_3_6 = SortedVec<Point>::from_sorted({0, 3, 6});
+        const auto vec_0_2 = SortedVec<Point>::from_sorted({0, 2});
+        const auto vec_0_1_2 = SortedVec<Point>::from_sorted({0, 1, 2});
+
+        const auto indicator_oo = Indicator<Bound::Open, Bound::Open>{{0, 3}};
+        const auto indicator_oc = Indicator<Bound::Open, Bound::Closed>{{0, 3}};
+        const auto indicator_co = Indicator<Bound::Closed, Bound::Open>{{0, 3}};
+        const auto indicator_cc = Indicator<Bound::Closed, Bound::Closed>{{0, 3}};
+
+        CHECK(sup_of_sum_of_differences_to_points(vec_empty, indicator_oo) == 0);
+        CHECK(sup_of_sum_of_differences_to_points(vec_empty, indicator_oc) == 0);
+        CHECK(sup_of_sum_of_differences_to_points(vec_empty, indicator_co) == 0);
+        CHECK(sup_of_sum_of_differences_to_points(vec_empty, indicator_cc) == 0);
+
+        CHECK(sup_of_sum_of_differences_to_points(vec_0_3_6, indicator_oo) == 1);
+        CHECK(sup_of_sum_of_differences_to_points(vec_0_3_6, indicator_oc) == 1);
+        CHECK(sup_of_sum_of_differences_to_points(vec_0_3_6, indicator_co) == 1);
+        CHECK(sup_of_sum_of_differences_to_points(vec_0_3_6, indicator_cc) == 2);
+
+        CHECK(sup_of_sum_of_differences_to_points(vec_0_2, indicator_oo) == 2);
+        CHECK(sup_of_sum_of_differences_to_points(vec_0_2, indicator_oc) == 2);
+        CHECK(sup_of_sum_of_differences_to_points(vec_0_2, indicator_co) == 2);
+        CHECK(sup_of_sum_of_differences_to_points(vec_0_2, indicator_cc) == 2);
+
+        CHECK(sup_of_sum_of_differences_to_points(vec_0_1_2, indicator_oo) == 3);
+        CHECK(sup_of_sum_of_differences_to_points(vec_0_1_2, indicator_oc) == 3);
+        CHECK(sup_of_sum_of_differences_to_points(vec_0_1_2, indicator_co) == 3);
+        CHECK(sup_of_sum_of_differences_to_points(vec_0_1_2, indicator_cc) == 3);
+    }
+    // OLD tests
     TEST_CASE("interval") {
         const auto interval = IntervalIndicator::with_half_width(1); // [-1, 1]
         const auto nzd = interval.non_zero_domain();
@@ -280,48 +313,6 @@ TEST_SUITE("computations") {
         CHECK(sum_of_point_differences(some_points, all_near_zero, interval) == 9);
         CHECK(sum_of_point_differences(all_near_zero, some_points, interval) == 9);
         CHECK(sum_of_point_differences(some_points, some_points, interval) == 3);
-    }
-    TEST_CASE("sup_of_sum_of_differences_to_points: IntervalIndicator") {
-        const auto interval = shape::IntervalIndicator::with_half_width(1);
-        SUBCASE("no points") {
-            const auto vec = SortedVec<Point>::from_sorted({});
-            CHECK(sup_of_sum_of_differences_to_points(vec, interval) == 0);
-        }
-        SUBCASE("non overlapping") {
-            const auto vec = SortedVec<Point>::from_sorted({0, 3});
-            CHECK(sup_of_sum_of_differences_to_points(vec, interval) == 1);
-        }
-        SUBCASE("overlapping: inner") {
-            const auto vec = SortedVec<Point>::from_sorted({0, 1, 4, 5});
-            CHECK(sup_of_sum_of_differences_to_points(vec, interval) == 2);
-        }
-        SUBCASE("overlapping: edge") {
-            const auto vec = SortedVec<Point>::from_sorted({0, 2, 4});
-            CHECK(sup_of_sum_of_differences_to_points(vec, interval) == 2);
-        }
-        SUBCASE("overlapping: edge and inner") {
-            const auto vec = SortedVec<Point>::from_sorted({0, 1, 2, 3, 4});
-            CHECK(sup_of_sum_of_differences_to_points(vec, interval) == 3);
-        }
-    }
-    TEST_CASE("sup_of_sum_of_differences_to_points: Interval<Open, Closed>") {
-        const auto interval = Interval<Bound::Open, Bound::Closed>{0, 3}; // ]0,3]
-        SUBCASE("no points") {
-            const auto vec = SortedVec<Point>::from_sorted({});
-            CHECK(sup_of_sum_of_differences_to_points(vec, interval) == 0);
-        }
-        SUBCASE("non overlapping") {
-            const auto vec = SortedVec<Point>::from_sorted({0, 3, 6});
-            CHECK(sup_of_sum_of_differences_to_points(vec, interval) == 1);
-        }
-        SUBCASE("overlapping") {
-            const auto vec = SortedVec<Point>::from_sorted({0, 2});
-            CHECK(sup_of_sum_of_differences_to_points(vec, interval) == 2);
-        }
-        SUBCASE("multiple overlapping") {
-            const auto vec = SortedVec<Point>::from_sorted({0, 1, 2});
-            CHECK(sup_of_sum_of_differences_to_points(vec, interval) == 3);
-        }
     }
     /*TEST_CASE ("b_ml_histogram_counts_for_all_k_denormalized") {
             const auto base = HistogramBase{3, 1}; // K=3, delta=1, so intervals=]0,1] ]1,2] ]2,3]
