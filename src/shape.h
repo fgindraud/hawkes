@@ -589,11 +589,64 @@ class ShiftedPoints {
     }
 };
 
+/* Compute sum_{x_m in N_m, x_l in N_l} shape(x_m - x_l).
+ * Shape must be a valid shape as per the shape namespace definition:
+ * - has a method non_zero_domain() returning the Interval where the shape is non zero.
+ * - has an operator()(x) returning the value at point x.
+ *
+ * Worst case complexity: O(|N|^2).
+ * Average complexity: O(|N| * density(N) * width(shape)) = O(|N|^2 * width(shape) / Tmax).
+ */
+template <typename Shape> inline double sum_of_point_differences(
+    const SortedVec<Point> & m_points, const SortedVec<Point> & l_points, const Shape & shape) {
+    // shape(x) != 0 => x in shape.non_zero_domain().
+    // Thus sum_{x_m,x_l} shape(x_m - x_l) = sum_{(x_m, x_l), x_m - x_l in non_zero_domain} shape(x_m - x_l).
+    const auto non_zero_domain = shape.non_zero_domain();
+
+    double sum = 0.;
+    size_t starting_i_m = 0;
+    for(const Point x_l : l_points) {
+        // x_l = N_l[i_l], with N_l[x] a strictly increasing function of x.
+        // Compute shape(x_m - x_l) for all x_m in (x_l + non_zero_domain) interval.
+        const auto interval_i_l = x_l + non_zero_domain;
+
+        // starting_i_m = min{i_m, N_m[i_m] - N_l[i_l] >= non_zero_domain.left}.
+        // We can restrict the search by starting from:
+        // last_starting_i_m = min{i_m, N_m[i_m] - N_l[i_l - 1] >= non_zero_domain.left or i_m == 0}.
+        // We have: N_m[starting_i_m] >= N_l[i_l] + nzd.left > N_l[i_l - 1] + nzd.left.
+        // Because N_m is increasing and properties of the min, starting_i_m >= last_starting_i_m.
+        while(starting_i_m < m_points.size() && !(interval_i_l.in_left_bound(m_points[starting_i_m]))) {
+            starting_i_m += 1;
+        }
+        if(starting_i_m == m_points.size()) {
+            // starting_i_m is undefined because last(N_m) < N_l[i_l] + non_zero_domain.left.
+            // last(N_m) == max(x_m in N_m) because N_m[x] is strictly increasing.
+            // So for each j > i_l , max(x_m) < N[j] + non_zero_domain.left, and shape (x_m - N_l[j]) == 0.
+            // We can stop there as the sum is already complete.
+            break;
+        }
+        // Sum values of shape(x_m - x_l) as long as x_m is in interval_i_l.
+        // starting_i_m defined => for each i_m < starting_i_m, shape(N_m[i_m] - x_l) == 0.
+        // Thus we only scan from starting_i_m to the last i_m in interval.
+        // N_m[x] is strictly increasing so we only need to check the right bound of the interval.
+        for(size_t i_m = starting_i_m; i_m < m_points.size() && interval_i_l.in_right_bound(m_points[i_m]); i_m += 1) {
+            sum += shape(m_points[i_m] - x_l);
+        }
+    }
+    return sum;
+}
+
+// Scaling can be moved out of computation.
+template <typename Inner> inline double sum_of_point_differences(
+    const SortedVec<Point> & m_points, const SortedVec<Point> & l_points, const shape::Scaled<Inner> & shape) {
+    return shape.scale * sum_of_point_differences(m_points, l_points, shape.inner);
+}
+
 /* Compute sup_{x} sum_{y in points} shape(x - y).
  * This is a building block for computation of B_hat, used in the computation of lasso penalties (d).
  */
-template <Bound lb, Bound rb>
-double sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, const Indicator<lb, rb> & indicator) {
+template <Bound lb, Bound rb> inline double sup_of_sum_of_differences_to_points(
+    const SortedVec<Point> & points, const Indicator<lb, rb> & indicator) {
     /* For an indicator function, the sum is a piecewise constant function of x.
      * This function has at maximum 2*|N_l| points of change, so the number of different values is finite.
      * Thus the sup over x is a max over all these possible values.
@@ -632,8 +685,8 @@ double sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, cons
 }
 
 // Legacy wrapper TODO remove
-inline double
-sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, const IntervalIndicator & indicator) {
+inline double sup_of_sum_of_differences_to_points(
+    const SortedVec<Point> & points, const IntervalIndicator & indicator) {
     return sup_of_sum_of_differences_to_points(
         points, Indicator<Bound::Closed, Bound::Closed>{indicator.non_zero_domain()});
 }
@@ -641,7 +694,11 @@ sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, const Inter
 // Scaling can be moved out
 template <typename Inner>
 inline double sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, const Scaled<Inner> & shape) {
-    return shape.scale * sup_of_sum_of_differences_to_points(points, shape.inner);
+    if(shape.scale > 0.) {
+        return shape.scale * sup_of_sum_of_differences_to_points(points, shape.inner);
+    } else {
+        return 0.;
+    }
 }
 // Shifting has no effect on the sup value.
 template <typename Inner>

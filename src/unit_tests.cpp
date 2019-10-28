@@ -65,9 +65,120 @@ TEST_SUITE("types") {
 /******************************************************************************
  * Shape tests.
  */
+template <Bound lb, Bound rb> struct IndicatorLike {
+    Interval<lb, rb> interval;
+    Interval<lb, rb> non_zero_domain() const { return interval; }
+    double operator()(Point x) const {
+        if(interval.contains(x)) {
+            return 1.;
+        } else {
+            return 0.;
+        }
+    }
+};
+struct TriangleShape {
+    double size;
+    Interval<Bound::Closed, Bound::Closed> non_zero_domain() const { return {0., size}; }
+    double operator()(Point x) const {
+        if(non_zero_domain().contains(x)) {
+            return x;
+        } else {
+            return 0.;
+        }
+    }
+};
 TEST_SUITE("shape") {
     using namespace shape;
 
+    TEST_CASE("sum_of_point_differences_generic") {
+        // Tested functions
+        const auto indicator_oo = IndicatorLike<Bound::Open, Bound::Open>{{-1, 1}};
+        const auto indicator_oc = IndicatorLike<Bound::Open, Bound::Closed>{{-1, 1}};
+        const auto indicator_co = IndicatorLike<Bound::Closed, Bound::Open>{{-1, 1}};
+        const auto indicator_cc = IndicatorLike<Bound::Closed, Bound::Closed>{{-1, 1}};
+
+        // Tested point sets
+        const auto empty = SortedVec<Point>::from_sorted({});
+        const auto zero = SortedVec<Point>::from_sorted({0});
+        const auto one = SortedVec<Point>::from_sorted({1});
+        const auto all_near_zero = SortedVec<Point>::from_sorted({-4, -3, -2, -1, 0, 1, 2, 3, 4});
+
+        // Should be zero due to emptyset
+        CHECK(sum_of_point_differences(empty, empty, indicator_oo) == 0);
+        CHECK(sum_of_point_differences(empty, zero, indicator_oo) == 0);
+        CHECK(sum_of_point_differences(zero, empty, indicator_oo) == 0);
+
+        CHECK(sum_of_point_differences(empty, empty, indicator_oc) == 0);
+        CHECK(sum_of_point_differences(empty, zero, indicator_oc) == 0);
+        CHECK(sum_of_point_differences(zero, empty, indicator_oc) == 0);
+
+        CHECK(sum_of_point_differences(empty, empty, indicator_co) == 0);
+        CHECK(sum_of_point_differences(empty, zero, indicator_co) == 0);
+        CHECK(sum_of_point_differences(zero, empty, indicator_co) == 0);
+
+        CHECK(sum_of_point_differences(empty, empty, indicator_cc) == 0);
+        CHECK(sum_of_point_differences(empty, zero, indicator_cc) == 0);
+        CHECK(sum_of_point_differences(zero, empty, indicator_cc) == 0);
+
+        // Only one same point in both sets
+        CHECK(sum_of_point_differences(zero, zero, indicator_oo) == 1);
+        CHECK(sum_of_point_differences(zero, zero, indicator_oc) == 1);
+        CHECK(sum_of_point_differences(zero, zero, indicator_cc) == 1);
+        CHECK(sum_of_point_differences(zero, zero, indicator_cc) == 1);
+
+        // Two sets with one point, one diff = 1 for (one, zero), -1 for (zero, one)
+        CHECK(sum_of_point_differences(one, zero, indicator_oo) == 0);
+        CHECK(sum_of_point_differences(zero, one, indicator_oo) == 0);
+
+        CHECK(sum_of_point_differences(one, zero, indicator_oc) == 1);
+        CHECK(sum_of_point_differences(zero, one, indicator_oc) == 0);
+
+        CHECK(sum_of_point_differences(one, zero, indicator_co) == 0);
+        CHECK(sum_of_point_differences(zero, one, indicator_co) == 1);
+
+        CHECK(sum_of_point_differences(one, zero, indicator_cc) == 1);
+        CHECK(sum_of_point_differences(zero, one, indicator_cc) == 1);
+
+        // Single point with all points near zero : set of diffs = all_near_zero
+        CHECK(sum_of_point_differences(zero, all_near_zero, indicator_oo) == 1);
+        CHECK(sum_of_point_differences(all_near_zero, zero, indicator_oo) == 1);
+
+        CHECK(sum_of_point_differences(zero, all_near_zero, indicator_oc) == 2);
+        CHECK(sum_of_point_differences(all_near_zero, zero, indicator_oc) == 2);
+
+        CHECK(sum_of_point_differences(zero, all_near_zero, indicator_co) == 2);
+        CHECK(sum_of_point_differences(all_near_zero, zero, indicator_co) == 2);
+
+        CHECK(sum_of_point_differences(zero, all_near_zero, indicator_cc) == 3);
+        CHECK(sum_of_point_differences(all_near_zero, zero, indicator_cc) == 3);
+
+        // Multiple points with all points near zero
+        const auto some_points = SortedVec<Point>::from_sorted({-3, 0, 3});
+        CHECK(sum_of_point_differences(some_points, all_near_zero, indicator_oo) == 3);
+        CHECK(sum_of_point_differences(all_near_zero, some_points, indicator_oo) == 3);
+        CHECK(sum_of_point_differences(some_points, some_points, indicator_oo) == 3);
+
+        CHECK(sum_of_point_differences(some_points, all_near_zero, indicator_oc) == 6);
+        CHECK(sum_of_point_differences(all_near_zero, some_points, indicator_oc) == 6);
+        CHECK(sum_of_point_differences(some_points, some_points, indicator_oc) == 3);
+
+        CHECK(sum_of_point_differences(some_points, all_near_zero, indicator_co) == 6);
+        CHECK(sum_of_point_differences(all_near_zero, some_points, indicator_co) == 6);
+        CHECK(sum_of_point_differences(some_points, some_points, indicator_co) == 3);
+
+        CHECK(sum_of_point_differences(some_points, all_near_zero, indicator_cc) == 9);
+        CHECK(sum_of_point_differences(all_near_zero, some_points, indicator_cc) == 9);
+        CHECK(sum_of_point_differences(some_points, some_points, indicator_cc) == 3);
+
+        // Tests values for non indicator shape
+        const auto triangle = TriangleShape{4.};
+        CHECK(sum_of_point_differences(empty, zero, triangle) == 0);
+        CHECK(sum_of_point_differences(zero, empty, triangle) == 0);
+        CHECK(sum_of_point_differences(zero, zero, triangle) == 0);
+        CHECK(sum_of_point_differences(one, zero, triangle) == 1);
+        CHECK(sum_of_point_differences(all_near_zero, zero, triangle) == 10); // 0+1+2+3+4
+        CHECK(sum_of_point_differences(all_near_zero, one, triangle) == 6);   // 0+1+2+3
+    }
     TEST_CASE("sup_of_sum_of_differences_to_points_indicators") {
         const auto vec_empty = SortedVec<Point>::from_sorted({});
         const auto vec_0_3_6 = SortedVec<Point>::from_sorted({0, 3, 6});
@@ -292,27 +403,6 @@ TEST_SUITE("computations") {
         CHECK(tmax(make_span(contains_empty)) == 42);
         const SortedVec<Point> one_point[] = {SortedVec<Point>::from_sorted({1})};
         CHECK(tmax(make_span(one_point)) == 0);
-    }
-    TEST_CASE("sum_of_point_differences") {
-        // Use interval [-1, 1] as this is a simple function to check
-        const auto interval = shape::IntervalIndicator::with_half_width(1);
-        const auto empty = SortedVec<Point>::from_sorted({});
-        const auto zero = SortedVec<Point>::from_sorted({0});
-        // Should be zero due to emptyset
-        CHECK(sum_of_point_differences(empty, empty, interval) == 0);
-        CHECK(sum_of_point_differences(empty, zero, interval) == 0);
-        CHECK(sum_of_point_differences(zero, empty, interval) == 0);
-        // Only one same point in both sets
-        CHECK(sum_of_point_differences(zero, zero, interval) == 1);
-        // Single point with all points near zero
-        const auto all_near_zero = SortedVec<Point>::from_sorted({-4, -3, -2, -1, 0, 1, 2, 3, 4});
-        CHECK(sum_of_point_differences(zero, all_near_zero, interval) == 3);
-        CHECK(sum_of_point_differences(all_near_zero, zero, interval) == 3);
-        // Multiple points with all points near zero
-        const auto some_points = SortedVec<Point>::from_sorted({-3, 0, 3});
-        CHECK(sum_of_point_differences(some_points, all_near_zero, interval) == 9);
-        CHECK(sum_of_point_differences(all_near_zero, some_points, interval) == 9);
-        CHECK(sum_of_point_differences(some_points, some_points, interval) == 3);
     }
     /*TEST_CASE ("b_ml_histogram_counts_for_all_k_denormalized") {
             const auto base = HistogramBase{3, 1}; // K=3, delta=1, so intervals=]0,1] ]1,2] ]2,3]

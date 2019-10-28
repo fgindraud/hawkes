@@ -169,8 +169,8 @@ static DataByProcessRegion<SortedVec<DataPoint>> read_process_files(const std::v
     return points;
 }
 
-static DataByProcessRegion<SortedVec<Point>>
-extract_point_lists(const DataByProcessRegion<SortedVec<DataPoint>> & data_points) {
+static DataByProcessRegion<SortedVec<Point>> extract_point_lists(
+    const DataByProcessRegion<SortedVec<DataPoint>> & data_points) {
     const auto nb_processes = data_points.nb_processes();
     const auto nb_regions = data_points.nb_regions();
     DataByProcessRegion<SortedVec<Point>> points(nb_processes, nb_regions);
@@ -189,8 +189,7 @@ extract_point_lists(const DataByProcessRegion<SortedVec<DataPoint>> & data_point
 }
 
 // Generate kernels and maximum width kernels from data_points
-template <typename WidthToKernelFunc>
-static auto get_heterogeneous_kernels(
+template <typename WidthToKernelFunc> static auto get_heterogeneous_kernels(
     const DataByProcessRegion<SortedVec<DataPoint>> & data_points, WidthToKernelFunc width_to_kernel) {
     using KernelT = decltype(width_to_kernel(PointSpace()));
     const auto nb_processes = data_points.nb_processes();

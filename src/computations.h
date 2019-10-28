@@ -29,9 +29,8 @@ struct CommonIntermediateValues {
 };
 
 // Default case for compute_intermediate_values
-template <typename Base, typename Kernels>
-inline CommonIntermediateValues
-compute_intermediate_values(const DataByProcessRegion<SortedVec<Point>> & /*points*/, const Base &, const Kernels &) {
+template <typename Base, typename Kernels> inline CommonIntermediateValues compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & /*points*/, const Base &, const Kernels &) {
     throw std::runtime_error("Unsupported base/kernel configuration combination");
 }
 
@@ -61,63 +60,6 @@ inline PointSpace tmax(span<const SortedVec<Point>> processes) {
     }
 }
 
-/* Compute sum_{x_m in N_m, x_l in N_l} shape(x_m - x_l).
- * Shape must be any shape from the shape namespace:
- * - with a method non_zero_domain() returning the interval where the shape is non zero.
- * - with an operator()(x) returning the value at point x.
- *
- * Worst case complexity: O(|N|^2).
- * Average complexity: O(|N| * density(N) * width(shape)) = O(|N|^2 * width(shape) / Tmax).
- */
-template <typename Shape>
-inline double
-sum_of_point_differences(const SortedVec<Point> & m_points, const SortedVec<Point> & l_points, const Shape & shape) {
-    double sum = 0.;
-
-    // shape(x) != 0 => x in shape.non_zero_domain().
-    // Thus sum_{x_m,x_l} shape(x_m - x_l) = sum_{(x_m, x_l), x_m - x_l in non_zero_domain} shape(x_m - x_l).
-    const auto non_zero_domain = shape.non_zero_domain();
-
-    size_t starting_i_m = 0;
-    for(const Point x_l : l_points) {
-        // x_l = N_l[i_l], with N_l[x] a strictly increasing function of x.
-        // Compute shape(x_m - x_l) for all x_m in (x_l + non_zero_domain) interval.
-        const auto interval_i_l = x_l + non_zero_domain;
-
-        // starting_i_m = min{i_m, N_m[i_m] - N_l[i_l] >= non_zero_domain.left}.
-        // We can restrict the search by starting from:
-        // last_starting_i_m = min{i_m, N_m[i_m] - N_l[i_l - 1] >= non_zero_domain.left or i_m == 0}.
-        // We have: N_m[starting_i_m] >= N_l[i_l] + nzd.left > N_l[i_l - 1] + nzd.left.
-        // Because N_m is increasing and properties of the min, starting_i_m >= last_starting_i_m.
-        while(starting_i_m < m_points.size() && !(interval_i_l.left <= m_points[starting_i_m])) {
-            starting_i_m += 1;
-        }
-        if(starting_i_m == m_points.size()) {
-            // starting_i_m is undefined because last(N_m) < N_l[i_l] + non_zero_domain.left.
-            // last(N_m) == max(x_m in N_m) because N_m[x] is strictly increasing.
-            // So for each j > i_l , max(x_m) < N[j] + non_zero_domain.left, and shape (x_m - N_l[j]) == 0.
-            // We can stop there as the sum is already complete.
-            break;
-        }
-        // Sum values of shape(x_m - x_l) as long as x_m is in interval_i_l.
-        // starting_i_m defined => for each i_m < starting_i_m, shape(N_m[i_m] - x_l) == 0.
-        // Thus we only scan from starting_i_m to the last i_m in interval.
-        // N_m[x] is strictly increasing so we only need to check the right bound of the interval.
-        for(size_t i_m = starting_i_m; i_m < m_points.size() && m_points[i_m] <= interval_i_l.right; i_m += 1) {
-            sum += shape(m_points[i_m] - x_l);
-        }
-    }
-
-    return sum;
-}
-
-// Scaling can be moved out of computation.
-template <typename Inner>
-inline double sum_of_point_differences(
-    const SortedVec<Point> & m_points, const SortedVec<Point> & l_points, const shape::Scaled<Inner> & shape) {
-    return shape.scale * sum_of_point_differences(m_points, l_points, shape.inner);
-}
-
 /* Compute sum_{x_m in N_m, x_l in N_l} shape_generator(W_{x_m}, W_{x_l})(x_m - x_l).
  *
  * shape_generator(i_m, i_l) must return the shape for W_{x_m}, W_{x_l} if x_m=N_m[i_m] and x_l=N_l[i_l].
@@ -131,8 +73,7 @@ inline double sum_of_point_differences(
  * Worst case complexity: O(|N|^2).
  * Average complexity: O(|N| * density(N) * width(non_zero_domain)) = O(|N|^2 * width(non_zero_domain) / Tmax).
  */
-template <typename ShapeGenerator>
-inline double sum_of_point_differences(
+template <typename ShapeGenerator> inline double sum_of_point_differences(
     const SortedVec<Point> & m_points,
     const SortedVec<Point> & l_points,
     const ShapeGenerator & shape_generator,
