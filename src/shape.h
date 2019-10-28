@@ -136,80 +136,6 @@ template <typename... Shapes> inline auto add(const Shapes &... shapes) {
  * Simplifications for other operations are defined in the same way, like for component().
  */
 
-// Component decomposition
-template <typename Inner, typename ComponentTag> inline auto component(const Scaled<Inner> & shape, ComponentTag tag) {
-    return scaled(shape.scale, component(shape.inner, tag));
-}
-template <typename Inner, typename ComponentTag> inline auto component(const Shifted<Inner> & shape, ComponentTag tag) {
-    return shifted(shape.shift, component(shape.inner, tag));
-}
-
-// Interval approximation
-template <typename Inner> inline auto interval_approximation(const Scaled<Inner> & shape) {
-    return scaled(shape.scale, interval_approximation(shape.inner));
-}
-template <typename Inner> inline auto interval_approximation(const Shifted<Inner> & shape) {
-    return shifted(shape.shift, interval_approximation(shape.inner));
-}
-
-/* Priority system for simplification of convolution/cross_correlation.
- *
- * Cases like convolution(shifted(a), scaled(b)) can cause overload conflicts.
- * Both rules for simplifying shifted(a) or scaled(b) parts are valid.
- * However the compiler needs to be told which one to apply first.
- * This is done by defining a "priority" for combinators, and "disabling" rules if another one has higher priority.
- */
-
-// Basic priorities. Scale has the highest, in order to be extracted to the outermost parts of expressions.
-constexpr int default_priority = 0;
-constexpr int shifted_priority = 1;
-constexpr int scaled_priority = 2;
-
-// Get the priority value of a shape type.
-template <typename T> struct Priority { static constexpr int value = default_priority; };
-template <typename Inner> struct Priority<Shifted<Inner>> { static constexpr int value = shifted_priority; };
-template <typename Inner> struct Priority<Scaled<Inner>> { static constexpr int value = scaled_priority; };
-
-// Convolution simplifications with shift.
-template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < shifted_priority)>>
-inline auto convolution(const Shifted<L> & lhs, const R & rhs) {
-    return shifted(lhs.shift, convolution(lhs.inner, rhs));
-}
-template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= shifted_priority)>>
-inline auto convolution(const L & lhs, const Shifted<R> & rhs) {
-    return shifted(rhs.shift, convolution(lhs, rhs.inner));
-}
-
-// Convolution simplifications with scaling.
-template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < scaled_priority)>>
-inline auto convolution(const Scaled<L> & lhs, const R & rhs) {
-    return scaled(lhs.scale, convolution(lhs.inner, rhs));
-}
-template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= scaled_priority)>>
-inline auto convolution(const L & lhs, const Scaled<R> & rhs) {
-    return scaled(rhs.scale, convolution(lhs, rhs.inner));
-}
-
-// Cross-correlation simplifications with shift.
-template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < shifted_priority)>>
-inline auto cross_correlation(const Shifted<L> & lhs, const R & rhs) {
-    return shifted(-lhs.shift, cross_correlation(lhs.inner, rhs));
-}
-template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= shifted_priority)>>
-inline auto cross_correlation(const L & lhs, const Shifted<R> & rhs) {
-    return shifted(rhs.shift, cross_correlation(lhs, rhs.inner));
-}
-
-// Cross-correlation simplifications with scaling.
-template <typename L, typename R, typename = std::enable_if_t<(Priority<R>::value < scaled_priority)>>
-inline auto cross_correlation(const Scaled<L> & lhs, const R & rhs) {
-    return scaled(lhs.scale, cross_correlation(lhs.inner, rhs));
-}
-template <typename L, typename R, typename = std::enable_if_t<(Priority<L>::value <= scaled_priority)>>
-inline auto cross_correlation(const L & lhs, const Scaled<R> & rhs) {
-    return scaled(rhs.scale, cross_correlation(lhs, rhs.inner));
-}
-
 /******************************************************************************
  * Base shapes.
  */
@@ -306,24 +232,14 @@ struct Trapezoid {
 
 // Decompose into components
 inline auto component(const Trapezoid & trapezoid, Trapezoid::CentralBlock) {
-    return scaled(trapezoid.height, IntervalIndicator::with_half_width(trapezoid.half_base));
+    return scaled(
+        trapezoid.height, Indicator<Bound::Closed, Bound::Closed>{{-trapezoid.half_base, trapezoid.half_base}});
 }
 inline auto component(const Trapezoid & trapezoid, Trapezoid::LeftTriangle) {
     return shifted(-trapezoid.half_len, PositiveTriangle{trapezoid.height});
 }
 inline auto component(const Trapezoid & trapezoid, Trapezoid::RightTriangle) {
     return shifted(trapezoid.half_len, NegativeTriangle{trapezoid.height});
-}
-
-inline Trapezoid convolution(const IntervalIndicator & left, const IntervalIndicator & right) {
-    return Trapezoid{std::min(left.half_width, right.half_width) * 2, std::abs(left.half_width - right.half_width)};
-}
-inline Trapezoid cross_correlation(const IntervalIndicator & left, const IntervalIndicator & right) {
-    return convolution(left, right); // Indicator is symmetric, identical by time inversion.
-}
-
-inline auto interval_approximation(const Trapezoid & trapezoid) {
-    return scaled(trapezoid.height, IntervalIndicator::with_half_width(trapezoid.half_len));
 }
 
 /* Convolution between IntervalIndicator(half_width=l/2) and PositiveTriangle(side=c).
@@ -364,20 +280,6 @@ struct ConvolutionIntervalPositiveTriangle {
     }
 };
 
-inline auto convolution(const IntervalIndicator & lhs, const PositiveTriangle & rhs) {
-    return ConvolutionIntervalPositiveTriangle(lhs.half_width, rhs.side);
-}
-inline auto convolution(const IntervalIndicator & lhs, const NegativeTriangle & rhs) {
-    // IntervalIndicator is symmetric, and NegativeTriangle(x) == PositiveTriangle(-x)
-    return reversed(convolution(lhs, PositiveTriangle{rhs.side}));
-}
-inline auto convolution(const PositiveTriangle & lhs, const IntervalIndicator & rhs) {
-    return convolution(rhs, lhs);
-}
-inline auto convolution(const NegativeTriangle & lhs, const IntervalIndicator & rhs) {
-    return convolution(rhs, lhs);
-}
-
 /* Convolution between PositiveTriangle(side=a) and PositiveTriangle(side=b).
  */
 struct ConvolutionPositiveTrianglePositiveTriangle {
@@ -415,14 +317,6 @@ struct ConvolutionPositiveTrianglePositiveTriangle {
         }
     }
 };
-
-inline auto convolution(const PositiveTriangle & lhs, const PositiveTriangle & rhs) {
-    return ConvolutionPositiveTrianglePositiveTriangle(lhs.side, rhs.side);
-}
-inline auto convolution(const NegativeTriangle & lhs, const NegativeTriangle & rhs) {
-    // Reversing the time dimension transforms both negative triangles into positive ones.
-    return reversed(convolution(PositiveTriangle{lhs.side}, PositiveTriangle{rhs.side}));
-}
 
 /* Convolution between NegativeTriangle(side=a) and PositiveTriangle(side=b).
  */
@@ -462,46 +356,6 @@ struct ConvolutionNegativeTrianglePositiveTriangle {
     }
 };
 
-inline auto convolution(const NegativeTriangle & lhs, const PositiveTriangle & rhs) {
-    return ConvolutionNegativeTrianglePositiveTriangle(lhs.side, rhs.side);
-}
-inline auto convolution(const PositiveTriangle & lhs, const NegativeTriangle & rhs) {
-    return convolution(rhs, lhs);
-}
-
-/* Define convolution of Trapezoid using Add of combinations.
- */
-inline auto convolution(const Trapezoid & lhs, const IntervalIndicator & rhs) {
-    return add(
-        convolution(component(lhs, Trapezoid::LeftTriangle{}), rhs),
-        convolution(component(lhs, Trapezoid::CentralBlock{}), rhs),
-        convolution(component(lhs, Trapezoid::RightTriangle{}), rhs));
-}
-inline auto convolution(const IntervalIndicator & lhs, const Trapezoid & rhs) {
-    return convolution(rhs, lhs);
-}
-inline auto convolution(const Trapezoid & lhs, const Trapezoid & rhs) {
-    const auto left_part = Trapezoid::LeftTriangle{};
-    const auto central_part = Trapezoid::CentralBlock{};
-    const auto right_part = Trapezoid::RightTriangle{};
-    return add(
-        //
-        convolution(component(lhs, left_part), component(rhs, left_part)),
-        convolution(component(lhs, central_part), component(rhs, left_part)),
-        convolution(component(lhs, right_part), component(rhs, left_part)),
-        //
-        convolution(component(lhs, left_part), component(rhs, central_part)),
-        convolution(component(lhs, central_part), component(rhs, central_part)),
-        convolution(component(lhs, right_part), component(rhs, central_part)),
-        //
-        convolution(component(lhs, left_part), component(rhs, right_part)),
-        convolution(component(lhs, central_part), component(rhs, right_part)),
-        convolution(component(lhs, right_part), component(rhs, right_part)));
-}
-inline auto cross_correlation(const Trapezoid & lhs, const Trapezoid & rhs) {
-    return convolution(lhs, rhs); // Trapezoid is symmetric, identical by time inversion
-}
-
 /******************************************************************************
  * NEW SHAPE impl
  */
@@ -535,14 +389,191 @@ template <Bound lb, Bound rb> struct Indicator {
  * Define explicit cases for base shapes.
  * Define simplifications when combinators are found.
  *
- * TODO conventional combinator order ?
+ * The conventional order of combinators is:
+ * scaling -> shifting -> reversion -> base_shape
  */
 
 /* Combinator: Reverse x dimension
- * reverse(f(x)) = f(-x)
+ * reverse(f)(x) = f(-x)
  */
 template <Bound lb, Bound rb> Indicator<rb, lb> reverse(const Indicator<lb, rb> & indicator) {
     return {-indicator.interval};
+}
+
+/* Combinator: Shift x dimension
+ * shifted(s, f)(x) = f(x - s)
+ */
+template <Bound lb, Bound rb> Indicator<rb, lb> shifted(PointSpace s, const Indicator<lb, rb> & indicator) {
+    return {s + indicator.interval};
+}
+
+/* Convolution.
+ * convolution(f,g)(x) = int_R f(x - t) g (t) dt
+ *
+ * Perform simplification by factoring scaling and shifting before applying base shape convolution.
+ */
+template <typename Lhs, typename Rhs> inline auto convolution(const Lhs & lhs, const Rhs & rhs) {
+    return convolution_extract_scale(lhs, rhs);
+}
+
+// Extract scale
+template <typename L, typename R> inline auto convolution_extract_scale(const Scaled<L> & lhs, const Scaled<R> & rhs) {
+    return scaled(lhs.scale * rhs.scale, convolution_extract_shift(lhs.inner, rhs.inner));
+}
+template <typename L, typename R> inline auto convolution_extract_scale(const Scaled<L> & lhs, const R & rhs) {
+    return scaled(lhs.scale, convolution_extract_shift(lhs.inner, rhs));
+}
+template <typename L, typename R> inline auto convolution_extract_scale(const L & lhs, const Scaled<R> & rhs) {
+    return scaled(rhs.scale, convolution_extract_shift(lhs, rhs.inner));
+}
+template <typename L, typename R> inline auto convolution_extract_scale(const L & lhs, const R & rhs) {
+    return convolution_extract_shift(lhs, rhs);
+}
+
+// Extract shift
+template <typename L, typename R>
+inline auto convolution_extract_shift(const Shifted<L> & lhs, const Shifted<R> & rhs) {
+    return shifted(lhs.shift + rhs.shift, convolution_base(lhs.inner, rhs.inner));
+}
+template <typename L, typename R> inline auto convolution_extract_shift(const Shifted<L> & lhs, const R & rhs) {
+    return shifted(lhs.shift, convolution_base(lhs.inner, rhs));
+}
+template <typename L, typename R> inline auto convolution_extract_shift(const L & lhs, const Shifted<R> & rhs) {
+    return shifted(rhs.shift, convolution_base(lhs, rhs.inner));
+}
+template <typename L, typename R> inline auto convolution_extract_shift(const L & lhs, const R & rhs) {
+    return convolution_base(lhs, rhs);
+}
+
+// Base cases
+inline Trapezoid convolution_base(const IntervalIndicator & left, const IntervalIndicator & right) {
+    return Trapezoid{std::min(left.half_width, right.half_width) * 2, std::abs(left.half_width - right.half_width)};
+}
+
+inline auto convolution_base(const IntervalIndicator & lhs, const PositiveTriangle & rhs) {
+    return ConvolutionIntervalPositiveTriangle(lhs.half_width, rhs.side);
+}
+inline auto convolution_base(const IntervalIndicator & lhs, const NegativeTriangle & rhs) {
+    // IntervalIndicator is symmetric, and NegativeTriangle(x) == PositiveTriangle(-x)
+    return reversed(convolution_base(lhs, PositiveTriangle{rhs.side}));
+}
+inline auto convolution_base(const PositiveTriangle & lhs, const IntervalIndicator & rhs) {
+    return convolution_base(rhs, lhs);
+}
+inline auto convolution_base(const NegativeTriangle & lhs, const IntervalIndicator & rhs) {
+    return convolution_base(rhs, lhs);
+}
+
+inline auto convolution_base(const PositiveTriangle & lhs, const PositiveTriangle & rhs) {
+    return ConvolutionPositiveTrianglePositiveTriangle(lhs.side, rhs.side);
+}
+inline auto convolution_base(const NegativeTriangle & lhs, const NegativeTriangle & rhs) {
+    // Reversing the time dimension transforms both negative triangles into positive ones.
+    return reversed(convolution_base(PositiveTriangle{lhs.side}, PositiveTriangle{rhs.side}));
+}
+
+inline auto convolution_base(const NegativeTriangle & lhs, const PositiveTriangle & rhs) {
+    return ConvolutionNegativeTrianglePositiveTriangle(lhs.side, rhs.side);
+}
+inline auto convolution_base(const PositiveTriangle & lhs, const NegativeTriangle & rhs) {
+    return convolution_base(rhs, lhs);
+}
+
+inline auto convolution_base(const Trapezoid & lhs, const IntervalIndicator & rhs) {
+    return add(
+        convolution(component(lhs, Trapezoid::LeftTriangle{}), rhs),
+        convolution(component(lhs, Trapezoid::CentralBlock{}), rhs),
+        convolution(component(lhs, Trapezoid::RightTriangle{}), rhs));
+}
+inline auto convolution_base(const IntervalIndicator & lhs, const Trapezoid & rhs) {
+    return convolution_base(rhs, lhs);
+}
+inline auto convolution_base(const Trapezoid & lhs, const Trapezoid & rhs) {
+    const auto left_part = Trapezoid::LeftTriangle{};
+    const auto central_part = Trapezoid::CentralBlock{};
+    const auto right_part = Trapezoid::RightTriangle{};
+    return add(
+        //
+        convolution(component(lhs, left_part), component(rhs, left_part)),
+        convolution(component(lhs, central_part), component(rhs, left_part)),
+        convolution(component(lhs, right_part), component(rhs, left_part)),
+        //
+        convolution(component(lhs, left_part), component(rhs, central_part)),
+        convolution(component(lhs, central_part), component(rhs, central_part)),
+        convolution(component(lhs, right_part), component(rhs, central_part)),
+        //
+        convolution(component(lhs, left_part), component(rhs, right_part)),
+        convolution(component(lhs, central_part), component(rhs, right_part)),
+        convolution(component(lhs, right_part), component(rhs, right_part)));
+}
+
+/* Cross correlation.
+ * cross_correlation(f,g)(x) = int_R f(t - x) g (t) dt = convolution(reverse(f), g).
+ *
+ * Perform simplification by factoring scaling and shifting before applying base shape convolution.
+ * Often use definitions from convolution.
+ */
+template <typename Lhs, typename Rhs> inline auto cross_correlation(const Lhs & lhs, const Rhs & rhs) {
+    return cross_correlation_extract_scale(lhs, rhs);
+}
+
+// Extract scale
+template <typename L, typename R>
+inline auto cross_correlation_extract_scale(const Scaled<L> & lhs, const Scaled<R> & rhs) {
+    return scaled(lhs.scale * rhs.scale, cross_correlation_extract_shift(lhs.inner, rhs.inner));
+}
+template <typename L, typename R> inline auto cross_correlation_extract_scale(const Scaled<L> & lhs, const R & rhs) {
+    return scaled(lhs.scale, cross_correlation_extract_shift(lhs.inner, rhs));
+}
+template <typename L, typename R> inline auto cross_correlation_extract_scale(const L & lhs, const Scaled<R> & rhs) {
+    return scaled(rhs.scale, cross_correlation_extract_shift(lhs, rhs.inner));
+}
+template <typename L, typename R> inline auto cross_correlation_extract_scale(const L & lhs, const R & rhs) {
+    return cross_correlation_extract_shift(lhs, rhs);
+}
+
+// Extract shift
+template <typename L, typename R>
+inline auto cross_correlation_extract_shift(const Shifted<L> & lhs, const Shifted<R> & rhs) {
+    return shifted(rhs.shift - lhs.shift, cross_correlation_base(lhs.inner, rhs.inner));
+}
+template <typename L, typename R> inline auto cross_correlation_extract_shift(const Shifted<L> & lhs, const R & rhs) {
+    return shifted(-lhs.shift, cross_correlation_base(lhs.inner, rhs));
+}
+template <typename L, typename R> inline auto cross_correlation_extract_shift(const L & lhs, const Shifted<R> & rhs) {
+    return shifted(rhs.shift, cross_correlation_base(lhs, rhs.inner));
+}
+template <typename L, typename R> inline auto cross_correlation_extract_shift(const L & lhs, const R & rhs) {
+    return cross_correlation_base(lhs, rhs);
+}
+
+// Base cases
+inline Trapezoid cross_correlation_base(const IntervalIndicator & left, const IntervalIndicator & right) {
+    return convolution_base(left, right); // Indicator is symmetric, identical by time inversion.
+}
+inline auto cross_correlation_base(const Trapezoid & lhs, const Trapezoid & rhs) {
+    return convolution_base(lhs, rhs); // Trapezoid is symmetric, identical by time inversion
+}
+
+/* Approximate a shape with an interval.
+ */
+template <typename Inner> inline auto interval_approximation(const Scaled<Inner> & shape) {
+    return scaled(shape.scale, interval_approximation(shape.inner));
+}
+template <typename Inner> inline auto interval_approximation(const Shifted<Inner> & shape) {
+    return shifted(shape.shift, interval_approximation(shape.inner));
+}
+inline auto interval_approximation(const Trapezoid & trapezoid) {
+    return scaled(trapezoid.height, IntervalIndicator::with_half_width(trapezoid.half_len));
+}
+
+/* Component decomposition.
+ */
+template <typename Inner, typename ComponentTag> inline auto component(const Scaled<Inner> & shape, ComponentTag tag) {
+    return scaled(shape.scale, component(shape.inner, tag));
+}
+template <typename Inner, typename ComponentTag> inline auto component(const Shifted<Inner> & shape, ComponentTag tag) {
+    return shifted(shape.shift, component(shape.inner, tag));
 }
 
 /******************************************************************************
@@ -635,6 +666,8 @@ template <typename Shape> inline double sum_of_point_differences(
     }
     return sum;
 }
+
+// TODO version specific to Indicator, with linear speed
 
 // Scaling can be moved out of computation.
 template <typename Inner> inline double sum_of_point_differences(

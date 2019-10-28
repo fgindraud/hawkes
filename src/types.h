@@ -124,9 +124,16 @@ struct HistogramBase {
 
     Interval<Bound::Open, Bound::Closed> total_span() const { return {0., PointSpace(base_size) * delta}; }
 
-    Interval<Bound::Open, Bound::Closed> interval(FunctionBaseId k) const {
+    struct Histogram {
+        Interval<Bound::Open, Bound::Closed> interval;
+        double normalization_factor;
+    };
+    Histogram histogram(FunctionBaseId k) const {
         assert(k < base_size);
-        return {PointSpace(k) * delta, PointSpace(k + 1) * delta};
+        return {
+            {PointSpace(k) * delta, PointSpace(k + 1) * delta},
+            normalization_factor,
+        };
     }
 };
 

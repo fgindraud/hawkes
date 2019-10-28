@@ -60,6 +60,7 @@ inline PointSpace tmax(span<const SortedVec<Point>> processes) {
     }
 }
 
+// TODO move
 /* Compute sum_{x_m in N_m, x_l in N_l} shape_generator(W_{x_m}, W_{x_l})(x_m - x_l).
  *
  * shape_generator(i_m, i_l) must return the shape for W_{x_m}, W_{x_l} if x_m=N_m[i_m] and x_l=N_l[i_l].
@@ -112,26 +113,24 @@ template <typename ShapeGenerator> inline double sum_of_point_differences(
     return sum;
 }
 
-// Conversion of objects to shapes (shape.h) TODO improve
+// Conversion of objects to shapes (shape.h)
 inline auto to_shape(IntervalKernel kernel) {
     return shape::scaled(
         normalization_factor(kernel),
-        shape::shifted(kernel.center, shape::IntervalIndicator::with_width(kernel.width)));
+        shape::Indicator<Bound::Closed, Bound::Closed>{
+            {kernel.center - kernel.width / 2., kernel.center + kernel.width / 2.},
+        });
 }
-// Lossy (]l,r] -> [l,r]), but ok if used in convolution.
-template <Bound l, Bound r> inline auto lossy_interval_shape(Interval<l, r> i) {
-    const PointSpace width = i.right - i.left;
-    const Point center = (i.left + i.right) / 2.;
-    return shape::shifted(center, shape::IntervalIndicator::with_width(width));
+inline auto to_shape(const HistogramBase::Histogram & histogram) {
+    return shape::scaled(
+        histogram.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{histogram.interval});
 }
-inline auto phi_k_shape(const HistogramBase & base, FunctionBaseId k) {
-    return shape::scaled(base.normalization_factor, lossy_interval_shape(base.interval(k)));
-}
+
 inline auto up_shape(const HaarBase::Wavelet & w) {
-    return shape::scaled(w.normalization_factor, lossy_interval_shape(w.up_part));
+    return shape::scaled(w.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{w.up_part});
 }
 inline auto down_shape(const HaarBase::Wavelet & w) {
-    return shape::scaled(w.normalization_factor, lossy_interval_shape(w.down_part));
+    return shape::scaled(w.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{w.down_part});
 }
 
 /******************************************************************************
@@ -148,8 +147,7 @@ inline Matrix_M_MK1 compute_b(span<const SortedVec<Point>> points, const Histogr
         // b_lk
         for(ProcessId l = 0; l < nb_processes; ++l) {
             for(FunctionBaseId k = 0; k < base_size; ++k) {
-                // FIXME lossy approx on bounds !
-                const double b_mlk = sum_of_point_differences(points[m], points[l], phi_k_shape(base, k));
+                const double b_mlk = sum_of_point_differences(points[m], points[l], to_shape(base.histogram(k)));
                 b.set_lk(m, l, k, b_mlk);
             }
         }
@@ -173,7 +171,7 @@ inline MatrixG compute_g(span<const SortedVec<Point>> points, const HistogramBas
     }
 
     auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
-        const auto shape = cross_correlation(phi_k_shape(base, k), phi_k_shape(base, k2));
+        const auto shape = cross_correlation(to_shape(base.histogram(k)), to_shape(base.histogram(k2)));
         return sum_of_point_differences(points[l], points[l2], shape);
     };
     /* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
@@ -228,7 +226,7 @@ inline Matrix_M_MK1 compute_b_hat(const DataByProcessRegion<SortedVec<Point>> & 
 
     // The sup is not affected by translation, so sup(phi_0) = sup(phi_k)
     // Only compute for phi_0 and replicate for all phi_k.
-    const auto phi_0 = phi_k_shape(base, 0);
+    const auto phi_0 = to_shape(base.histogram(FunctionBaseId{0}));
 
     for(ProcessId l = 0; l < nb_processes; ++l) {
         double b_hat_l = 0.;
@@ -279,7 +277,7 @@ inline Matrix_M_MK1 compute_b(
         for(ProcessId l = 0; l < nb_processes; ++l) {
             for(FunctionBaseId k = 0; k < base_size; ++k) {
                 const auto shape =
-                    convolution(phi_k_shape(base, k), convolution(to_shape(kernels[m]), to_shape(kernels[l])));
+                    convolution(to_shape(base.histogram(k)), convolution(to_shape(kernels[m]), to_shape(kernels[l])));
                 const double b_mlk = sum_of_point_differences(points[m], points[l], shape);
                 b.set_lk(m, l, k, b_mlk);
             }
@@ -311,8 +309,8 @@ inline MatrixG compute_g(
     const auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
         // V = sum_{x_l,x_l2} corr(conv(W_l,phi_k),conv(W_l2,phi_k2)) (x_l-x_l2)
         const auto shape = cross_correlation(
-            convolution(to_shape(kernels[l]), phi_k_shape(base, k)),
-            convolution(to_shape(kernels[l2]), phi_k_shape(base, k2)));
+            convolution(to_shape(kernels[l]), to_shape(base.histogram(k))),
+            convolution(to_shape(kernels[l2]), to_shape(base.histogram(k2))));
         return sum_of_point_differences(points[l], points[l2], shape);
     };
     /* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
@@ -374,7 +372,7 @@ inline Matrix_M_MK1 compute_b_hat(
                 // Base shapes
                 const auto w_m = to_shape(kernels[m]);
                 const auto w_l = to_shape(kernels[l]);
-                const auto phi_k = phi_k_shape(base, k);
+                const auto phi_k = to_shape(base.histogram(k));
                 // Approximate trapezoids with an interval of height=max, width=width of trapezoid
                 const auto intermediate = interval_approximation(convolution(w_l, phi_k));
                 const auto approx = interval_approximation(convolution(intermediate, w_m));
@@ -438,7 +436,7 @@ inline Matrix_M_MK1 compute_b(
                            FunctionBaseId k) {
         assert(m_points.size() == m_kernels.size());
         assert(l_points.size() == l_kernels.size());
-        const auto phi_shape = phi_k_shape(base, k);
+        const auto phi_shape = to_shape(base.histogram(k));
 
         const auto maximum_width_shape =
             convolution(phi_shape, convolution(to_shape(m_maximum_width_kernel), to_shape(l_maximum_width_kernel)));
@@ -512,8 +510,8 @@ inline MatrixG compute_g(
         const auto & l_kernels = kernels[l];
         const auto & l2_kernels = kernels[l2];
 
-        const auto phi_shape = phi_k_shape(base, k);
-        const auto phi_shape_2 = phi_k_shape(base, k2);
+        const auto phi_shape = to_shape(base.histogram(k));
+        const auto phi_shape_2 = to_shape(base.histogram(k2));
 
         const auto maximum_width_shape = cross_correlation(
             convolution(to_shape(maximum_width_kernels[l]), phi_shape),
