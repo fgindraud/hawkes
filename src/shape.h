@@ -1,9 +1,9 @@
 #pragma once
 
-#include <cmath>
-#include <utility>
-
+#include <algorithm> // add
 #include <limits>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "types.h"
@@ -29,6 +29,9 @@ using ::Bound;
 using ::Interval;
 using ::Point;
 using ::PointSpace;
+
+// Get non_zero_domain interval type from a shape
+template <typename Shape> using NzdIntervalType = decltype(std::declval<Shape>().non_zero_domain());
 
 #if 0
 inline double square(double x) {
@@ -318,7 +321,7 @@ template <typename Inner> struct Shifted {
     PointSpace shift;
     Inner inner;
 
-    auto non_zero_domain() const { return shift + inner.non_zero_domain(); }
+    NzdIntervalType<Inner> non_zero_domain() const { return shift + inner.non_zero_domain(); }
     double operator()(Point x) const { return inner(x - shift); }
 };
 
@@ -339,7 +342,7 @@ template <typename Inner> struct Scaled {
     double scale;
     Inner inner;
 
-    auto non_zero_domain() const { return inner.non_zero_domain(); }
+    NzdIntervalType<Inner> non_zero_domain() const { return inner.non_zero_domain(); }
     double operator()(Point x) const { return scale * inner(x); }
 };
 
@@ -354,14 +357,43 @@ template <typename Inner> inline auto scaled(double scale, const Scaled<Inner> &
  */
 template <typename Container> struct Add;
 
-// Vector of shapes of uniform type.
-// Performs optimisations like dropping zero shapes.
+// Vector of shapes of uniform type. Performs optimisations like dropping zero shapes.
 template <typename Inner> struct Add<std::vector<Inner>> {
     std::vector<Inner> components;
+    NzdIntervalType<Inner> union_non_zero_domain{0., 0.};
 
-    // FIXME interval type deduction
+    Add() = default; // Zero function
 
-    Add(std::vector<Inner> && components_) : components(std::move(components_)) {}
+    Add(std::vector<Inner> && components_) : components(std::move(components_)) {
+        if(NzdIntervalType<Inner>::left_bound_type == Bound::Open ||
+           NzdIntervalType<Inner>::right_bound_type == Bound::Open) {
+            // Remove zero width components, except if both bounds are closed (it changes the overall value).
+            auto new_end = std::remove_if(components.begin(), components.end(), [](const Inner & shape) {
+                shape.non_zero_domain().width() == 0.;
+            });
+            components.erase(new_end, components.end());
+        }
+        if(!components.empty()) {
+            // Determine the non zero domain
+            union_non_zero_domain = components[0].non_zero_domain();
+            for(size_t i = 1; i < components.size(); ++i) {
+                union_non_zero_domain = union_(union_non_zero_domain, components[i].non_zero_domain());
+            }
+        }
+    }
+
+    NzdIntervalType<Inner> non_zero_domain() const { return union_non_zero_domain; }
+    double operator()(Point x) const {
+        if(union_non_zero_domain.contains(x)) {
+            double sum = 0.;
+            for(const Inner & component : components) {
+                sum += component(x);
+            }
+            return sum;
+        } else {
+            return 0.;
+        }
+    }
 };
 
 /******************************************************************************
@@ -476,17 +508,19 @@ struct PowersUpToN {
     }
 };
 
-inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> convolution_base(
-    ShiftedPolynomial left, ShiftedPolynomial right) {
+inline void append_convolution_components(
+    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> & components,
+    ShiftedPolynomial lhs,
+    ShiftedPolynomial rhs) {
     // q is the polynom with the smallest width
     const auto compare_widths = [](const auto & lhs, const auto & rhs) { return lhs.width < rhs.width; };
-    const ShiftedPolynomial & p = std::max(left, right, compare_widths);
-    const ShiftedPolynomial & q = std::min(left, right, compare_widths);
-    // Components
-    if (q.width == 0.) {
-        return {}; // Convolution with support that is empty or a point is a zero.
+    const ShiftedPolynomial & p = std::max(lhs, rhs, compare_widths);
+    const ShiftedPolynomial & q = std::min(lhs, rhs, compare_widths);
+    if(q.width == 0.) {
+        return; // Convolution with support that is empty or a point is a zero.
     }
     // Useful numerical tools / values
+    const PointSpace global_shift = p.shift + q.shift;
     const size_t border_parts_degree = p.degree() + q.degree() + 1;
     const size_t center_part_degree = p.degree();
     const auto binomial = BinomialCoefficientsUpToN(border_parts_degree);
@@ -494,52 +528,62 @@ inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> convolutio
     const auto p_width_powers = PowersUpToN(border_parts_degree, p.width);
     const auto minus_1_power = [](size_t n) -> double { return n % 2 == 0 ? 1. : -1.; };
     // Left part is for [0, q.width]
-    auto left_part = Polynom<Bound::Open, Bound::Closed>{q.width, border_parts_degree};
-    for(size_t k = 0; k <= p.degree(); ++k) {
-        for(size_t j = 0; j <= q.degree(); ++j) {
+    {
+        auto left_part = Polynom<Bound::Open, Bound::Closed>{q.width, border_parts_degree};
+        for(size_t k = 0; k <= p.degree(); ++k) {
+            for(size_t j = 0; j <= q.degree(); ++j) {
+                double c = 0.;
+                for(size_t i = 0; i <= k; ++i) {
+                    c += minus_1_power(i) * binomial(i, k) / double(i + j + 1);
+                }
+                left_part.coefficients[k + j + 1] += p.coefficients[k] * q.coefficients[j] * c;
+            }
+        }
+        components.emplace_back(Shifted<Polynom<Bound::Open, Bound::Closed>>{global_shift, std::move(left_part)});
+    }
+    // Center part is for [q.width, p.width]. Optimization : avoid computing it if zero width (would be discarded).
+    if(p.width > q.width) {
+        auto center_part = Polynom<Bound::Open, Bound::Closed>{p.width - q.width, center_part_degree};
+        for(size_t l = 0; l <= p.degree(); ++l) {
             double c = 0.;
-            for(size_t i = 0; i <= k; ++i) {
-                c += minus_1_power(i) * binomial(i, k) / double(i + j + 1);
+            for(size_t j = 0; j <= q.degree(); ++j) {
+                for(size_t i = 0; i <= p.degree() - l; ++i) {
+                    c += minus_1_power(i) * binomial(i, i + l) * p.coefficients[i + l] * q.coefficients[j] *
+                         q_width_powers(i + j + 1) / double(i + j + 1);
+                }
             }
-            left_part.coefficients[k + j + 1] += p.coefficients[k] * q.coefficients[j] * c;
+            center_part.coefficients[l] = c;
         }
+        components.emplace_back(
+            Shifted<Polynom<Bound::Open, Bound::Closed>>{global_shift + q.width, std::move(center_part)});
     }
-    // Center part is for [q.width, p.width], will be shifted later
-    auto center_part = Polynom<Bound::Open, Bound::Closed>{p.width - q.width, center_part_degree};
-    for(size_t l = 0; l <= p.degree(); ++l) {
-        double c = 0.;
-        for(size_t j = 0; j <= q.degree(); ++j) {
-            for(size_t i = 0; i <= p.degree() - l; ++i) {
-                c += minus_1_power(i) * binomial(i, i + l) * p.coefficients[i + l] * q.coefficients[j] *
-                     q_width_powers(i + j + 1) / double(i + j + 1);
-            }
-        }
-        center_part.coefficients[l] = c;
-    }
-    // Right part is for [p.width, p.width+q.width], will be shifted later
-    auto right_part = Polynom<Bound::Open, Bound::Closed>{q.width, border_parts_degree};
-    for(size_t k = 0; k <= p.degree(); ++k) {
-        for(size_t j = 0; j <= q.degree(); ++j) {
-            for(size_t i = 0; i <= k; ++i) {
-                const size_t ij1 = i + j + 1;
-                const double factor =
-                    minus_1_power(i) * binomial(i, k) * p.coefficients[k] * q.coefficients[j] / double(ij1);
-                right_part.coefficients[k - i] +=
-                    factor * (q_width_powers(ij1) - minus_1_power(ij1) * p_width_powers(ij1));
-                for(size_t l = 1; l <= ij1; ++l) {
-                    right_part.coefficients[k - i + l] -= factor * minus_1_power(ij1 - l) * p_width_powers(ij1 - l);
+    // Right part is for [p.width, p.width+q.width]
+    {
+        auto right_part = Polynom<Bound::Open, Bound::Closed>{q.width, border_parts_degree};
+        for(size_t k = 0; k <= p.degree(); ++k) {
+            for(size_t j = 0; j <= q.degree(); ++j) {
+                for(size_t i = 0; i <= k; ++i) {
+                    const size_t ij1 = i + j + 1;
+                    const double factor =
+                        minus_1_power(i) * binomial(i, k) * p.coefficients[k] * q.coefficients[j] / double(ij1);
+                    right_part.coefficients[k - i] +=
+                        factor * (q_width_powers(ij1) - minus_1_power(ij1) * p_width_powers(ij1));
+                    for(size_t l = 1; l <= ij1; ++l) {
+                        right_part.coefficients[k - i + l] -= factor * minus_1_power(ij1 - l) * p_width_powers(ij1 - l);
+                    }
                 }
             }
         }
+        components.emplace_back(
+            Shifted<Polynom<Bound::Open, Bound::Closed>>{global_shift + p.width, std::move(right_part)});
     }
-    // Resulting shape is the composition (add) of all 3 parts.
-    // Shifting to have the right definition intervals is done here.
-    // FIXME add base shifting !
-    return {{
-        Shifted<Polynom<Bound::Open, Bound::Closed>>{0., std::move(left_part)},
-        Shifted<Polynom<Bound::Open, Bound::Closed>>{q.width, std::move(center_part)},
-        Shifted<Polynom<Bound::Open, Bound::Closed>>{p.width, std::move(right_part)},
-    }};
+}
+
+inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> convolution_base(
+    ShiftedPolynomial lhs, ShiftedPolynomial rhs) {
+    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+    append_convolution_components(components, lhs, rhs);
+    return {std::move(components)};
 }
 
 /******************************************************************************

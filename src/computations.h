@@ -60,7 +60,7 @@ inline PointSpace tmax(span<const SortedVec<Point>> processes) {
     }
 }
 
-// TODO move
+// FIXME move and upgrade
 /* Compute sum_{x_m in N_m, x_l in N_l} shape_generator(W_{x_m}, W_{x_l})(x_m - x_l).
  *
  * shape_generator(i_m, i_l) must return the shape for W_{x_m}, W_{x_l} if x_m=N_m[i_m] and x_l=N_l[i_l].
@@ -78,7 +78,7 @@ template <typename ShapeGenerator> inline double sum_of_point_differences(
     const SortedVec<Point> & m_points,
     const SortedVec<Point> & l_points,
     const ShapeGenerator & shape_generator,
-    shape::ClosedInterval union_non_zero_domain) {
+    shape::NzdIntervalType<decltype(std::declval<ShapeGenerator>()(size_t(), size_t()))> union_non_zero_domain) {
     double sum = 0.;
     size_t starting_i_m = 0;
     for(size_t i_l = 0; i_l < l_points.size(); ++i_l) {

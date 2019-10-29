@@ -84,6 +84,9 @@ template <Bound lb, Bound rb> struct Interval {
     Point left{};
     Point right{};
 
+    static constexpr Bound left_bound_type = lb;
+    static constexpr Bound right_bound_type = rb;
+
     Interval() = default;
     Interval(PointSpace left_, PointSpace right_) : left(left_), right(right_) { assert(left <= right); }
 
@@ -101,6 +104,9 @@ template <Bound lb, Bound rb> inline Interval<rb, lb> operator-(Interval<lb, rb>
 }
 template <Bound lb, Bound rb> inline bool operator==(Interval<lb, rb> lhs, Interval<lb, rb> rhs) {
     return lhs.left == rhs.left && lhs.right == rhs.right;
+}
+template <Bound lb, Bound rb> inline Interval<lb, rb> union_(Interval<lb, rb> lhs, Interval<lb, rb> rhs) {
+    return {std::min(lhs.left, rhs.left), std::max(lhs.right, rhs.right)};
 }
 
 /******************************************************************************
