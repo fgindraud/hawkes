@@ -1,11 +1,10 @@
 #pragma once
 
 #include <cmath>
-#include <tuple>       // Add
-#include <type_traits> // enable_if
 #include <utility>
 
 #include <limits>
+#include <vector>
 
 #include "types.h"
 
@@ -31,134 +30,13 @@ using ::Interval;
 using ::Point;
 using ::PointSpace;
 
+#if 0
 inline double square(double x) {
     return x * x;
 }
 inline double cube(double x) {
     return x * square(x);
 }
-
-// TODO remove
-using ClosedInterval = Interval<Bound::Closed, Bound::Closed>;
-
-// tuple-only equivalent of std::apply, used in add.
-template <typename F, size_t... Is, typename... Types>
-inline auto tuple_apply_impl(F && f, const std::tuple<Types...> & t, std::index_sequence<Is...>) {
-    return std::forward<F>(f)(std::get<Is>(t)...);
-}
-template <typename F, typename... Types> inline auto tuple_apply(F && f, const std::tuple<Types...> & t) {
-    return tuple_apply_impl(std::forward<F>(f), t, std::index_sequence_for<Types...>());
-}
-
-/******************************************************************************
- * Combinators.
- */
-
-// Invert the temporal space.
-template <typename Inner> struct Reversed {
-    Inner inner;
-
-    ClosedInterval non_zero_domain() const { return -inner.non_zero_domain(); }
-    double operator()(Point x) const { return inner(-x); }
-};
-template <typename Inner> inline auto reversed(const Inner & inner) {
-    return Reversed<Inner>{inner};
-}
-
-// Temporal shift of a shape: move it forward by 'shift'.
-template <typename Inner> struct Shifted {
-    PointSpace shift;
-    Inner inner;
-
-    ClosedInterval non_zero_domain() const { return shift + inner.non_zero_domain(); }
-    double operator()(Point x) const { return inner(x - shift); }
-};
-template <typename Inner> inline auto shifted(PointSpace shift, const Inner & inner) {
-    return Shifted<Inner>{shift, inner};
-}
-template <typename Inner> inline auto shifted(PointSpace shift, const Shifted<Inner> & s) {
-    return shifted(shift + s.shift, s.inner);
-}
-
-// Scale a shape on the vertical axis by 'scale'.
-template <typename Inner> struct Scaled {
-    double scale;
-    Inner inner;
-
-    ClosedInterval non_zero_domain() const { return inner.non_zero_domain(); }
-    double operator()(Point x) const { return scale * inner(x); }
-};
-template <typename Inner> inline auto scaled(double scale, const Inner & inner) {
-    return Scaled<Inner>{scale, inner};
-}
-template <typename Inner> inline auto scaled(double scale, const Scaled<Inner> & s) {
-    return scaled(scale * s.scale, s.inner);
-}
-
-// Addition of multiple sub-shapes
-inline double add_doubles(double x) {
-    return x;
-}
-template <typename... Doubles> inline double add_doubles(double first, Doubles... others) {
-    return first + add_doubles(others...);
-}
-template <typename... Shapes> struct Add {
-    std::tuple<Shapes...> shapes;
-    ClosedInterval non_zero_domain_; // Precomputed
-
-    Add(const Shapes &... from_shapes) : shapes(from_shapes...) {
-        non_zero_domain_.left = std::min({from_shapes.non_zero_domain().left...});
-        non_zero_domain_.right = std::max({from_shapes.non_zero_domain().right...});
-        assert(non_zero_domain_.left <= non_zero_domain_.right);
-    }
-
-    ClosedInterval non_zero_domain() const { return non_zero_domain_; }
-    double operator()(Point x) const {
-        if(!non_zero_domain_.contains(x)) {
-            return 0.;
-        } else {
-            return tuple_apply([x](const Shapes &... shapes) { return add_doubles(shapes(x)...); }, shapes);
-        }
-    }
-};
-template <typename... Shapes> inline auto add(const Shapes &... shapes) {
-    return Add<Shapes...>(shapes...);
-}
-
-/* Simplification of expressions.
- *
- * convolution(a,b) is defined for each specific shape pair.
- * Shapeis modified by combinators are handled using the convolution rules, like:
- * convolution(shifted(a), b) = shifted(convolution(a,b))
- * convolution(a, scaled(b)) = scaled(convolution(a,b))
- * etc,...
- *
- * Simplifications for other operations are defined in the same way, like for component().
- */
-
-/******************************************************************************
- * Base shapes.
- */
-
-/* Indicator function for a closed interval.
- * Not normalized, returns 1. in the interval.
- */
-struct IntervalIndicator {
-    PointSpace half_width; // [0, inf[
-
-    IntervalIndicator(PointSpace half_width) : half_width(half_width) { assert(half_width >= 0.); }
-    static IntervalIndicator with_half_width(PointSpace half_width) { return {half_width}; }
-    static IntervalIndicator with_width(PointSpace width) { return {width / 2.}; }
-
-    ClosedInterval non_zero_domain() const { return {-half_width, half_width}; }
-    double operator()(Point x) const {
-        if(non_zero_domain().contains(x)) {
-            return 1.;
-        } else {
-            return 0.;
-        }
-    }
-};
 
 /* Triangle (0,0), (side, 0), (side, side).
  */
@@ -223,24 +101,7 @@ struct Trapezoid {
             return height; // Central block
         }
     }
-
-    // Component type tags.
-    struct LeftTriangle {};
-    struct CentralBlock {};
-    struct RightTriangle {};
 };
-
-// Decompose into components
-inline auto component(const Trapezoid & trapezoid, Trapezoid::CentralBlock) {
-    return scaled(
-        trapezoid.height, Indicator<Bound::Closed, Bound::Closed>{{-trapezoid.half_base, trapezoid.half_base}});
-}
-inline auto component(const Trapezoid & trapezoid, Trapezoid::LeftTriangle) {
-    return shifted(-trapezoid.half_len, PositiveTriangle{trapezoid.height});
-}
-inline auto component(const Trapezoid & trapezoid, Trapezoid::RightTriangle) {
-    return shifted(trapezoid.half_len, NegativeTriangle{trapezoid.height});
-}
 
 /* Convolution between IntervalIndicator(half_width=l/2) and PositiveTriangle(side=c).
  */
@@ -355,6 +216,7 @@ struct ConvolutionNegativeTrianglePositiveTriangle {
         }
     }
 };
+#endif
 
 /******************************************************************************
  * NEW SHAPE impl
@@ -381,6 +243,45 @@ template <Bound lb, Bound rb> struct Indicator {
     }
 };
 
+/* Polynom on a restricted interval.
+ * f(x) = if(x in [0, width]) { sum_i coefficients[i] x^i } else { 0 }
+ */
+inline double compute_polynom_value(Point x, span<const double> coefficients) {
+    assert(coefficients.size() > 0);
+    // Horner strategy
+    size_t i = coefficients.size() - 1;
+    double r = coefficients[i];
+    while(i > 0) {
+        i -= 1;
+        r = coefficients[i] + x * r;
+    }
+    return r;
+}
+template <Bound lb, Bound rb> struct Polynom {
+    PointSpace width;                 // width >= 0
+    std::vector<double> coefficients; // size() > 0
+
+    // With zeroed coefficients
+    Polynom(PointSpace width_, size_t degree) : width(width_), coefficients(degree + 1, 0.) { assert(width >= 0.); }
+    // With values
+    Polynom(PointSpace width_, std::vector<double> coefficients_)
+        : width(width_), coefficients(std::move(coefficients_)) {
+        assert(width >= 0.);
+        assert(coefficients.size() > 0);
+    }
+
+    size_t degree() const { return coefficients.size() - 1; }
+
+    Interval<lb, rb> non_zero_domain() const { return {0, width}; }
+    double operator()(Point x) const {
+        if(non_zero_domain().contains(x)) {
+            return compute_polynom_value(x, make_span(coefficients));
+        } else {
+            return 0.;
+        }
+    }
+};
+
 /******************************************************************************
  * Shape manipulation functions and combinators.
  * Combinators : modify a shape, like x/y translation, x/y scaling, ...
@@ -390,24 +291,82 @@ template <Bound lb, Bound rb> struct Indicator {
  * Define simplifications when combinators are found.
  *
  * The conventional order of combinators is:
- * scaling -> shifting -> reversion -> base_shape
+ * scaling -> shifting -> reversion / add -> base_shape
  */
 
-/* Combinator: Reverse x dimension
+/* Reverse x dimension
  * reverse(f)(x) = f(-x)
  */
+template <typename Inner> struct Reversed {
+    Inner inner;
+
+    auto non_zero_domain() const { return -inner.non_zero_domain(); }
+    double operator()(Point x) const { return inner(-x); }
+};
+
+template <typename Inner> inline auto reversed(const Inner & inner) {
+    return Reversed<Inner>{inner};
+}
 template <Bound lb, Bound rb> Indicator<rb, lb> reverse(const Indicator<lb, rb> & indicator) {
     return {-indicator.interval};
 }
 
-/* Combinator: Shift x dimension
+/* Shift x dimension
  * shifted(s, f)(x) = f(x - s)
  */
-template <Bound lb, Bound rb> Indicator<rb, lb> shifted(PointSpace s, const Indicator<lb, rb> & indicator) {
-    return {s + indicator.interval};
+template <typename Inner> struct Shifted {
+    PointSpace shift;
+    Inner inner;
+
+    auto non_zero_domain() const { return shift + inner.non_zero_domain(); }
+    double operator()(Point x) const { return inner(x - shift); }
+};
+
+template <typename Inner> inline auto shifted(PointSpace shift, const Inner & inner) {
+    return Shifted<Inner>{shift, inner};
+}
+template <typename Inner> inline auto shifted(PointSpace shift, const Shifted<Inner> & s) {
+    return shifted(shift + s.shift, s.inner);
+}
+template <Bound lb, Bound rb> Indicator<rb, lb> shifted(PointSpace s, const Indicator<lb, rb> & ind) {
+    return {s + ind.interval};
 }
 
-/* Convolution.
+/* Scale y dimension
+ * scaled(s, f)(x) = s * f(x)
+ */
+template <typename Inner> struct Scaled {
+    double scale;
+    Inner inner;
+
+    auto non_zero_domain() const { return inner.non_zero_domain(); }
+    double operator()(Point x) const { return scale * inner(x); }
+};
+
+template <typename Inner> inline auto scaled(double scale, const Inner & inner) {
+    return Scaled<Inner>{scale, inner};
+}
+template <typename Inner> inline auto scaled(double scale, const Scaled<Inner> & s) {
+    return scaled(scale * s.scale, s.inner);
+}
+
+/* Addition / composition of multiple shapes.
+ */
+template <typename Container> struct Add;
+
+// Vector of shapes of uniform type.
+// Performs optimisations like dropping zero shapes.
+template <typename Inner> struct Add<std::vector<Inner>> {
+    std::vector<Inner> components;
+
+    // FIXME interval type deduction
+
+    Add(std::vector<Inner> && components_) : components(std::move(components_)) {}
+};
+
+/******************************************************************************
+ * Convolution.
+ *
  * convolution(f,g)(x) = int_R f(x - t) g (t) dt
  *
  * Perform simplification by factoring scaling and shifting before applying base shape convolution.
@@ -445,69 +404,147 @@ template <typename L, typename R> inline auto convolution_extract_shift(const L 
     return convolution_base(lhs, rhs);
 }
 
-// Base cases
-inline Trapezoid convolution_base(const IntervalIndicator & left, const IntervalIndicator & right) {
-    return Trapezoid{std::min(left.half_width, right.half_width) * 2, std::abs(left.half_width - right.half_width)};
+/* Base cases done using the polynomial framework.
+ *
+ * The convolution of two polynom shapes is a composition of 3 polynom shapes.
+ * This allows one implementation to compute convolutions for an entire family of shapes.
+ * The convolution does not care about the type of bounds of input polynoms, so they are ignored.
+ *
+ * TODO doc.
+ */
+
+// Temporary reference to a shape similar to a shifted polynom without bound types.
+// Supports implicit conversion from valid shapes.
+struct ShiftedPolynomial {
+    PointSpace shift;
+    PointSpace width;
+    span<const double> coefficients;
+
+    static constexpr double indicator_coefficients[1] = {1.};
+
+    template <Bound lb, Bound rb> ShiftedPolynomial(const Indicator<lb, rb> & indicator)
+        : shift(indicator.left), width(indicator.width()), coefficients(make_span(indicator_coefficients)) {}
+
+    template <Bound lb, Bound rb> ShiftedPolynomial(const Shifted<Polynom<lb, rb>> & shape)
+        : shift(shape.shift), width(shape.inner.width), coefficients(make_span(shape.inner.coefficients)) {}
+
+    template <Bound lb, Bound rb> ShiftedPolynomial(const Polynom<lb, rb> & polynom)
+        : shift(0.), width(polynom.width), coefficients(make_span(polynom.coefficients)) {}
+
+    size_t degree() const { return coefficients.size() - 1; }
+};
+
+// Computation tools
+struct BinomialCoefficientsUpToN {
+    std::vector<std::vector<size_t>> values;
+
+    explicit BinomialCoefficientsUpToN(size_t maximum_n) {
+        values.reserve(maximum_n + 1);
+        for(size_t n = 0; n <= maximum_n; ++n) {
+            std::vector<size_t> values_for_n(n + 1);
+            values_for_n[0] = 1;
+            values_for_n[n] = 1;
+            for(size_t k = 1; k + 1 <= n; ++k) {
+                // k <= n - 1 generates wrapping underflow for n = 0 !
+                values_for_n[k] = values[n - 1][k - 1] + values[n - 1][k];
+            }
+            values.emplace_back(std::move(values_for_n));
+        }
+    }
+
+    size_t maximum_n() const { return values.size() - 1; }
+    size_t operator()(size_t k, size_t n) const {
+        assert(k <= n);
+        assert(n <= maximum_n());
+        return values[n][k];
+    }
+};
+struct PowersUpToN {
+    std::vector<double> values;
+
+    PowersUpToN(size_t maximum_n, double c) : values(maximum_n + 1) {
+        values[0] = 1.;
+        for(size_t n = 1; n <= maximum_n; ++n) {
+            values[n] = values[n - 1] * c;
+        }
+    }
+
+    size_t maximum_n() const { return values.size() - 1; }
+    double operator()(size_t n) const {
+        assert(n <= maximum_n());
+        return values[n];
+    }
+};
+
+inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> convolution_base(
+    ShiftedPolynomial left, ShiftedPolynomial right) {
+    // q is the polynom with the smallest width
+    const auto compare_widths = [](const auto & lhs, const auto & rhs) { return lhs.width < rhs.width; };
+    const ShiftedPolynomial & p = std::max(left, right, compare_widths);
+    const ShiftedPolynomial & q = std::min(left, right, compare_widths);
+    // Components
+    if (q.width == 0.) {
+        return {}; // Convolution with support that is empty or a point is a zero.
+    }
+    // Useful numerical tools / values
+    const size_t border_parts_degree = p.degree() + q.degree() + 1;
+    const size_t center_part_degree = p.degree();
+    const auto binomial = BinomialCoefficientsUpToN(border_parts_degree);
+    const auto q_width_powers = PowersUpToN(border_parts_degree, q.width);
+    const auto p_width_powers = PowersUpToN(border_parts_degree, p.width);
+    const auto minus_1_power = [](size_t n) -> double { return n % 2 == 0 ? 1. : -1.; };
+    // Left part is for [0, q.width]
+    auto left_part = Polynom<Bound::Open, Bound::Closed>{q.width, border_parts_degree};
+    for(size_t k = 0; k <= p.degree(); ++k) {
+        for(size_t j = 0; j <= q.degree(); ++j) {
+            double c = 0.;
+            for(size_t i = 0; i <= k; ++i) {
+                c += minus_1_power(i) * binomial(i, k) / double(i + j + 1);
+            }
+            left_part.coefficients[k + j + 1] += p.coefficients[k] * q.coefficients[j] * c;
+        }
+    }
+    // Center part is for [q.width, p.width], will be shifted later
+    auto center_part = Polynom<Bound::Open, Bound::Closed>{p.width - q.width, center_part_degree};
+    for(size_t l = 0; l <= p.degree(); ++l) {
+        double c = 0.;
+        for(size_t j = 0; j <= q.degree(); ++j) {
+            for(size_t i = 0; i <= p.degree() - l; ++i) {
+                c += minus_1_power(i) * binomial(i, i + l) * p.coefficients[i + l] * q.coefficients[j] *
+                     q_width_powers(i + j + 1) / double(i + j + 1);
+            }
+        }
+        center_part.coefficients[l] = c;
+    }
+    // Right part is for [p.width, p.width+q.width], will be shifted later
+    auto right_part = Polynom<Bound::Open, Bound::Closed>{q.width, border_parts_degree};
+    for(size_t k = 0; k <= p.degree(); ++k) {
+        for(size_t j = 0; j <= q.degree(); ++j) {
+            for(size_t i = 0; i <= k; ++i) {
+                const size_t ij1 = i + j + 1;
+                const double factor =
+                    minus_1_power(i) * binomial(i, k) * p.coefficients[k] * q.coefficients[j] / double(ij1);
+                right_part.coefficients[k - i] +=
+                    factor * (q_width_powers(ij1) - minus_1_power(ij1) * p_width_powers(ij1));
+                for(size_t l = 1; l <= ij1; ++l) {
+                    right_part.coefficients[k - i + l] -= factor * minus_1_power(ij1 - l) * p_width_powers(ij1 - l);
+                }
+            }
+        }
+    }
+    // Resulting shape is the composition (add) of all 3 parts.
+    // Shifting to have the right definition intervals is done here.
+    // FIXME add base shifting !
+    return {{
+        Shifted<Polynom<Bound::Open, Bound::Closed>>{0., std::move(left_part)},
+        Shifted<Polynom<Bound::Open, Bound::Closed>>{q.width, std::move(center_part)},
+        Shifted<Polynom<Bound::Open, Bound::Closed>>{p.width, std::move(right_part)},
+    }};
 }
 
-inline auto convolution_base(const IntervalIndicator & lhs, const PositiveTriangle & rhs) {
-    return ConvolutionIntervalPositiveTriangle(lhs.half_width, rhs.side);
-}
-inline auto convolution_base(const IntervalIndicator & lhs, const NegativeTriangle & rhs) {
-    // IntervalIndicator is symmetric, and NegativeTriangle(x) == PositiveTriangle(-x)
-    return reversed(convolution_base(lhs, PositiveTriangle{rhs.side}));
-}
-inline auto convolution_base(const PositiveTriangle & lhs, const IntervalIndicator & rhs) {
-    return convolution_base(rhs, lhs);
-}
-inline auto convolution_base(const NegativeTriangle & lhs, const IntervalIndicator & rhs) {
-    return convolution_base(rhs, lhs);
-}
-
-inline auto convolution_base(const PositiveTriangle & lhs, const PositiveTriangle & rhs) {
-    return ConvolutionPositiveTrianglePositiveTriangle(lhs.side, rhs.side);
-}
-inline auto convolution_base(const NegativeTriangle & lhs, const NegativeTriangle & rhs) {
-    // Reversing the time dimension transforms both negative triangles into positive ones.
-    return reversed(convolution_base(PositiveTriangle{lhs.side}, PositiveTriangle{rhs.side}));
-}
-
-inline auto convolution_base(const NegativeTriangle & lhs, const PositiveTriangle & rhs) {
-    return ConvolutionNegativeTrianglePositiveTriangle(lhs.side, rhs.side);
-}
-inline auto convolution_base(const PositiveTriangle & lhs, const NegativeTriangle & rhs) {
-    return convolution_base(rhs, lhs);
-}
-
-inline auto convolution_base(const Trapezoid & lhs, const IntervalIndicator & rhs) {
-    return add(
-        convolution(component(lhs, Trapezoid::LeftTriangle{}), rhs),
-        convolution(component(lhs, Trapezoid::CentralBlock{}), rhs),
-        convolution(component(lhs, Trapezoid::RightTriangle{}), rhs));
-}
-inline auto convolution_base(const IntervalIndicator & lhs, const Trapezoid & rhs) {
-    return convolution_base(rhs, lhs);
-}
-inline auto convolution_base(const Trapezoid & lhs, const Trapezoid & rhs) {
-    const auto left_part = Trapezoid::LeftTriangle{};
-    const auto central_part = Trapezoid::CentralBlock{};
-    const auto right_part = Trapezoid::RightTriangle{};
-    return add(
-        //
-        convolution(component(lhs, left_part), component(rhs, left_part)),
-        convolution(component(lhs, central_part), component(rhs, left_part)),
-        convolution(component(lhs, right_part), component(rhs, left_part)),
-        //
-        convolution(component(lhs, left_part), component(rhs, central_part)),
-        convolution(component(lhs, central_part), component(rhs, central_part)),
-        convolution(component(lhs, right_part), component(rhs, central_part)),
-        //
-        convolution(component(lhs, left_part), component(rhs, right_part)),
-        convolution(component(lhs, central_part), component(rhs, right_part)),
-        convolution(component(lhs, right_part), component(rhs, right_part)));
-}
-
-/* Cross correlation.
+/******************************************************************************
+ * Cross correlation.
+ *
  * cross_correlation(f,g)(x) = int_R f(t - x) g (t) dt = convolution(reverse(f), g).
  *
  * Perform simplification by factoring scaling and shifting before applying base shape convolution.
@@ -547,33 +584,16 @@ template <typename L, typename R> inline auto cross_correlation_extract_shift(co
     return cross_correlation_base(lhs, rhs);
 }
 
-// Base cases
-inline Trapezoid cross_correlation_base(const IntervalIndicator & left, const IntervalIndicator & right) {
-    return convolution_base(left, right); // Indicator is symmetric, identical by time inversion.
-}
-inline auto cross_correlation_base(const Trapezoid & lhs, const Trapezoid & rhs) {
-    return convolution_base(lhs, rhs); // Trapezoid is symmetric, identical by time inversion
-}
+// Base cases TODO
 
-/* Approximate a shape with an interval.
+/******************************************************************************
+ * Approximate a shape with an interval.
  */
 template <typename Inner> inline auto interval_approximation(const Scaled<Inner> & shape) {
     return scaled(shape.scale, interval_approximation(shape.inner));
 }
 template <typename Inner> inline auto interval_approximation(const Shifted<Inner> & shape) {
     return shifted(shape.shift, interval_approximation(shape.inner));
-}
-inline auto interval_approximation(const Trapezoid & trapezoid) {
-    return scaled(trapezoid.height, IntervalIndicator::with_half_width(trapezoid.half_len));
-}
-
-/* Component decomposition.
- */
-template <typename Inner, typename ComponentTag> inline auto component(const Scaled<Inner> & shape, ComponentTag tag) {
-    return scaled(shape.scale, component(shape.inner, tag));
-}
-template <typename Inner, typename ComponentTag> inline auto component(const Shifted<Inner> & shape, ComponentTag tag) {
-    return shifted(shape.shift, component(shape.inner, tag));
 }
 
 /******************************************************************************
@@ -715,13 +735,6 @@ template <Bound lb, Bound rb> inline double sup_of_sum_of_differences_to_points(
         right_bounds.next_if_equal(x);
     }
     return max;
-}
-
-// Legacy wrapper TODO remove
-inline double sup_of_sum_of_differences_to_points(
-    const SortedVec<Point> & points, const IntervalIndicator & indicator) {
-    return sup_of_sum_of_differences_to_points(
-        points, Indicator<Bound::Closed, Bound::Closed>{indicator.non_zero_domain()});
 }
 
 // Scaling can be moved out
