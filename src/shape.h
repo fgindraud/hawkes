@@ -508,6 +508,18 @@ struct PowersUpToN {
     }
 };
 
+/* Basic functionality : computes the three polynomial components of a convolution.
+ *
+ * Components are defined on consecutive intervals: ]0,qw] ]qw,pw] ]pw,pw+qw].
+ * Open-Closed bounds are chosen so the sum contains 1 value at points {qw, pw} (borders).
+ * Open-Closed is chosen instead of Closed-Open to better fit hawkes computation (cases with ]0,?]).
+ * The Open bound on ]0,qw] is ok, as left_part(0) == a_0 == 0 by construction of the formulas.
+ *
+ * Testable properties:
+ * Matching values at component borders
+ * 0s at points {0, qw + pw} ; the convolution on the sides of lhs/rhs nzds.
+ * Explicitly known coefficients in fixed cases: trapezoid, etc...
+ */
 inline void append_convolution_components(
     std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> & components,
     ShiftedPolynomial lhs,
@@ -579,10 +591,36 @@ inline void append_convolution_components(
     }
 }
 
+// Base cases, including distributed convolution for Add<Shifted<Polynom>>>.
 inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> convolution_base(
     ShiftedPolynomial lhs, ShiftedPolynomial rhs) {
     std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
     append_convolution_components(components, lhs, rhs);
+    return {std::move(components)};
+}
+
+inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> convolution_base(
+    const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & lhs, ShiftedPolynomial rhs) {
+    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+    for(const auto & lhs_component : lhs.components) {
+        append_convolution_components(components, lhs_component, rhs);
+    }
+    return {std::move(components)};
+}
+inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> convolution_base(
+    ShiftedPolynomial lhs, const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & rhs) {
+    return convolution_base(rhs, lhs); // Use commutativity.
+}
+
+inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> convolution_base(
+    const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & lhs,
+    const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & rhs) {
+    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+    for(const auto & lhs_component : lhs.components) {
+        for(const auto & rhs_component : rhs.components) {
+            append_convolution_components(components, lhs_component, rhs_component);
+        }
+    }
     return {std::move(components)};
 }
 
