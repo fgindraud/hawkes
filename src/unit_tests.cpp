@@ -7,7 +7,7 @@
 #include <cstdio>
 
 #include "command_line.h"
-#include "computations.h"
+//#include "computations.h"
 #include "input.h"
 #include "shape.h"
 #include "utils.h"
@@ -90,6 +90,51 @@ struct TriangleShape {
 TEST_SUITE("shape") {
     using namespace shape;
 
+    // FIXME tests for convolution/correlation of shapes
+
+    TEST_CASE("integral") {
+        // Simple constant function
+        const auto indicator = Indicator<Bound::Closed, Bound::Closed>{{0., 42.}};
+        CHECK(integral(indicator) == doctest::Approx(42.));
+        // Linear function with equal time negative and positive
+        const auto linear_with_0_integral = Polynom<Bound::Closed, Bound::Closed>{
+            2.,
+            {-1., 1.},
+        };
+        CHECK(integral(linear_with_0_integral) == doctest::Approx(0.));
+        // Degree 2 simple function, integral = x^3/3
+        const auto degree_2 = Polynom<Bound::Closed, Bound::Closed>{
+            10.,
+            {0., 0., 1.},
+        };
+        CHECK(integral(degree_2) == doctest::Approx((10. * 10. * 10.) / 3.));
+    }
+    TEST_CASE("indicator_approximation") {
+        // Trivial case
+        const auto indicator = Indicator<Bound::Closed, Bound::Closed>{{0., 42.}};
+        const Indicator<Bound::Closed, Bound::Closed> indicator_a = indicator_approximation(indicator);
+        CHECK(indicator_a.interval == indicator.interval);
+        // Linear function, "climbing" triangle of size 2.
+        const auto linear = Polynom<Bound::Closed, Bound::Closed>{
+            2.,
+            {0., 1.},
+        };
+        const auto linear_a = indicator_approximation(linear);
+        CHECK(linear_a.non_zero_domain() == linear.non_zero_domain());
+        CHECK(linear_a(0.) == doctest::Approx(1.));
+        // Sum of linears : positive then negative slopes of lengths 2
+        const auto mountain = Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>>{{
+            Shifted<Polynom<Bound::Open, Bound::Closed>>{
+                0., {2., {0., 1.}}, // Positive slope
+            },
+            Shifted<Polynom<Bound::Open, Bound::Closed>>{
+                2., {2., {2., -1.}}, // Negative slope
+            },
+        }};
+        const auto mountain_a = indicator_approximation(mountain);
+        CHECK(mountain_a.non_zero_domain() == Interval<Bound::Open, Bound::Closed>{0., 4.});
+        CHECK(mountain_a(1.) == doctest::Approx(1.));
+    }
     TEST_CASE("sum_of_point_differences_generic") {
         // Tested functions
         const auto indicator_oo = IndicatorLike<Bound::Open, Bound::Open>{{-1, 1}};
@@ -210,7 +255,8 @@ TEST_SUITE("shape") {
         CHECK(sup_of_sum_of_differences_to_points(vec_0_1_2, indicator_co) == 3);
         CHECK(sup_of_sum_of_differences_to_points(vec_0_1_2, indicator_cc) == 3);
     }
-    // OLD tests
+// OLD tests
+#if 0
     TEST_CASE("interval") {
         const auto interval = IntervalIndicator::with_half_width(1); // [-1, 1]
         const auto nzd = interval.non_zero_domain();
@@ -381,12 +427,14 @@ TEST_SUITE("shape") {
         CHECK(conv(3) == 0);
         CHECK(conv(4) == 0);
     }
+#endif
 }
 
 /******************************************************************************
  * Computations tests.
  */
 TEST_SUITE("computations") {
+    /* FIXME
     TEST_CASE("tmax") {
         const SortedVec<Point> one_array[] = {SortedVec<Point>::from_sorted({-1, 1})};
         CHECK(tmax(make_span(one_array)) == 2);
@@ -403,7 +451,7 @@ TEST_SUITE("computations") {
         CHECK(tmax(make_span(contains_empty)) == 42);
         const SortedVec<Point> one_point[] = {SortedVec<Point>::from_sorted({1})};
         CHECK(tmax(make_span(one_point)) == 0);
-    }
+    }*/
     /*TEST_CASE ("b_ml_histogram_counts_for_all_k_denormalized") {
             const auto base = HistogramBase{3, 1}; // K=3, delta=1, so intervals=]0,1] ]1,2] ]2,3]
             const auto empty = SortedVec<Point>::from_sorted ({});

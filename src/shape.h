@@ -280,6 +280,7 @@ template <Bound lb, Bound rb> struct Polynom {
         }
     }
 };
+
 /******************************************************************************
  * Shape manipulation functions and combinators.
  * Combinators : modify a shape, like x/y translation, x/y scaling, ...
@@ -674,12 +675,94 @@ inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> cross_corr
 
 /******************************************************************************
  * Approximate a shape with an interval.
+ *
+ * For polynoms (or sums of polynoms), use the average value spread over the definition domain.
  */
-template <typename Inner> inline auto interval_approximation(const Scaled<Inner> & shape) {
-    return scaled(shape.scale, interval_approximation(shape.inner));
+template <typename Inner> inline auto indicator_approximation(const Scaled<Inner> & shape) {
+    return scaled(shape.scale, indicator_approximation(shape.inner));
 }
-template <typename Inner> inline auto interval_approximation(const Shifted<Inner> & shape) {
-    return shifted(shape.shift, interval_approximation(shape.inner));
+template <typename Inner> inline auto indicator_approximation(const Shifted<Inner> & shape) {
+    return shifted(shape.shift, indicator_approximation(shape.inner));
+}
+
+template <Bound lb, Bound rb> inline Indicator<lb, rb> indicator_approximation(const Indicator<lb, rb> & indicator) {
+    return indicator;
+}
+
+// Compute integral of polynomial or sums of polynomials
+inline double integral(ShiftedPolynomial polynomial) {
+    // int_R sum_i a_i x^i = int_[0,w] sum_i a_i x^i = sum_i a_i w^(i+1) / (i+1)
+    // Shift is ignored.
+    const double width = polynomial.width;
+    const span<const double> coefficients = polynomial.coefficients;
+    assert(coefficients.size() > 0);
+    // Horner strategy : sum_i a_i w^i / (i+1)
+    size_t i = coefficients.size() - 1;
+    double r = coefficients[i] / double(i + 1);
+    while(i > 0) {
+        i -= 1;
+        r = coefficients[i] / double(i + 1) + width * r;
+    }
+    // Add final width multiplier
+    return r * width;
+}
+template <typename T> inline double integral(const Add<std::vector<T>> & sum) {
+    double r = 0;
+    for(const T & component : sum.components) {
+        r += integral(component);
+    }
+    return r;
+}
+
+template <Bound lb, Bound rb>
+inline Scaled<Indicator<lb, rb>> indicator_approximation(const Polynom<lb, rb> & polynom) {
+    if(polynom.width == 0.) {
+        return Scaled<Indicator<lb, rb>>{
+            0.,
+            {{0., 0.}},
+        }; // Dummy 0 value
+    } else {
+        const double average_value = integral(polynom) / polynom.width;
+        return Scaled<Indicator<lb, rb>>{
+            average_value,
+            {polynom.non_zero_domain()},
+        };
+    }
+}
+
+template <Bound lb, Bound rb>
+inline Scaled<Indicator<lb, rb>> indicator_approximation(const Shifted<Polynom<lb, rb>> & polynom) {
+    if(polynom.inner.width == 0.) {
+        return Scaled<Indicator<lb, rb>>{
+            0.,
+            {{0., 0.}},
+        }; // Dummy 0 value
+    } else {
+        // Same as with no shifting, but on the shifted non_zero_domain().
+        const double average_value = integral(polynom.inner) / polynom.inner.width;
+        return Scaled<Indicator<lb, rb>>{
+            average_value,
+            {polynom.non_zero_domain()},
+        };
+    }
+}
+
+template <Bound lb, Bound rb> inline Scaled<Indicator<lb, rb>> indicator_approximation(
+    const Add<std::vector<Shifted<Polynom<lb, rb>>>> & polynom_sum) {
+    const Interval<lb, rb> non_zero_domain = polynom_sum.non_zero_domain();
+    const PointSpace width = non_zero_domain.width();
+    if(width == 0.) {
+        return Scaled<Indicator<lb, rb>>{
+            0.,
+            {{0., 0.}},
+        }; // Dummy 0 value
+    } else {
+        const double average_value = integral(polynom_sum) / width;
+        return Scaled<Indicator<lb, rb>>{
+            average_value,
+            {non_zero_domain},
+        };
+    }
 }
 
 /******************************************************************************

@@ -373,9 +373,8 @@ inline Matrix_M_MK1 compute_b_hat(
                 const auto w_m = to_shape(kernels[m]);
                 const auto w_l = to_shape(kernels[l]);
                 const auto phi_k = to_shape(base.histogram(k));
-                // Approximate trapezoids with an interval of height=max, width=width of trapezoid
-                const auto intermediate = interval_approximation(convolution(w_l, phi_k));
-                const auto approx = interval_approximation(convolution(intermediate, w_m));
+                // Approximate trapezoids with an interval of height=avg, width=width of trapezoid
+                const auto approx = indicator_approximation(convolution(phi_k, convolution(w_m, w_l)));
 
                 double sum_of_region_sups = 0;
                 for(RegionId r = 0; r < nb_regions; ++r) {
