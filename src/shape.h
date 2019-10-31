@@ -222,10 +222,6 @@ struct ConvolutionNegativeTrianglePositiveTriangle {
 #endif
 
 /******************************************************************************
- * NEW SHAPE impl
- */
-
-/******************************************************************************
  * Base shapes.
  */
 
@@ -284,7 +280,6 @@ template <Bound lb, Bound rb> struct Polynom {
         }
     }
 };
-
 /******************************************************************************
  * Shape manipulation functions and combinators.
  * Combinators : modify a shape, like x/y translation, x/y scaling, ...
@@ -306,12 +301,8 @@ template <typename Inner> struct Reversed {
     auto non_zero_domain() const { return -inner.non_zero_domain(); }
     double operator()(Point x) const { return inner(-x); }
 };
-
 template <typename Inner> inline auto reversed(const Inner & inner) {
     return Reversed<Inner>{inner};
-}
-template <Bound lb, Bound rb> Indicator<rb, lb> reverse(const Indicator<lb, rb> & indicator) {
-    return {-indicator.interval};
 }
 
 /* Shift x dimension
@@ -324,15 +315,8 @@ template <typename Inner> struct Shifted {
     NzdIntervalType<Inner> non_zero_domain() const { return shift + inner.non_zero_domain(); }
     double operator()(Point x) const { return inner(x - shift); }
 };
-
 template <typename Inner> inline auto shifted(PointSpace shift, const Inner & inner) {
     return Shifted<Inner>{shift, inner};
-}
-template <typename Inner> inline auto shifted(PointSpace shift, const Shifted<Inner> & s) {
-    return shifted(shift + s.shift, s.inner);
-}
-template <Bound lb, Bound rb> Indicator<rb, lb> shifted(PointSpace s, const Indicator<lb, rb> & ind) {
-    return {s + ind.interval};
 }
 
 /* Scale y dimension
@@ -345,12 +329,8 @@ template <typename Inner> struct Scaled {
     NzdIntervalType<Inner> non_zero_domain() const { return inner.non_zero_domain(); }
     double operator()(Point x) const { return scale * inner(x); }
 };
-
 template <typename Inner> inline auto scaled(double scale, const Inner & inner) {
     return Scaled<Inner>{scale, inner};
-}
-template <typename Inner> inline auto scaled(double scale, const Scaled<Inner> & s) {
-    return scaled(scale * s.scale, s.inner);
 }
 
 /* Addition / composition of multiple shapes.
@@ -369,7 +349,7 @@ template <typename Inner> struct Add<std::vector<Inner>> {
            NzdIntervalType<Inner>::right_bound_type == Bound::Open) {
             // Remove zero width components, except if both bounds are closed (it changes the overall value).
             auto new_end = std::remove_if(components.begin(), components.end(), [](const Inner & shape) {
-                shape.non_zero_domain().width() == 0.;
+                return shape.non_zero_domain().width() == 0.;
             });
             components.erase(new_end, components.end());
         }
@@ -395,6 +375,23 @@ template <typename Inner> struct Add<std::vector<Inner>> {
         }
     }
 };
+
+/* Simplification by overload selection.
+ */
+template <Bound lb, Bound rb> Indicator<rb, lb> reverse(const Indicator<lb, rb> & indicator) {
+    return {-indicator.interval};
+}
+
+template <typename Inner> inline auto shifted(PointSpace shift, const Shifted<Inner> & s) {
+    return shifted(shift + s.shift, s.inner);
+}
+template <Bound lb, Bound rb> Indicator<rb, lb> shifted(PointSpace s, const Indicator<lb, rb> & ind) {
+    return {s + ind.interval};
+}
+
+template <typename Inner> inline auto scaled(double scale, const Scaled<Inner> & s) {
+    return scaled(scale * s.scale, s.inner);
+}
 
 /******************************************************************************
  * Convolution.
@@ -455,7 +452,9 @@ struct ShiftedPolynomial {
     static constexpr double indicator_coefficients[1] = {1.};
 
     template <Bound lb, Bound rb> ShiftedPolynomial(const Indicator<lb, rb> & indicator)
-        : shift(indicator.left), width(indicator.width()), coefficients(make_span(indicator_coefficients)) {}
+        : shift(indicator.interval.left),
+          width(indicator.interval.width()),
+          coefficients(make_span(indicator_coefficients)) {}
 
     template <Bound lb, Bound rb> ShiftedPolynomial(const Shifted<Polynom<lb, rb>> & shape)
         : shift(shape.shift), width(shape.inner.width), coefficients(make_span(shape.inner.coefficients)) {}
@@ -666,7 +665,12 @@ template <typename L, typename R> inline auto cross_correlation_extract_shift(co
     return cross_correlation_base(lhs, rhs);
 }
 
-// Base cases TODO
+// Base cases
+template <Bound lb, Bound rb>
+inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> cross_correlation_base(
+    const Indicator<lb, rb> & lhs, ShiftedPolynomial rhs) {
+    return convolution_base(reverse(lhs), rhs);
+}
 
 /******************************************************************************
  * Approximate a shape with an interval.
