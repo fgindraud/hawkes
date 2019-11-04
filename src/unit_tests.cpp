@@ -7,7 +7,7 @@
 #include <cstdio>
 
 #include "command_line.h"
-//#include "computations.h"
+#include "computations.h"
 #include "input.h"
 #include "shape.h"
 #include "utils.h"
@@ -257,19 +257,6 @@ TEST_SUITE("shape") {
     }
 // OLD tests
 #if 0
-    TEST_CASE("interval") {
-        const auto interval = IntervalIndicator::with_half_width(1); // [-1, 1]
-        const auto nzd = interval.non_zero_domain();
-        CHECK(nzd == ClosedInterval{-1, 1});
-        CHECK(nzd.contains(0));
-        CHECK(nzd.contains(1));
-        CHECK(!nzd.contains(2));
-        CHECK(interval(-2) == 0);
-        CHECK(interval(-1) == 1);
-        CHECK(interval(0) == 1);
-        CHECK(interval(1) == 1);
-        CHECK(interval(2) == 0);
-    }
     TEST_CASE("combinators") {
         const auto interval = IntervalIndicator::with_half_width(1); // [-1, 1]
         const auto scaled_2 = scaled(2, interval);
@@ -434,7 +421,6 @@ TEST_SUITE("shape") {
  * Computations tests.
  */
 TEST_SUITE("computations") {
-    /* FIXME
     TEST_CASE("tmax") {
         const SortedVec<Point> one_array[] = {SortedVec<Point>::from_sorted({-1, 1})};
         CHECK(tmax(make_span(one_array)) == 2);
@@ -451,7 +437,7 @@ TEST_SUITE("computations") {
         CHECK(tmax(make_span(contains_empty)) == 42);
         const SortedVec<Point> one_point[] = {SortedVec<Point>::from_sorted({1})};
         CHECK(tmax(make_span(one_point)) == 0);
-    }*/
+    }
     /*TEST_CASE ("b_ml_histogram_counts_for_all_k_denormalized") {
             const auto base = HistogramBase{3, 1}; // K=3, delta=1, so intervals=]0,1] ]1,2] ]2,3]
             const auto empty = SortedVec<Point>::from_sorted ({});

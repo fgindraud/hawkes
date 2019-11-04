@@ -354,6 +354,7 @@ template <typename Inner> struct Add<std::vector<Inner>> {
             });
             components.erase(new_end, components.end());
         }
+        // TODO sum polynoms could merge polynoms with same support.
         if(!components.empty()) {
             // Determine the non zero domain
             union_non_zero_domain = components[0].non_zero_domain();
@@ -395,6 +396,81 @@ template <typename Inner> inline auto scaled(double scale, const Scaled<Inner> &
 }
 
 /******************************************************************************
+ * Computation tools for convolution / cross_correlation of polynomials.
+ *
+ * The convolution of two polynom shapes is a composition of 3 polynom shapes.
+ * This allows one implementation to compute convolutions for an entire family of shapes.
+ * The convolution does not care about the type of bounds of input polynoms, so they are ignored.
+ *
+ * Similar properties for the cross_correlation.
+ */
+
+constexpr double indicator_polynomial_coefficients[1] = {1.};
+
+// Temporary reference to a shape similar to a shifted polynom without bound types.
+// Supports implicit conversion from valid shapes.
+struct ShiftedPolynomial {
+    PointSpace shift;
+    PointSpace width;
+    span<const double> coefficients;
+
+    template <Bound lb, Bound rb> ShiftedPolynomial(const Indicator<lb, rb> & indicator)
+        : shift(indicator.interval.left),
+          width(indicator.interval.width()),
+          coefficients(make_span(indicator_polynomial_coefficients)) {}
+
+    template <Bound lb, Bound rb> ShiftedPolynomial(const Shifted<Polynom<lb, rb>> & shape)
+        : shift(shape.shift), width(shape.inner.width), coefficients(make_span(shape.inner.coefficients)) {}
+
+    template <Bound lb, Bound rb> ShiftedPolynomial(const Polynom<lb, rb> & polynom)
+        : shift(0.), width(polynom.width), coefficients(make_span(polynom.coefficients)) {}
+
+    size_t degree() const { return coefficients.size() - 1; }
+};
+
+struct BinomialCoefficientsUpToN {
+    std::vector<std::vector<size_t>> values;
+
+    explicit BinomialCoefficientsUpToN(size_t maximum_n) {
+        values.reserve(maximum_n + 1);
+        for(size_t n = 0; n <= maximum_n; ++n) {
+            std::vector<size_t> values_for_n(n + 1);
+            values_for_n[0] = 1;
+            values_for_n[n] = 1;
+            for(size_t k = 1; k + 1 <= n; ++k) {
+                // k <= n - 1 generates wrapping underflow for n = 0 !
+                values_for_n[k] = values[n - 1][k - 1] + values[n - 1][k];
+            }
+            values.emplace_back(std::move(values_for_n));
+        }
+    }
+
+    size_t maximum_n() const { return values.size() - 1; }
+    size_t operator()(size_t k, size_t n) const {
+        assert(k <= n);
+        assert(n <= maximum_n());
+        return values[n][k];
+    }
+};
+
+struct PowersUpToN {
+    std::vector<double> values;
+
+    PowersUpToN(size_t maximum_n, double c) : values(maximum_n + 1) {
+        values[0] = 1.;
+        for(size_t n = 1; n <= maximum_n; ++n) {
+            values[n] = values[n - 1] * c;
+        }
+    }
+
+    size_t maximum_n() const { return values.size() - 1; }
+    double operator()(size_t n) const {
+        assert(n <= maximum_n());
+        return values[n];
+    }
+};
+
+/******************************************************************************
  * Convolution.
  *
  * convolution(f,g)(x) = int_R f(x - t) g (t) dt
@@ -434,81 +510,7 @@ template <typename L, typename R> inline auto convolution_extract_shift(const L 
     return convolution_base(lhs, rhs);
 }
 
-/* Base cases done using the polynomial framework.
- *
- * The convolution of two polynom shapes is a composition of 3 polynom shapes.
- * This allows one implementation to compute convolutions for an entire family of shapes.
- * The convolution does not care about the type of bounds of input polynoms, so they are ignored.
- *
- * TODO doc.
- */
-
-// Temporary reference to a shape similar to a shifted polynom without bound types.
-// Supports implicit conversion from valid shapes.
-struct ShiftedPolynomial {
-    PointSpace shift;
-    PointSpace width;
-    span<const double> coefficients;
-
-    static constexpr double indicator_coefficients[1] = {1.};
-
-    template <Bound lb, Bound rb> ShiftedPolynomial(const Indicator<lb, rb> & indicator)
-        : shift(indicator.interval.left),
-          width(indicator.interval.width()),
-          coefficients(make_span(indicator_coefficients)) {}
-
-    template <Bound lb, Bound rb> ShiftedPolynomial(const Shifted<Polynom<lb, rb>> & shape)
-        : shift(shape.shift), width(shape.inner.width), coefficients(make_span(shape.inner.coefficients)) {}
-
-    template <Bound lb, Bound rb> ShiftedPolynomial(const Polynom<lb, rb> & polynom)
-        : shift(0.), width(polynom.width), coefficients(make_span(polynom.coefficients)) {}
-
-    size_t degree() const { return coefficients.size() - 1; }
-};
-
-// Computation tools
-struct BinomialCoefficientsUpToN {
-    std::vector<std::vector<size_t>> values;
-
-    explicit BinomialCoefficientsUpToN(size_t maximum_n) {
-        values.reserve(maximum_n + 1);
-        for(size_t n = 0; n <= maximum_n; ++n) {
-            std::vector<size_t> values_for_n(n + 1);
-            values_for_n[0] = 1;
-            values_for_n[n] = 1;
-            for(size_t k = 1; k + 1 <= n; ++k) {
-                // k <= n - 1 generates wrapping underflow for n = 0 !
-                values_for_n[k] = values[n - 1][k - 1] + values[n - 1][k];
-            }
-            values.emplace_back(std::move(values_for_n));
-        }
-    }
-
-    size_t maximum_n() const { return values.size() - 1; }
-    size_t operator()(size_t k, size_t n) const {
-        assert(k <= n);
-        assert(n <= maximum_n());
-        return values[n][k];
-    }
-};
-struct PowersUpToN {
-    std::vector<double> values;
-
-    PowersUpToN(size_t maximum_n, double c) : values(maximum_n + 1) {
-        values[0] = 1.;
-        for(size_t n = 1; n <= maximum_n; ++n) {
-            values[n] = values[n - 1] * c;
-        }
-    }
-
-    size_t maximum_n() const { return values.size() - 1; }
-    double operator()(size_t n) const {
-        assert(n <= maximum_n());
-        return values[n];
-    }
-};
-
-/* Basic functionality : computes the three polynomial components of a convolution.
+/* Computes the three polynomial components of a convolution.
  *
  * Components are defined on consecutive intervals: ]0,qw] ]qw,pw] ]pw,pw+qw].
  * Open-Closed bounds are chosen so the sum contains 1 value at points {qw, pw} (borders).
@@ -529,7 +531,7 @@ inline void append_convolution_components(
     const ShiftedPolynomial & p = std::max(lhs, rhs, compare_widths);
     const ShiftedPolynomial & q = std::min(lhs, rhs, compare_widths);
     if(q.width == 0.) {
-        return; // Convolution with support that is empty or a point is a zero.
+        return; // Optimization : cconvolution with zero width support is a zero value.
     }
     // Useful numerical tools / values
     const PointSpace global_shift = p.shift + q.shift;
@@ -551,7 +553,10 @@ inline void append_convolution_components(
                 left_part.coefficients[k + j + 1] += p.coefficients[k] * q.coefficients[j] * c;
             }
         }
-        components.emplace_back(Shifted<Polynom<Bound::Open, Bound::Closed>>{global_shift, std::move(left_part)});
+        components.emplace_back(Shifted<Polynom<Bound::Open, Bound::Closed>>{
+            global_shift,
+            std::move(left_part),
+        });
     }
     // Center part is for [q.width, p.width]. Optimization : avoid computing it if zero width (would be discarded).
     if(p.width > q.width) {
@@ -566,8 +571,10 @@ inline void append_convolution_components(
             }
             center_part.coefficients[l] = c;
         }
-        components.emplace_back(
-            Shifted<Polynom<Bound::Open, Bound::Closed>>{global_shift + q.width, std::move(center_part)});
+        components.emplace_back(Shifted<Polynom<Bound::Open, Bound::Closed>>{
+            global_shift + q.width,
+            std::move(center_part),
+        });
     }
     // Right part is for [p.width, p.width+q.width]
     {
@@ -586,9 +593,12 @@ inline void append_convolution_components(
                 }
             }
         }
-        components.emplace_back(
-            Shifted<Polynom<Bound::Open, Bound::Closed>>{global_shift + p.width, std::move(right_part)});
+        components.emplace_back(Shifted<Polynom<Bound::Open, Bound::Closed>>{
+            global_shift + p.width,
+            std::move(right_part),
+        });
     }
+    // FIXME bad modeling recompute formulas
 }
 
 // Base cases, including distributed convolution for Add<Shifted<Polynom>>>.
@@ -666,11 +676,116 @@ template <typename L, typename R> inline auto cross_correlation_extract_shift(co
     return cross_correlation_base(lhs, rhs);
 }
 
-// Base cases
-template <Bound lb, Bound rb>
+/* Computes the three polynomial components of a convolution.
+ *
+ * Bounds of the components and the middle component formula depend on respective widths of P/Q.
+ * a = min(qw-pw, 0)
+ * b = max(qw-pw, 0)
+ *
+ * Components are defined on consecutive intervals: ]-pw,a] ]a,b] ]b,qw].
+ * Open-Closed bounds are chosen so the sum contains 1 value at points {a, b} (borders).
+ * Open-Closed is chosen instead of Closed-Open to better fit hawkes computation (cases with ]0,?]).
+ * The Open bound on ]-pw,a] is ok, as left_part(-pw) == a_0 == 0 by construction of the formulas.
+ *
+ * Testable properties:
+ * Matching values at component borders
+ * 0s at points {-pw, qw} ; the convolution on the sides of lhs/rhs nzds.
+ * Explicitly known coefficients in fixed cases: trapezoid, etc...
+ */
+inline void append_cross_correlation_components(
+    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> & components, ShiftedPolynomial p, ShiftedPolynomial q) {
+    if(p.width == 0. || q.width == 0.) {
+        return; // Optimization : cross_correlation with zero width support is a zero value.
+    }
+    // Useful numerical tools / values
+    const PointSpace global_shift = q.shift - p.shift;
+    const size_t border_parts_degree = p.degree() + q.degree() + 1;
+    const size_t center_part_degree = p.degree(); // FIXME unsure
+    const Point a = std::min(q.width - p.width, 0.);
+    const Point b = std::max(q.width - p.width, 0.);
+    const auto binomial = BinomialCoefficientsUpToN(border_parts_degree);
+    const auto q_width_powers = PowersUpToN(border_parts_degree, q.width);
+    const auto p_width_powers = PowersUpToN(border_parts_degree, p.width);
+    const auto minus_1_power = [](size_t n) -> double { return n % 2 == 0 ? 1. : -1.; };
+    // Left part for [-pw, a]
+    {
+        const PointSpace width = a + p.width; // a - (-pw)
+        auto left_part = Polynom<Bound::Open, Bound::Closed>{width, border_parts_degree};
+        for(size_t k = 0; k <= p.degree(); ++k) {
+            for(size_t j = 0; j <= q.degree(); ++j) {
+                for(size_t i = 0; i <= k; ++i) {
+                    const size_t ij1 = i + j + 1;
+                    const double factor =
+                        minus_1_power(k - i) * binomial(i, k) * p.coefficients[k] * q.coefficients[j] / double(ij1);
+                    for(size_t l = 0; l <= ij1; ++l) {
+                        left_part.coefficients[k + j + 1 - l] += factor * binomial(l, ij1) * p_width_powers(l);
+                    }
+                }
+            }
+        }
+        components.emplace_back(Shifted<Polynom<Bound::Open, Bound::Closed>>{
+            global_shift - p.width,
+            std::move(left_part),
+        });
+    }
+    // FIXME add center part , selection for a/b
+    // Right part for [b, qw]
+    {
+        auto right_part = Polynom<Bound::Open, Bound::Closed>{q.width - b, border_parts_degree};
+        for(size_t k = 0; k <= p.degree(); ++k) {
+            for(size_t j = 0; j <= q.degree(); ++j) {
+                for(size_t i = 0; i <= k; ++i) {
+                    const size_t ij1 = i + j + 1;
+                    const double factor =
+                        minus_1_power(k - i) * binomial(i, k) * p.coefficients[k] * q.coefficients[j] / double(ij1);
+                    right_part.coefficients[k - i] += factor * q_width_powers(ij1);
+                    right_part.coefficients[k + j + 1] -= factor;
+                }
+            }
+        }
+        components.emplace_back(Shifted<Polynom<Bound::Open, Bound::Closed>>{
+            global_shift + b,
+            std::move(right_part),
+        });
+    }
+    // FIXME bad modeling recompute formulas
+}
+
+// Base cases, including distributed cross_correlation for Add<Shifted<Polynom>>>.
 inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> cross_correlation_base(
-    const Indicator<lb, rb> & lhs, ShiftedPolynomial rhs) {
-    return convolution_base(reverse(lhs), rhs);
+    ShiftedPolynomial lhs, ShiftedPolynomial rhs) {
+    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+    append_cross_correlation_components(components, lhs, rhs);
+    return {std::move(components)};
+}
+
+inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> cross_correlation_base(
+    const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & lhs, ShiftedPolynomial rhs) {
+    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+    for(const auto & lhs_component : lhs.components) {
+        append_cross_correlation_components(components, lhs_component, rhs);
+    }
+    return {std::move(components)};
+}
+inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> cross_correlation_base(
+    ShiftedPolynomial lhs, const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & rhs) {
+    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+    for(const auto & rhs_component : rhs.components) {
+        append_cross_correlation_components(components, lhs, rhs_component);
+    }
+    return {std::move(components)};
+}
+
+inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> cross_correlation_base(
+    const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & lhs,
+    const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & rhs) {
+    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+    for(const auto & lhs_component : lhs.components) {
+        for(const auto & rhs_component : rhs.components) {
+            append_cross_correlation_components(components, lhs_component, rhs_component);
+        }
+    }
+    return {std::move(components)};
 }
 
 /******************************************************************************

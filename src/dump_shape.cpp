@@ -20,50 +20,50 @@ int main(int argc, const char * argv[]) {
 
     const DumpCase cases[] = {
         []() {
-            const auto empty = IntervalIndicator::with_width(0);
-            const auto interval = IntervalIndicator::with_width(100);
-            dump_shape(convolution(empty, interval));
+            const auto empty = Indicator<Bound::Closed, Bound::Closed>{{0., 0.}};
+            const auto indicator = Indicator<Bound::Closed, Bound::Closed>{{-50., 50.}};
+            dump_shape(convolution(empty, indicator));
         },
         []() {
-            const auto small = IntervalIndicator::with_width(0.1);
-            const auto interval = IntervalIndicator::with_width(100);
-            dump_shape(convolution(small, interval));
+            const auto small = Indicator<Bound::Closed, Bound::Closed>{{-0.1, 0.1}};
+            const auto indicator = Indicator<Bound::Closed, Bound::Closed>{{-50., 50.}};
+            dump_shape(convolution(small, indicator));
         },
         []() {
-            const auto interval = IntervalIndicator::with_width(100);
-            dump_shape(convolution(interval, interval));
+            const auto indicator = Indicator<Bound::Closed, Bound::Closed>{{-50., 50.}};
+            dump_shape(convolution(indicator, indicator));
         },
         []() {
-            const auto kernel = IntervalKernel(100);
-            const auto phi = HistogramBase(5, 1000).interval(0);
+            const auto kernel = IntervalKernel{100};
+            const auto phi = HistogramBase{5, 1000}.histogram(0);
             dump_shape(convolution(to_shape(kernel), to_shape(phi)));
         },
         []() {
-            const auto kernel = IntervalKernel(100);
-            const auto kernel2 = IntervalKernel(200);
-            const auto phi = HistogramBase(5, 1000).interval(0);
+            const auto kernel = IntervalKernel{100};
+            const auto kernel2 = IntervalKernel{200};
+            const auto phi = HistogramBase{5, 1000}.histogram(0);
             dump_shape(convolution(convolution(to_shape(kernel), to_shape(phi)), to_shape(kernel2)));
         },
         []() {
-            const auto kernel = IntervalKernel(300);
-            const auto phi = HistogramBase(5, 1000).interval(0);
+            const auto kernel = IntervalKernel{300};
+            const auto phi = HistogramBase{5, 1000}.histogram(0);
             dump_shape(convolution(convolution(to_shape(kernel), to_shape(phi)), to_shape(kernel)));
         },
         []() {
-            const auto base = HistogramBase(5, 1000);
-            const auto kernel = IntervalKernel(100);
-            const auto kernel2 = IntervalKernel(200);
-            const auto phi = base.interval(0);
-            const auto phi2 = base.interval(3);
+            const auto base = HistogramBase{5, 1000};
+            const auto kernel = IntervalKernel{100};
+            const auto kernel2 = IntervalKernel{200};
+            const auto phi = base.histogram(0);
+            const auto phi2 = base.histogram(3);
             dump_shape(convolution(
                 convolution(to_shape(kernel), to_shape(phi)), convolution(to_shape(kernel2), to_shape(phi2))));
         },
         []() {
-            const auto base = HistogramBase(5, 10000);
-            const auto kernel = IntervalKernel(0.1);
-            const auto kernel2 = IntervalKernel(100);
-            const auto phi = base.interval(0);
-            const auto phi2 = base.interval(3);
+            const auto base = HistogramBase{5, 10000};
+            const auto kernel = IntervalKernel{0.1};
+            const auto kernel2 = IntervalKernel{100};
+            const auto phi = base.histogram(0);
+            const auto phi2 = base.histogram(3);
             dump_shape(convolution(
                 convolution(to_shape(kernel), to_shape(phi)), convolution(to_shape(kernel2), to_shape(phi2))));
         },
