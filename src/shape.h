@@ -243,7 +243,7 @@ template <Bound lb, Bound rb> struct Indicator {
 };
 
 /* Polynom on a restricted interval.
- * f(x) = if(x in [0, width]) { sum_i coefficients[i] x^i } else { 0 }
+ * f(x) = if(x in interval) { sum_i coefficients[i] x^i } else { 0 }
  */
 inline double compute_polynom_value(Point x, span<const double> coefficients) {
     assert(coefficients.size() > 0);
@@ -257,23 +257,22 @@ inline double compute_polynom_value(Point x, span<const double> coefficients) {
     return r;
 }
 template <Bound lb, Bound rb> struct Polynom {
-    PointSpace width;                 // width >= 0
+    Interval<lb, rb> interval;
     std::vector<double> coefficients; // size() > 0
 
     // With zeroed coefficients
-    Polynom(PointSpace width_, size_t degree) : width(width_), coefficients(degree + 1, 0.) { assert(width >= 0.); }
+    Polynom(Interval<lb, rb> interval_, size_t degree) : interval(interval_), coefficients(degree + 1, 0.) {}
     // With values
-    Polynom(PointSpace width_, std::vector<double> coefficients_)
-        : width(width_), coefficients(std::move(coefficients_)) {
-        assert(width >= 0.);
+    Polynom(Interval<lb, rb> interval_, std::vector<double> && coefficients_)
+        : interval(interval_), coefficients(std::move(coefficients_)) {
         assert(coefficients.size() > 0);
     }
 
     size_t degree() const { return coefficients.size() - 1; }
 
-    Interval<lb, rb> non_zero_domain() const { return {0, width}; }
+    Interval<lb, rb> non_zero_domain() const { return interval; }
     double operator()(Point x) const {
-        if(non_zero_domain().contains(x)) {
+        if(interval.contains(x)) {
             return compute_polynom_value(x, make_span(coefficients));
         } else {
             return 0.;
@@ -290,34 +289,33 @@ template <Bound lb, Bound rb> struct Polynom {
  * Define simplifications when combinators are found.
  *
  * The conventional order of combinators is:
- * scaling -> shifting -> reversion / add -> base_shape
+ * scaling -> add -> base_shape
  */
 
 /* Reverse x dimension
  * reverse(f)(x) = f(-x)
  */
-template <typename Inner> struct Reversed {
-    Inner inner;
-
-    auto non_zero_domain() const { return -inner.non_zero_domain(); }
-    double operator()(Point x) const { return inner(-x); }
-};
-template <typename Inner> inline auto reversed(const Inner & inner) {
-    return Reversed<Inner>{inner};
+template <Bound lb, Bound rb> Indicator<rb, lb> reverse(const Indicator<lb, rb> & indicator) {
+    return {-indicator.interval};
+}
+template <Bound lb, Bound rb> Polynom<rb, lb> reverse(const Polynom<lb, rb> & polynom) {
+    // Q(x) = P(-x) = sum_k a_k (-x)^k = sum_k (a_k (-1)^k) x^k for -x in nzd(P) <=> x in -nzd(P).
+    // Copy and invert coefficients for odd k.
+    auto coefficients = std::vector<double>(polynom.coefficients);
+    for(size_t k = 1; k < coefficients.size(); k += 2) {
+        coefficients[k] = -coefficients[k];
+    }
+    return {-polynom.interval, std::move(coefficients)};
 }
 
 /* Shift x dimension
  * shifted(s, f)(x) = f(x - s)
+ *
+ * Defined entirely through overloads on specific shape classes.
+ * All base shapes have a builtin shifting (interval).
  */
-template <typename Inner> struct Shifted {
-    PointSpace shift;
-    Inner inner;
-
-    NzdIntervalType<Inner> non_zero_domain() const { return shift + inner.non_zero_domain(); }
-    double operator()(Point x) const { return inner(x - shift); }
-};
-template <typename Inner> inline auto shifted(PointSpace shift, const Inner & inner) {
-    return Shifted<Inner>{shift, inner};
+template <Bound lb, Bound rb> Indicator<rb, lb> shifted(PointSpace s, const Indicator<lb, rb> & ind) {
+    return {s + ind.interval};
 }
 
 /* Scale y dimension
@@ -332,6 +330,10 @@ template <typename Inner> struct Scaled {
 };
 template <typename Inner> inline auto scaled(double scale, const Inner & inner) {
     return Scaled<Inner>{scale, inner};
+}
+
+template <typename Inner> inline auto scaled(double scale, const Scaled<Inner> & s) {
+    return scaled(scale * s.scale, s.inner);
 }
 
 /* Addition / composition of multiple shapes.
@@ -378,23 +380,6 @@ template <typename Inner> struct Add<std::vector<Inner>> {
     }
 };
 
-/* Simplification by overload selection.
- */
-template <Bound lb, Bound rb> Indicator<rb, lb> reverse(const Indicator<lb, rb> & indicator) {
-    return {-indicator.interval};
-}
-
-template <typename Inner> inline auto shifted(PointSpace shift, const Shifted<Inner> & s) {
-    return shifted(shift + s.shift, s.inner);
-}
-template <Bound lb, Bound rb> Indicator<rb, lb> shifted(PointSpace s, const Indicator<lb, rb> & ind) {
-    return {s + ind.interval};
-}
-
-template <typename Inner> inline auto scaled(double scale, const Scaled<Inner> & s) {
-    return scaled(scale * s.scale, s.inner);
-}
-
 /******************************************************************************
  * Computation tools for convolution / cross_correlation of polynomials.
  *
@@ -407,25 +392,25 @@ template <typename Inner> inline auto scaled(double scale, const Scaled<Inner> &
 
 constexpr double indicator_polynomial_coefficients[1] = {1.};
 
-// Temporary reference to a shape similar to a shifted polynom without bound types.
+// Temporary reference to a shape similar to a polynom without bound types.
 // Supports implicit conversion from valid shapes.
-struct ShiftedPolynomial {
-    PointSpace shift;
-    PointSpace width;
+struct Polynomial {
+    Point interval_left;
+    Point interval_right;
     span<const double> coefficients;
 
-    template <Bound lb, Bound rb> ShiftedPolynomial(const Indicator<lb, rb> & indicator)
-        : shift(indicator.interval.left),
-          width(indicator.interval.width()),
+    template <Bound lb, Bound rb> Polynomial(const Indicator<lb, rb> & indicator)
+        : interval_left(indicator.interval.left),
+          interval_right(indicator.interval.right),
           coefficients(make_span(indicator_polynomial_coefficients)) {}
 
-    template <Bound lb, Bound rb> ShiftedPolynomial(const Shifted<Polynom<lb, rb>> & shape)
-        : shift(shape.shift), width(shape.inner.width), coefficients(make_span(shape.inner.coefficients)) {}
-
-    template <Bound lb, Bound rb> ShiftedPolynomial(const Polynom<lb, rb> & polynom)
-        : shift(0.), width(polynom.width), coefficients(make_span(polynom.coefficients)) {}
+    template <Bound lb, Bound rb> Polynomial(const Polynom<lb, rb> & polynom)
+        : interval_left(polynom.interval.left),
+          interval_right(polynom.interval.right),
+          coefficients(make_span(polynom.coefficients)) {}
 
     size_t degree() const { return coefficients.size() - 1; }
+    PointSpace width() const { return interval_right - interval_left; }
 };
 
 struct BinomialCoefficientsUpToN {
@@ -483,30 +468,15 @@ template <typename Lhs, typename Rhs> inline auto convolution(const Lhs & lhs, c
 
 // Extract scale
 template <typename L, typename R> inline auto convolution_extract_scale(const Scaled<L> & lhs, const Scaled<R> & rhs) {
-    return scaled(lhs.scale * rhs.scale, convolution_extract_shift(lhs.inner, rhs.inner));
+    return scaled(lhs.scale * rhs.scale, convolution_base(lhs.inner, rhs.inner));
 }
 template <typename L, typename R> inline auto convolution_extract_scale(const Scaled<L> & lhs, const R & rhs) {
-    return scaled(lhs.scale, convolution_extract_shift(lhs.inner, rhs));
+    return scaled(lhs.scale, convolution_base(lhs.inner, rhs));
 }
 template <typename L, typename R> inline auto convolution_extract_scale(const L & lhs, const Scaled<R> & rhs) {
-    return scaled(rhs.scale, convolution_extract_shift(lhs, rhs.inner));
+    return scaled(rhs.scale, convolution_base(lhs, rhs.inner));
 }
 template <typename L, typename R> inline auto convolution_extract_scale(const L & lhs, const R & rhs) {
-    return convolution_extract_shift(lhs, rhs);
-}
-
-// Extract shift
-template <typename L, typename R>
-inline auto convolution_extract_shift(const Shifted<L> & lhs, const Shifted<R> & rhs) {
-    return shifted(lhs.shift + rhs.shift, convolution_base(lhs.inner, rhs.inner));
-}
-template <typename L, typename R> inline auto convolution_extract_shift(const Shifted<L> & lhs, const R & rhs) {
-    return shifted(lhs.shift, convolution_base(lhs.inner, rhs));
-}
-template <typename L, typename R> inline auto convolution_extract_shift(const L & lhs, const Shifted<R> & rhs) {
-    return shifted(rhs.shift, convolution_base(lhs, rhs.inner));
-}
-template <typename L, typename R> inline auto convolution_extract_shift(const L & lhs, const R & rhs) {
     return convolution_base(lhs, rhs);
 }
 
@@ -523,109 +493,114 @@ template <typename L, typename R> inline auto convolution_extract_shift(const L 
  * Explicitly known coefficients in fixed cases: trapezoid, etc...
  */
 inline void append_convolution_components(
-    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> & components,
-    ShiftedPolynomial lhs,
-    ShiftedPolynomial rhs) {
+    std::vector<Polynom<Bound::Open, Bound::Closed>> & components, Polynomial lhs, Polynomial rhs) {
     // q is the polynom with the smallest width
-    const auto compare_widths = [](const auto & lhs, const auto & rhs) { return lhs.width < rhs.width; };
-    const ShiftedPolynomial & p = std::max(lhs, rhs, compare_widths);
-    const ShiftedPolynomial & q = std::min(lhs, rhs, compare_widths);
-    if(q.width == 0.) {
-        return; // Optimization : cconvolution with zero width support is a zero value.
+    const auto compare_widths = [](const auto & lhs, const auto & rhs) { return lhs.width() < rhs.width(); };
+    const Polynomial & p = std::max(lhs, rhs, compare_widths);
+    const Polynomial & q = std::min(lhs, rhs, compare_widths);
+    if(q.width() == 0.) {
+        return; // Optimization : convolution with zero width support is a zero value.
     }
     // Useful numerical tools / values
-    const PointSpace global_shift = p.shift + q.shift;
     const size_t border_parts_degree = p.degree() + q.degree() + 1;
     const size_t center_part_degree = p.degree();
     const auto binomial = BinomialCoefficientsUpToN(border_parts_degree);
-    const auto q_width_powers = PowersUpToN(border_parts_degree, q.width);
-    const auto p_width_powers = PowersUpToN(border_parts_degree, p.width);
+    const auto ipl_powers = PowersUpToN(border_parts_degree, p.interval_left);
+    const auto ipr_powers = PowersUpToN(border_parts_degree, p.interval_right);
+    const auto iql_powers = PowersUpToN(border_parts_degree, q.interval_left);
+    const auto iqr_powers = PowersUpToN(border_parts_degree, q.interval_right);
     const auto minus_1_power = [](size_t n) -> double { return n % 2 == 0 ? 1. : -1.; };
-    // Left part is for [0, q.width]
+    // Left part
     {
-        auto left_part = Polynom<Bound::Open, Bound::Closed>{q.width, border_parts_degree};
-        for(size_t k = 0; k <= p.degree(); ++k) {
-            for(size_t j = 0; j <= q.degree(); ++j) {
-                double c = 0.;
-                for(size_t i = 0; i <= k; ++i) {
-                    c += minus_1_power(i) * binomial(i, k) / double(i + j + 1);
-                }
-                left_part.coefficients[k + j + 1] += p.coefficients[k] * q.coefficients[j] * c;
-            }
-        }
-        components.emplace_back(Shifted<Polynom<Bound::Open, Bound::Closed>>{
-            global_shift,
-            std::move(left_part),
-        });
-    }
-    // Center part is for [q.width, p.width]. Optimization : avoid computing it if zero width (would be discarded).
-    if(p.width > q.width) {
-        auto center_part = Polynom<Bound::Open, Bound::Closed>{p.width - q.width, center_part_degree};
-        for(size_t l = 0; l <= p.degree(); ++l) {
-            double c = 0.;
-            for(size_t j = 0; j <= q.degree(); ++j) {
-                for(size_t i = 0; i <= p.degree() - l; ++i) {
-                    c += minus_1_power(i) * binomial(i, i + l) * p.coefficients[i + l] * q.coefficients[j] *
-                         q_width_powers(i + j + 1) / double(i + j + 1);
-                }
-            }
-            center_part.coefficients[l] = c;
-        }
-        components.emplace_back(Shifted<Polynom<Bound::Open, Bound::Closed>>{
-            global_shift + q.width,
-            std::move(center_part),
-        });
-    }
-    // Right part is for [p.width, p.width+q.width]
-    {
-        auto right_part = Polynom<Bound::Open, Bound::Closed>{q.width, border_parts_degree};
+        auto coefficients = std::vector<double>(border_parts_degree + 1, 0.);
         for(size_t k = 0; k <= p.degree(); ++k) {
             for(size_t j = 0; j <= q.degree(); ++j) {
                 for(size_t i = 0; i <= k; ++i) {
                     const size_t ij1 = i + j + 1;
                     const double factor =
-                        minus_1_power(i) * binomial(i, k) * p.coefficients[k] * q.coefficients[j] / double(ij1);
-                    right_part.coefficients[k - i] +=
-                        factor * (q_width_powers(ij1) - minus_1_power(ij1) * p_width_powers(ij1));
-                    for(size_t l = 1; l <= ij1; ++l) {
-                        right_part.coefficients[k - i + l] -= factor * minus_1_power(ij1 - l) * p_width_powers(ij1 - l);
+                        p.coefficients[k] * q.coefficients[j] * binomial(i, k) * minus_1_power(i) / double(ij1);
+                    coefficients[k - i] += -factor * iql_powers(ij1);
+                    for(size_t l = 0; l <= ij1; ++l) {
+                        coefficients[k + j + 1 - l] += factor * binomial(l, ij1) * minus_1_power(l) * ipl_powers(l);
                     }
                 }
             }
         }
-        components.emplace_back(Shifted<Polynom<Bound::Open, Bound::Closed>>{
-            global_shift + p.width,
-            std::move(right_part),
-        });
+        components.emplace_back(
+            Interval<Bound::Open, Bound::Closed>{
+                p.interval_left + q.interval_left,
+                p.interval_left + q.interval_right,
+            },
+            std::move(coefficients));
     }
-    // FIXME bad modeling recompute formulas
+    // Center part. Optimization : avoid computing it if zero width (would be discarded).
+    if(p.width() > q.width()) {
+        auto coefficients = std::vector<double>(center_part_degree + 1, 0.);
+        for(size_t k = 0; k <= p.degree(); ++k) {
+            for(size_t j = 0; j <= q.degree(); ++j) {
+                for(size_t i = 0; i <= k; ++i) {
+                    const size_t ij1 = i + j + 1;
+                    coefficients[k - i] += p.coefficients[k] * q.coefficients[j] * binomial(i, k) *
+                                           (minus_1_power(i) / double(ij1)) * (iqr_powers(ij1) - iql_powers(ij1));
+                }
+            }
+        }
+        components.emplace_back(
+            Interval<Bound::Open, Bound::Closed>{
+                p.interval_left + q.interval_right,
+                p.interval_right + q.interval_left,
+            },
+            std::move(coefficients));
+    }
+    // Right part
+    {
+        auto coefficients = std::vector<double>(border_parts_degree + 1, 0.);
+        for(size_t k = 0; k <= p.degree(); ++k) {
+            for(size_t j = 0; j <= q.degree(); ++j) {
+                for(size_t i = 0; i <= k; ++i) {
+                    const size_t ij1 = i + j + 1;
+                    const double factor =
+                        p.coefficients[k] * q.coefficients[j] * binomial(i, k) * minus_1_power(i) / double(ij1);
+                    coefficients[k - i] += factor * iqr_powers(ij1);
+                    for(size_t l = 0; l <= ij1; ++l) {
+                        coefficients[k + j + 1 - l] += -factor * binomial(l, ij1) * minus_1_power(l) * ipr_powers(l);
+                    }
+                }
+            }
+        }
+        components.emplace_back(
+            Interval<Bound::Open, Bound::Closed>{
+                p.interval_right + q.interval_left,
+                p.interval_right + q.interval_right,
+            },
+            std::move(coefficients));
+    }
 }
 
-// Base cases, including distributed convolution for Add<Shifted<Polynom>>>.
-inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> convolution_base(
-    ShiftedPolynomial lhs, ShiftedPolynomial rhs) {
-    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+// Base cases, including distributed convolution for Add<Polynom>>.
+inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> convolution_base(Polynomial lhs, Polynomial rhs) {
+    std::vector<Polynom<Bound::Open, Bound::Closed>> components;
     append_convolution_components(components, lhs, rhs);
     return {std::move(components)};
 }
 
-inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> convolution_base(
-    const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & lhs, ShiftedPolynomial rhs) {
-    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> convolution_base(
+    const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & lhs, Polynomial rhs) {
+    std::vector<Polynom<Bound::Open, Bound::Closed>> components;
     for(const auto & lhs_component : lhs.components) {
         append_convolution_components(components, lhs_component, rhs);
     }
     return {std::move(components)};
 }
-inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> convolution_base(
-    ShiftedPolynomial lhs, const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & rhs) {
+inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> convolution_base(
+    Polynomial lhs, const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & rhs) {
     return convolution_base(rhs, lhs); // Use commutativity.
 }
 
-inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> convolution_base(
-    const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & lhs,
-    const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & rhs) {
-    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> convolution_base(
+    const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & lhs,
+    const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & rhs) {
+    std::vector<Polynom<Bound::Open, Bound::Closed>> components;
     for(const auto & lhs_component : lhs.components) {
         for(const auto & rhs_component : rhs.components) {
             append_convolution_components(components, lhs_component, rhs_component);
@@ -649,140 +624,73 @@ template <typename Lhs, typename Rhs> inline auto cross_correlation(const Lhs & 
 // Extract scale
 template <typename L, typename R>
 inline auto cross_correlation_extract_scale(const Scaled<L> & lhs, const Scaled<R> & rhs) {
-    return scaled(lhs.scale * rhs.scale, cross_correlation_extract_shift(lhs.inner, rhs.inner));
+    return scaled(lhs.scale * rhs.scale, cross_correlation_base(lhs.inner, rhs.inner));
 }
 template <typename L, typename R> inline auto cross_correlation_extract_scale(const Scaled<L> & lhs, const R & rhs) {
-    return scaled(lhs.scale, cross_correlation_extract_shift(lhs.inner, rhs));
+    return scaled(lhs.scale, cross_correlation_base(lhs.inner, rhs));
 }
 template <typename L, typename R> inline auto cross_correlation_extract_scale(const L & lhs, const Scaled<R> & rhs) {
-    return scaled(rhs.scale, cross_correlation_extract_shift(lhs, rhs.inner));
+    return scaled(rhs.scale, cross_correlation_base(lhs, rhs.inner));
 }
 template <typename L, typename R> inline auto cross_correlation_extract_scale(const L & lhs, const R & rhs) {
-    return cross_correlation_extract_shift(lhs, rhs);
-}
-
-// Extract shift
-template <typename L, typename R>
-inline auto cross_correlation_extract_shift(const Shifted<L> & lhs, const Shifted<R> & rhs) {
-    return shifted(rhs.shift - lhs.shift, cross_correlation_base(lhs.inner, rhs.inner));
-}
-template <typename L, typename R> inline auto cross_correlation_extract_shift(const Shifted<L> & lhs, const R & rhs) {
-    return shifted(-lhs.shift, cross_correlation_base(lhs.inner, rhs));
-}
-template <typename L, typename R> inline auto cross_correlation_extract_shift(const L & lhs, const Shifted<R> & rhs) {
-    return shifted(rhs.shift, cross_correlation_base(lhs, rhs.inner));
-}
-template <typename L, typename R> inline auto cross_correlation_extract_shift(const L & lhs, const R & rhs) {
     return cross_correlation_base(lhs, rhs);
 }
 
-/* Computes the three polynomial components of a convolution.
- *
- * Bounds of the components and the middle component formula depend on respective widths of P/Q.
- * a = min(qw-pw, 0)
- * b = max(qw-pw, 0)
- *
- * Components are defined on consecutive intervals: ]-pw,a] ]a,b] ]b,qw].
- * Open-Closed bounds are chosen so the sum contains 1 value at points {a, b} (borders).
- * Open-Closed is chosen instead of Closed-Open to better fit hawkes computation (cases with ]0,?]).
- * The Open bound on ]-pw,a] is ok, as left_part(-pw) == a_0 == 0 by construction of the formulas.
- *
- * Testable properties:
- * Matching values at component borders
- * 0s at points {-pw, qw} ; the convolution on the sides of lhs/rhs nzds.
- * Explicitly known coefficients in fixed cases: trapezoid, etc...
+/* Base cases, including distributed cross_correlation for Add<Polynom>>.
+
+ * Currently uses convolution with reverse(p) for simplicity.
+ * reverse(p) does not work for Polynomial, so duplicate for individual cases.
+ * TODO better scheme ? compute formulas for cross_correlation ?
  */
-inline void append_cross_correlation_components(
-    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> & components, ShiftedPolynomial p, ShiftedPolynomial q) {
-    if(p.width == 0. || q.width == 0.) {
-        return; // Optimization : cross_correlation with zero width support is a zero value.
-    }
-    // Useful numerical tools / values
-    const PointSpace global_shift = q.shift - p.shift;
-    const size_t border_parts_degree = p.degree() + q.degree() + 1;
-    const size_t center_part_degree = p.degree(); // FIXME unsure
-    const Point a = std::min(q.width - p.width, 0.);
-    const Point b = std::max(q.width - p.width, 0.);
-    const auto binomial = BinomialCoefficientsUpToN(border_parts_degree);
-    const auto q_width_powers = PowersUpToN(border_parts_degree, q.width);
-    const auto p_width_powers = PowersUpToN(border_parts_degree, p.width);
-    const auto minus_1_power = [](size_t n) -> double { return n % 2 == 0 ? 1. : -1.; };
-    // Left part for [-pw, a]
-    {
-        const PointSpace width = a + p.width; // a - (-pw)
-        auto left_part = Polynom<Bound::Open, Bound::Closed>{width, border_parts_degree};
-        for(size_t k = 0; k <= p.degree(); ++k) {
-            for(size_t j = 0; j <= q.degree(); ++j) {
-                for(size_t i = 0; i <= k; ++i) {
-                    const size_t ij1 = i + j + 1;
-                    const double factor =
-                        minus_1_power(k - i) * binomial(i, k) * p.coefficients[k] * q.coefficients[j] / double(ij1);
-                    for(size_t l = 0; l <= ij1; ++l) {
-                        left_part.coefficients[k + j + 1 - l] += factor * binomial(l, ij1) * p_width_powers(l);
-                    }
-                }
-            }
-        }
-        components.emplace_back(Shifted<Polynom<Bound::Open, Bound::Closed>>{
-            global_shift - p.width,
-            std::move(left_part),
-        });
-    }
-    // FIXME add center part , selection for a/b
-    // Right part for [b, qw]
-    {
-        auto right_part = Polynom<Bound::Open, Bound::Closed>{q.width - b, border_parts_degree};
-        for(size_t k = 0; k <= p.degree(); ++k) {
-            for(size_t j = 0; j <= q.degree(); ++j) {
-                for(size_t i = 0; i <= k; ++i) {
-                    const size_t ij1 = i + j + 1;
-                    const double factor =
-                        minus_1_power(k - i) * binomial(i, k) * p.coefficients[k] * q.coefficients[j] / double(ij1);
-                    right_part.coefficients[k - i] += factor * q_width_powers(ij1);
-                    right_part.coefficients[k + j + 1] -= factor;
-                }
-            }
-        }
-        components.emplace_back(Shifted<Polynom<Bound::Open, Bound::Closed>>{
-            global_shift + b,
-            std::move(right_part),
-        });
-    }
-    // FIXME bad modeling recompute formulas
+template <Bound lb, Bound rb> inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
+    Indicator<lb, rb> lhs, Polynomial rhs) {
+    std::vector<Polynom<Bound::Open, Bound::Closed>> components;
+    append_convolution_components(components, reverse(lhs), rhs);
+    return {std::move(components)};
 }
-
-// Base cases, including distributed cross_correlation for Add<Shifted<Polynom>>>.
-inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> cross_correlation_base(
-    ShiftedPolynomial lhs, ShiftedPolynomial rhs) {
-    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
-    append_cross_correlation_components(components, lhs, rhs);
+template <Bound lb, Bound rb> inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
+    const Polynom<lb, rb> & lhs, Polynomial rhs) {
+    std::vector<Polynom<Bound::Open, Bound::Closed>> components;
+    append_convolution_components(components, reverse(lhs), rhs);
     return {std::move(components)};
 }
 
-inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> cross_correlation_base(
-    const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & lhs, ShiftedPolynomial rhs) {
-    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
+    const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & lhs, Polynomial rhs) {
+    std::vector<Polynom<Bound::Open, Bound::Closed>> components;
     for(const auto & lhs_component : lhs.components) {
-        append_cross_correlation_components(components, lhs_component, rhs);
+        append_convolution_components(components, reverse(lhs_component), rhs);
     }
     return {std::move(components)};
 }
-inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> cross_correlation_base(
-    ShiftedPolynomial lhs, const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & rhs) {
-    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+
+template <Bound lb, Bound rb> inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
+    Indicator<lb, rb> lhs, const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & rhs) {
+    std::vector<Polynom<Bound::Open, Bound::Closed>> components;
+    const auto reverse_lhs = reverse(lhs);
     for(const auto & rhs_component : rhs.components) {
-        append_cross_correlation_components(components, lhs, rhs_component);
+        append_convolution_components(components, reverse_lhs, rhs_component);
+    }
+    return {std::move(components)};
+}
+template <Bound lb, Bound rb> inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
+    const Polynom<lb, rb> & lhs, const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & rhs) {
+    std::vector<Polynom<Bound::Open, Bound::Closed>> components;
+    const auto reverse_lhs = reverse(lhs);
+    for(const auto & rhs_component : rhs.components) {
+        append_convolution_components(components, reverse_lhs, rhs_component);
     }
     return {std::move(components)};
 }
 
-inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> cross_correlation_base(
-    const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & lhs,
-    const Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> & rhs) {
-    std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>> components;
+inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
+    const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & lhs,
+    const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & rhs) {
+    std::vector<Polynom<Bound::Open, Bound::Closed>> components;
     for(const auto & lhs_component : lhs.components) {
+        const auto reverse_lhs_component = reverse(lhs_component);
         for(const auto & rhs_component : rhs.components) {
-            append_cross_correlation_components(components, lhs_component, rhs_component);
+            append_convolution_components(components, reverse_lhs_component, rhs_component);
         }
     }
     return {std::move(components)};
@@ -796,19 +704,16 @@ inline Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>> cross_corr
 template <typename Inner> inline auto indicator_approximation(const Scaled<Inner> & shape) {
     return scaled(shape.scale, indicator_approximation(shape.inner));
 }
-template <typename Inner> inline auto indicator_approximation(const Shifted<Inner> & shape) {
-    return shifted(shape.shift, indicator_approximation(shape.inner));
-}
 
 template <Bound lb, Bound rb> inline Indicator<lb, rb> indicator_approximation(const Indicator<lb, rb> & indicator) {
     return indicator;
 }
 
 // Compute integral of polynomial or sums of polynomials
-inline double integral(ShiftedPolynomial polynomial) {
+inline double integral(Polynomial polynomial) {
     // int_R sum_i a_i x^i = int_[0,w] sum_i a_i x^i = sum_i a_i w^(i+1) / (i+1)
     // Shift is ignored.
-    const double width = polynomial.width;
+    const double width = polynomial.width();
     const span<const double> coefficients = polynomial.coefficients;
     assert(coefficients.size() > 0);
     // Horner strategy : sum_i a_i w^i / (i+1)
@@ -831,39 +736,24 @@ template <typename T> inline double integral(const Add<std::vector<T>> & sum) {
 
 template <Bound lb, Bound rb>
 inline Scaled<Indicator<lb, rb>> indicator_approximation(const Polynom<lb, rb> & polynom) {
-    if(polynom.width == 0.) {
+    const Interval<lb, rb> non_zero_domain = polynom.non_zero_domain();
+    const PointSpace width = non_zero_domain.width();
+    if(width == 0.) {
         return Scaled<Indicator<lb, rb>>{
             0.,
             {{0., 0.}},
         }; // Dummy 0 value
     } else {
-        const double average_value = integral(polynom) / polynom.width;
+        const double average_value = integral(polynom) / width;
         return Scaled<Indicator<lb, rb>>{
             average_value,
-            {polynom.non_zero_domain()},
+            {non_zero_domain},
         };
     }
 }
 
 template <Bound lb, Bound rb>
-inline Scaled<Indicator<lb, rb>> indicator_approximation(const Shifted<Polynom<lb, rb>> & polynom) {
-    if(polynom.inner.width == 0.) {
-        return Scaled<Indicator<lb, rb>>{
-            0.,
-            {{0., 0.}},
-        }; // Dummy 0 value
-    } else {
-        // Same as with no shifting, but on the shifted non_zero_domain().
-        const double average_value = integral(polynom.inner) / polynom.inner.width;
-        return Scaled<Indicator<lb, rb>>{
-            average_value,
-            {polynom.non_zero_domain()},
-        };
-    }
-}
-
-template <Bound lb, Bound rb> inline Scaled<Indicator<lb, rb>> indicator_approximation(
-    const Add<std::vector<Shifted<Polynom<lb, rb>>>> & polynom_sum) {
+inline Scaled<Indicator<lb, rb>> indicator_approximation(const Add<std::vector<Polynom<lb, rb>>> & polynom_sum) {
     const Interval<lb, rb> non_zero_domain = polynom_sum.non_zero_domain();
     const PointSpace width = non_zero_domain.width();
     if(width == 0.) {
@@ -1029,11 +919,6 @@ inline double sup_of_sum_of_differences_to_points(const SortedVec<Point> & point
     } else {
         return 0.;
     }
-}
-// Shifting has no effect on the sup value.
-template <typename Inner>
-inline double sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, const Shifted<Inner> & shape) {
-    return sup_of_sum_of_differences_to_points(points, shape.inner);
 }
 
 } // namespace shape

@@ -98,13 +98,13 @@ TEST_SUITE("shape") {
         CHECK(integral(indicator) == doctest::Approx(42.));
         // Linear function with equal time negative and positive
         const auto linear_with_0_integral = Polynom<Bound::Closed, Bound::Closed>{
-            2.,
+            {0., 2.},
             {-1., 1.},
         };
         CHECK(integral(linear_with_0_integral) == doctest::Approx(0.));
         // Degree 2 simple function, integral = x^3/3
         const auto degree_2 = Polynom<Bound::Closed, Bound::Closed>{
-            10.,
+            {0., 10.},
             {0., 0., 1.},
         };
         CHECK(integral(degree_2) == doctest::Approx((10. * 10. * 10.) / 3.));
@@ -116,20 +116,16 @@ TEST_SUITE("shape") {
         CHECK(indicator_a.interval == indicator.interval);
         // Linear function, "climbing" triangle of size 2.
         const auto linear = Polynom<Bound::Closed, Bound::Closed>{
-            2.,
+            {0., 2.},
             {0., 1.},
         };
         const auto linear_a = indicator_approximation(linear);
         CHECK(linear_a.non_zero_domain() == linear.non_zero_domain());
         CHECK(linear_a(0.) == doctest::Approx(1.));
         // Sum of linears : positive then negative slopes of lengths 2
-        const auto mountain = Add<std::vector<Shifted<Polynom<Bound::Open, Bound::Closed>>>>{{
-            Shifted<Polynom<Bound::Open, Bound::Closed>>{
-                0., {2., {0., 1.}}, // Positive slope
-            },
-            Shifted<Polynom<Bound::Open, Bound::Closed>>{
-                2., {2., {2., -1.}}, // Negative slope
-            },
+        const auto mountain = Add<std::vector<Polynom<Bound::Open, Bound::Closed>>>{{
+            Polynom<Bound::Open, Bound::Closed>{{0., 2.}, {0., 1.}},  // Positive slope
+            Polynom<Bound::Open, Bound::Closed>{{2., 4.}, {2., -1.}}, // Negative slope
         }};
         const auto mountain_a = indicator_approximation(mountain);
         CHECK(mountain_a.non_zero_domain() == Interval<Bound::Open, Bound::Closed>{0., 4.});
