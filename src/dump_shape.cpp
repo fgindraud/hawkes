@@ -67,6 +67,24 @@ int main(int argc, const char * argv[]) {
             dump_shape(convolution(
                 convolution(to_shape(kernel), to_shape(phi)), convolution(to_shape(kernel2), to_shape(phi2))));
         },
+        []() {
+            auto q = Polynom<Bound::Closed, Bound::Closed>{
+                {-10., 10.},
+                {0., -100., 0., 1.},
+            };
+            dump_shape(q);
+        },
+        []() {
+            auto p = Polynom<Bound::Closed, Bound::Closed>{
+                {-8., 8.},
+                {64., 0., -1.},
+            };
+            auto q = Polynom<Bound::Closed, Bound::Closed>{
+                {-10., 10.},
+                {0., -100., 0., 1.},
+            };
+            dump_shape(convolution(p, q));
+        },
     };
     const auto nb_cases = std::distance(std::begin(cases), std::end(cases));
 
