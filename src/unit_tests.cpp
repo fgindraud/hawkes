@@ -12,27 +12,26 @@
 #include "shape.h"
 #include "utils.h"
 
-namespace doctest {
-template <typename T> struct StringMaker<std::vector<T>> {
-    static String convert(const std::vector<T> & v) {
-        using doctest::toString;
-        doctest::String s = "Vec{";
-        if(v.size() > 0) {
-            s += toString(v[0]);
-        }
-        for(std::size_t i = 1; i < v.size(); ++i) {
-            s += toString(", ") + toString(v[i]);
-        }
-        return s + toString("}");
+template <typename T> static doctest::String toString(const std::vector<T> & v) {
+    using doctest::toString;
+    doctest::String s = "Vec{";
+    if(v.size() > 0) {
+        s += toString(v[0]);
     }
-};
-template <> struct StringMaker<string_view> {
-    static String convert(string_view sv) {
-        using doctest::toString;
-        return toString("\"") + toString(to_string(sv)) + toString("\"");
+    for(std::size_t i = 1; i < v.size(); ++i) {
+        s += toString(", ") + toString(v[i]);
     }
-};
-} // namespace doctest
+    return s + toString("}");
+}
+template <Bound lb, Bound rb> static doctest::String toString(Interval<lb, rb> i) {
+    using doctest::toString;
+    doctest::String s = "Interval{";
+    s += toString(i.left);
+    s += ",";
+    s += toString(i.right);
+    s += "}";
+    return s;
+}
 
 /******************************************************************************
  * Types definitions
@@ -87,11 +86,128 @@ struct TriangleShape {
         }
     }
 };
+static double raw_evaluate_at(shape::Polynomial p, Point x) {
+    // ignore nzd, used to test continuity between convolution components
+    return shape::compute_polynom_value(x, p.coefficients);
+}
+
 TEST_SUITE("shape") {
     using namespace shape;
 
     // FIXME tests for convolution/correlation of shapes
 
+    TEST_CASE("reverse") {
+        auto p = Polynom<Bound::Closed, Bound::Closed>{
+            {0., 10.},
+            {1., -1., 1., -2.},
+        };
+        auto rev_p = reverse(p);
+        for(int x = -15; x <= 15; x += 1) {
+            CHECK(rev_p(x) == p(-x));
+        }
+    }
+    TEST_CASE("trapezoids") {
+        auto indicator = Indicator<Bound::Closed, Bound::Closed>{{-1., 1.}};
+        auto indicator_shifted = Indicator<Bound::Closed, Bound::Closed>{{0., 2.}};
+        auto indicator_large = Indicator<Bound::Closed, Bound::Closed>{{-2., 2.}};
+        {
+            auto degenerate_trapezoid = convolution(indicator, indicator);
+            // Properties
+            CHECK(degenerate_trapezoid.components.size() == 2); // Optimized
+            const auto & up = degenerate_trapezoid.components[0];
+            CHECK(up.interval == Interval<Bound::Open, Bound::Closed>{-2., 0.});
+            CHECK(up.degree() == 1);
+            CHECK(up.coefficients[1] == 1.);
+            const auto & down = degenerate_trapezoid.components[1];
+            CHECK(down.interval == Interval<Bound::Open, Bound::Closed>{0., 2.});
+            CHECK(down.degree() == 1);
+            CHECK(down.coefficients[1] == -1.);
+            // Values
+            CHECK(degenerate_trapezoid(-3) == 0);
+            CHECK(degenerate_trapezoid(-2) == 0);
+            CHECK(degenerate_trapezoid(-1) == 1);
+            CHECK(degenerate_trapezoid(0) == 2);
+            CHECK(degenerate_trapezoid(1) == 1);
+            CHECK(degenerate_trapezoid(2) == 0);
+            CHECK(degenerate_trapezoid(3) == 0);
+            // Continuity
+            CHECK(raw_evaluate_at(up, -2.) == 0.);
+            CHECK(raw_evaluate_at(up, 0.) == 2.);
+            CHECK(raw_evaluate_at(down, 0.) == 2.);
+            CHECK(raw_evaluate_at(down, 2.) == 0.);
+            // Cross correlation should be the same
+            auto dt_cc = cross_correlation(indicator, indicator);
+            CHECK(dt_cc(-2) == 0);
+            CHECK(dt_cc(-1) == 1);
+            CHECK(dt_cc(0) == 2);
+            CHECK(dt_cc(1) == 1);
+            CHECK(dt_cc(2) == 0);
+        }
+        {
+            // Shifting
+            auto trapezoid_1sa = convolution(indicator, indicator_shifted);
+            CHECK(trapezoid_1sa.non_zero_domain() == Interval<Bound::Open, Bound::Closed>{-1., 3.});
+            CHECK(trapezoid_1sa(-1) == 0);
+            CHECK(trapezoid_1sa(0) == 1);
+            CHECK(trapezoid_1sa(1) == 2);
+            CHECK(trapezoid_1sa(2) == 1);
+            CHECK(trapezoid_1sa(3) == 0);
+            auto trapezoid_1sb = convolution(indicator_shifted, indicator);
+            CHECK(trapezoid_1sb.non_zero_domain() == Interval<Bound::Open, Bound::Closed>{-1., 3.});
+            CHECK(trapezoid_1sb(-1) == 0);
+            CHECK(trapezoid_1sb(0) == 1);
+            CHECK(trapezoid_1sb(1) == 2);
+            CHECK(trapezoid_1sb(2) == 1);
+            CHECK(trapezoid_1sb(3) == 0);
+            auto trapezoid_2s = convolution(indicator_shifted, indicator_shifted);
+            CHECK(trapezoid_2s.non_zero_domain() == Interval<Bound::Open, Bound::Closed>{0., 4.});
+            CHECK(trapezoid_2s(0) == 0);
+            CHECK(trapezoid_2s(1) == 1);
+            CHECK(trapezoid_2s(2) == 2);
+            CHECK(trapezoid_2s(3) == 1);
+            CHECK(trapezoid_2s(4) == 0);
+            // Cross correlation
+            auto trapezoid_r1sa = cross_correlation(indicator, indicator_shifted);
+            CHECK(trapezoid_r1sa.non_zero_domain() == Interval<Bound::Open, Bound::Closed>{-1., 3.});
+            CHECK(trapezoid_r1sa(-1) == 0);
+            CHECK(trapezoid_r1sa(0) == 1);
+            CHECK(trapezoid_r1sa(1) == 2);
+            CHECK(trapezoid_r1sa(2) == 1);
+            CHECK(trapezoid_r1sa(3) == 0);
+            auto trapezoid_r1sb = cross_correlation(indicator_shifted, indicator);
+            CHECK(trapezoid_r1sb.non_zero_domain() == Interval<Bound::Open, Bound::Closed>{-3., 1.});
+            CHECK(trapezoid_r1sb(-3) == 0);
+            CHECK(trapezoid_r1sb(-2) == 1);
+            CHECK(trapezoid_r1sb(-1) == 2);
+            CHECK(trapezoid_r1sb(0) == 1);
+            CHECK(trapezoid_r1sb(1) == 0);
+            auto trapezoid_r2s = cross_correlation(indicator_shifted, indicator_shifted);
+            CHECK(trapezoid_r2s.non_zero_domain() == Interval<Bound::Open, Bound::Closed>{-2., 2.});
+            CHECK(trapezoid_r2s(-2) == 0);
+            CHECK(trapezoid_r2s(-1) == 1);
+            CHECK(trapezoid_r2s(0) == 2);
+            CHECK(trapezoid_r2s(1) == 1);
+            CHECK(trapezoid_r2s(2) == 0);
+        }
+        {
+            // Full trapezoids
+            auto trapezoid = convolution(indicator, indicator_large);
+            CHECK(trapezoid.non_zero_domain() == Interval<Bound::Open, Bound::Closed>{-3., 3.});
+            CHECK(trapezoid(-4) == 0);
+            CHECK(trapezoid(-3) == 0);
+            CHECK(trapezoid(-2) == 1);
+            CHECK(trapezoid(-1) == 2);
+            CHECK(trapezoid(0) == 2);
+            CHECK(trapezoid(1) == 2);
+            CHECK(trapezoid(2) == 1);
+            CHECK(trapezoid(3) == 0);
+            CHECK(trapezoid(4) == 0);
+            auto r_trapezoid = cross_correlation(indicator, indicator_large);
+            for(int x = -4; x <= 4; x += 1) {
+                CHECK(trapezoid(x) == r_trapezoid(x));
+            }
+        }
+    }
     TEST_CASE("integral") {
         // Simple constant function
         const auto indicator = Indicator<Bound::Closed, Bound::Closed>{{0., 42.}};
@@ -253,90 +369,6 @@ TEST_SUITE("shape") {
     }
 // OLD tests
 #if 0
-    TEST_CASE("combinators") {
-        const auto interval = IntervalIndicator::with_half_width(1); // [-1, 1]
-        const auto scaled_2 = scaled(2, interval);
-        CHECK(scaled_2(0) == 2);
-        CHECK(scaled_2(1) == 2);
-        CHECK(scaled_2(2) == 0);
-        CHECK(scaled_2.non_zero_domain() == interval.non_zero_domain());
-        const auto shifted_forward = shifted(1, interval);
-        CHECK(shifted_forward(-2) == 0);
-        CHECK(shifted_forward(-1) == 0);
-        CHECK(shifted_forward(0) == 1);
-        CHECK(shifted_forward(1) == 1);
-        CHECK(shifted_forward(2) == 1);
-        CHECK(shifted_forward(3) == 0);
-        CHECK(shifted_forward.non_zero_domain() == ClosedInterval{0, 2});
-        const auto rev = reversed(shifted_forward); // Use the non symmetric shifted_forward shape
-        CHECK(rev(-3) == 0);
-        CHECK(rev(-2) == 1);
-        CHECK(rev(-1) == 1);
-        CHECK(rev(0) == 1);
-        CHECK(rev(1) == 0);
-        CHECK(rev(2) == 0);
-        CHECK(rev.non_zero_domain() == ClosedInterval{-2, 0});
-    }
-    TEST_CASE("triangles") {
-        const auto pos_tri = PositiveTriangle(2);
-        CHECK(pos_tri(-1) == 0);
-        CHECK(pos_tri(0) == 0);
-        CHECK(pos_tri(1) == 1);
-        CHECK(pos_tri(2) == 2);
-        CHECK(pos_tri(3) == 0);
-        const auto neg_tri = NegativeTriangle(2);
-        CHECK(neg_tri(-3) == 0);
-        CHECK(neg_tri(-2) == 2);
-        CHECK(neg_tri(-1) == 1);
-        CHECK(neg_tri(0) == 0);
-        CHECK(neg_tri(1) == 0);
-    }
-    TEST_CASE("trapezoid") {
-        const auto interval = IntervalIndicator::with_half_width(1); // [-1, 1]
-        const auto degenerate_trapezoid = convolution(interval, interval);
-        // The trapezoid is a simple triangle centered on 0 (no central section).
-        const auto degenerate_trapezoid_nzd = degenerate_trapezoid.non_zero_domain();
-        CHECK(degenerate_trapezoid_nzd.left == -degenerate_trapezoid_nzd.right);
-        CHECK(degenerate_trapezoid_nzd.right == 2 * interval.half_width);
-        CHECK(degenerate_trapezoid.half_base == 0);
-        CHECK(degenerate_trapezoid.height == 2); // Max height == integral_x interval(x) == 1*width == 2
-        // Graph
-        CHECK(degenerate_trapezoid(-3) == 0);
-        CHECK(degenerate_trapezoid(-2) == 0);
-        CHECK(degenerate_trapezoid(-1) == 1);
-        CHECK(degenerate_trapezoid(0) == 2);
-        CHECK(degenerate_trapezoid(1) == 1);
-        CHECK(degenerate_trapezoid(2) == 0);
-        CHECK(degenerate_trapezoid(3) == 0);
-        // Non degenerate trapezoid
-        const auto trapezoid = convolution(interval, IntervalIndicator::with_half_width(2));
-        CHECK(trapezoid(-4) == 0);
-        CHECK(trapezoid(-3) == 0);
-        CHECK(trapezoid(-2) == 1);
-        CHECK(trapezoid(-1) == 2);
-        CHECK(trapezoid(0) == 2);
-        CHECK(trapezoid(1) == 2);
-        CHECK(trapezoid(2) == 1);
-        CHECK(trapezoid(3) == 0);
-        CHECK(trapezoid(4) == 0);
-        // Components
-        const auto left_tri = component(trapezoid, Trapezoid::LeftTriangle{});
-        CHECK(left_tri(-3) == 0);
-        CHECK(left_tri(-2) == 1);
-        CHECK(left_tri(-1) == 2);
-        CHECK(left_tri(0) == 0);
-        const auto central_block = component(trapezoid, Trapezoid::CentralBlock{});
-        CHECK(central_block(-2) == 0);
-        CHECK(central_block(-1) == 2);
-        CHECK(central_block(0) == 2);
-        CHECK(central_block(1) == 2);
-        CHECK(central_block(2) == 0);
-        const auto right_tri = component(trapezoid, Trapezoid::RightTriangle{});
-        CHECK(right_tri(0) == 0);
-        CHECK(right_tri(1) == 2);
-        CHECK(right_tri(2) == 1);
-        CHECK(right_tri(3) == 0);
-    }
     TEST_CASE("ConvolutionIntervalPositiveTriangle") {
         {
             // Case l <= c

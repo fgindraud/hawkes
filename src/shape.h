@@ -34,51 +34,6 @@ using ::PointSpace;
 template <typename Shape> using NzdIntervalType = decltype(std::declval<Shape>().non_zero_domain());
 
 #if 0
-inline double square(double x) {
-    return x * x;
-}
-inline double cube(double x) {
-    return x * square(x);
-}
-
-/* Triangle (0,0), (side, 0), (side, side).
- */
-struct PositiveTriangle {
-    PointSpace side; // [0, inf[
-
-    PositiveTriangle(PointSpace side) : side(side) { assert(side >= 0.); }
-
-    ClosedInterval non_zero_domain() const { return {0., side}; }
-    double operator()(Point x) const {
-        if(non_zero_domain().contains(x)) {
-            return x;
-        } else {
-            return 0.;
-        }
-    }
-};
-
-/* Triangle (0,0), (-side, 0), (-side, side).
- */
-struct NegativeTriangle {
-    PointSpace side; // [0, inf[
-
-    NegativeTriangle(PointSpace side) : side(side) { assert(side >= 0.); }
-
-    ClosedInterval non_zero_domain() const { return {-side, 0.}; }
-    double operator()(Point x) const {
-        if(non_zero_domain().contains(x)) {
-            return -x;
-        } else {
-            return 0.;
-        }
-    }
-};
-inline auto as_positive_triangle(NegativeTriangle t) {
-    // NegativeTriangle(side)(x) == PositiveTriangle(side)(x)
-    return reversed(PositiveTriangle{t.side});
-}
-
 /* Trapezoid with a block (2*half_base, height) with a PositiveTriangle(height) on the left and a negative on the right.
  */
 struct Trapezoid {
@@ -493,11 +448,11 @@ template <typename L, typename R> inline auto convolution_extract_scale(const L 
  * Explicitly known coefficients in fixed cases: trapezoid, etc...
  */
 inline void append_convolution_components(
-    std::vector<Polynom<Bound::Open, Bound::Closed>> & components, Polynomial lhs, Polynomial rhs) {
-    // q is the polynom with the smallest width
-    const auto compare_widths = [](const auto & lhs, const auto & rhs) { return lhs.width() < rhs.width(); };
-    const Polynomial & p = std::max(lhs, rhs, compare_widths);
-    const Polynomial & q = std::min(lhs, rhs, compare_widths);
+    std::vector<Polynom<Bound::Open, Bound::Closed>> & components, Polynomial p, Polynomial q) {
+    // Ensure q is the polynom with the smallest width
+    if(p.width() < q.width()) {
+        std::swap(p, q);
+    }
     if(q.width() == 0.) {
         return; // Optimization : convolution with zero width support is a zero value.
     }
@@ -643,7 +598,7 @@ template <typename L, typename R> inline auto cross_correlation_extract_scale(co
  * TODO better scheme ? compute formulas for cross_correlation ?
  */
 template <Bound lb, Bound rb> inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
-    Indicator<lb, rb> lhs, Polynomial rhs) {
+    const Indicator<lb, rb> & lhs, Polynomial rhs) {
     std::vector<Polynom<Bound::Open, Bound::Closed>> components;
     append_convolution_components(components, reverse(lhs), rhs);
     return {std::move(components)};
@@ -665,7 +620,7 @@ inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_b
 }
 
 template <Bound lb, Bound rb> inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
-    Indicator<lb, rb> lhs, const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & rhs) {
+    const Indicator<lb, rb> & lhs, const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & rhs) {
     std::vector<Polynom<Bound::Open, Bound::Closed>> components;
     const auto reverse_lhs = reverse(lhs);
     for(const auto & rhs_component : rhs.components) {
