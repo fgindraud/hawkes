@@ -55,9 +55,19 @@ template <Bound lb, Bound rb> struct Indicator {
 };
 
 /* Polynom on a restricted interval.
- * f(x) = if(x in interval) { sum_i coefficients[i] x^i } else { 0 }
+ * interval = [center - half_width, center + half_width]
+ * P(x) = if(x in interval) { sum_i coefficients[i] (x - interval.center)^i } else { 0 }
+ *
+ * A previous definition was P(x) = sum_i a_k x^k for x in interval.
+ * For an interval far from 0, and P shape "small" : max{|P(x)| for x in interval} << |interval.center|.
+ * a_0 would need to be huge to compensate x^N_p at the interval level and ensure a "small" shape.
+ * This means generating a "small" difference from multiple huge floating point numbers.
+ * This is usually very imprecise. Tests for continuity of convolution failed due to this.
+ *
+ * To reduce this imprecision, the "origin" of the polynom is fixed at the interval center.
+ * Thus the above expression. This is equivalent to a 0-centered polynom, shifted to interval center.
  */
-inline double compute_polynom_value(Point x, span<const double> coefficients) {
+inline double compute_polynom_value(double x, span<const double> coefficients) {
     assert(coefficients.size() > 0);
     // Horner strategy
     size_t i = coefficients.size() - 1;
@@ -72,9 +82,6 @@ template <Bound lb, Bound rb> struct Polynom {
     Interval<lb, rb> interval;
     std::vector<double> coefficients; // size() > 0
 
-    // With zeroed coefficients
-    Polynom(Interval<lb, rb> interval_, size_t degree) : interval(interval_), coefficients(degree + 1, 0.) {}
-    // With values
     Polynom(Interval<lb, rb> interval_, std::vector<double> && coefficients_)
         : interval(interval_), coefficients(std::move(coefficients_)) {
         assert(coefficients.size() > 0);
@@ -85,7 +92,7 @@ template <Bound lb, Bound rb> struct Polynom {
     Interval<lb, rb> non_zero_domain() const { return interval; }
     double operator()(Point x) const {
         if(interval.contains(x)) {
-            return compute_polynom_value(x, make_span(coefficients));
+            return compute_polynom_value(x - interval.center(), make_span(coefficients));
         } else {
             return 0.;
         }
@@ -111,12 +118,13 @@ template <Bound lb, Bound rb> Indicator<rb, lb> reverse(const Indicator<lb, rb> 
     return {-indicator.interval};
 }
 template <Bound lb, Bound rb> Polynom<rb, lb> reverse(const Polynom<lb, rb> & polynom) {
-    // Q(x) = P(-x) = sum_k a_k (-x)^k = sum_k (a_k (-1)^k) x^k for -x in nzd(P) <=> x in -nzd(P).
+    // Q(x) = P(-x) = sum_k a_k (-x - origin)^k = sum_k (a_k (-1)^k) (x - -origin)^k for -x in nzd(P) <=> x in -nzd(P).
     // Copy and invert coefficients for odd k.
     auto coefficients = std::vector<double>(polynom.coefficients);
     for(size_t k = 1; k < coefficients.size(); k += 2) {
         coefficients[k] = -coefficients[k];
     }
+    // origin = center(nzd(P)) <=> -origin = center(-nzd(P)), deduced from interval
     return {-polynom.interval, std::move(coefficients)};
 }
 
@@ -126,8 +134,11 @@ template <Bound lb, Bound rb> Polynom<rb, lb> reverse(const Polynom<lb, rb> & po
  * Defined entirely through overloads on specific shape classes.
  * All base shapes have a builtin shifting (interval).
  */
-template <Bound lb, Bound rb> Indicator<rb, lb> shifted(PointSpace s, const Indicator<lb, rb> & ind) {
+template <Bound lb, Bound rb> Indicator<lb, rb> shifted(PointSpace s, const Indicator<lb, rb> & ind) {
     return {s + ind.interval};
+}
+template <Bound lb, Bound rb> Polynom<lb, rb> shifted(PointSpace s, const Polynom<lb, rb> & p) {
+    return {s + p.interval, std::vector<double>{p.coefficients}};
 }
 
 /* Scale y dimension
@@ -168,7 +179,6 @@ template <typename Inner> struct Add<std::vector<Inner>> {
             });
             components.erase(new_end, components.end());
         }
-        // TODO sum polynoms could merge polynoms with same support.
         if(!components.empty()) {
             // Determine the non zero domain
             union_non_zero_domain = components[0].non_zero_domain();
@@ -207,22 +217,21 @@ constexpr double indicator_polynomial_coefficients[1] = {1.};
 // Temporary reference to a shape similar to a polynom without bound types.
 // Supports implicit conversion from valid shapes.
 struct Polynomial {
-    Point interval_left;
-    Point interval_right;
+    Point origin;
+    PointSpace half_width;
     span<const double> coefficients;
 
     template <Bound lb, Bound rb> Polynomial(const Indicator<lb, rb> & indicator)
-        : interval_left(indicator.interval.left),
-          interval_right(indicator.interval.right),
+        : origin(indicator.interval.center()),
+          half_width(indicator.interval.width() / 2.),
           coefficients(make_span(indicator_polynomial_coefficients)) {}
 
     template <Bound lb, Bound rb> Polynomial(const Polynom<lb, rb> & polynom)
-        : interval_left(polynom.interval.left),
-          interval_right(polynom.interval.right),
+        : origin(polynom.interval.center()),
+          half_width(polynom.interval.width() / 2.),
           coefficients(make_span(polynom.coefficients)) {}
 
     size_t degree() const { return coefficients.size() - 1; }
-    PointSpace width() const { return interval_right - interval_left; }
 };
 
 struct BinomialCoefficientsUpToN {
@@ -294,97 +303,88 @@ template <typename L, typename R> inline auto convolution_extract_scale(const L 
 
 /* Computes the three polynomial components of a convolution.
  *
- * Components are defined on consecutive intervals: ]0,qw] ]qw,pw] ]pw,pw+qw].
- * Open-Closed bounds are chosen so the sum contains 1 value at points {qw, pw} (borders).
- * Open-Closed is chosen instead of Closed-Open to better fit hawkes computation (cases with ]0,?]).
- * The Open bound on ]0,qw] is ok, as left_part(0) == a_0 == 0 by construction of the formulas.
+ * First the shiftings of p/q are extracted to outer_shifting (applied afterwards).
+ * Then we consider p/q both centered on 0, which is a simpler case.
+ * This generates 3 components, each polynomial on a "local" interval shifted from 0.
+ * For each component, the convolution integral is expressed as a polynom of x-interval.center (shifted).
+ * This is used to determine the coefficients of the component from the parameters of p/q.
+ * Finally the component is created from its coefficients and "global" interval ("local" interval + outer_shift).
  *
- * Testable properties:
- * Matching values at component borders
- * 0s at points {0, qw + pw} ; the convolution on the sides of lhs/rhs nzds.
- * Explicitly known coefficients in fixed cases: trapezoid, etc...
+ * 3 consecutive components defined on ]-hwp-hwq,-hwp+hwq] ]-hwp+hwq,hwp-hwq] ]hwp-hwq,hwqp+hwq] (outer_shift ignored).
+ * Open-Closed bounds are chosen so the sum contains 1 value at internal border points.
+ * Open-Closed is chosen instead of Closed-Open to better fit hawkes computation (cases with ]0,?]).
+ * The Open bound on left component is ok, as left_part(-hwp-hwq) == 0 by construction of the formulas.
  */
 inline void append_convolution_components(
     std::vector<Polynom<Bound::Open, Bound::Closed>> & components, Polynomial p, Polynomial q) {
     // Ensure q is the polynom with the smallest width
-    if(p.width() < q.width()) {
+    if(p.half_width < q.half_width) {
         std::swap(p, q);
     }
-    if(q.width() == 0.) {
+    if(q.half_width == 0.) {
         return; // Optimization : convolution with zero width support is a zero value.
     }
     // Useful numerical tools / values
+    const PointSpace outer_shifting = p.origin + q.origin;
     const size_t border_parts_degree = p.degree() + q.degree() + 1;
     const size_t center_part_degree = p.degree();
     const auto binomial = BinomialCoefficientsUpToN(border_parts_degree);
-    const auto ipl_powers = PowersUpToN(border_parts_degree, p.interval_left);
-    const auto ipr_powers = PowersUpToN(border_parts_degree, p.interval_right);
-    const auto iql_powers = PowersUpToN(border_parts_degree, q.interval_left);
-    const auto iqr_powers = PowersUpToN(border_parts_degree, q.interval_right);
+    const auto hwp_powers = PowersUpToN(border_parts_degree, p.half_width);
+    const auto hwq_powers = PowersUpToN(border_parts_degree, q.half_width);
     const auto minus_1_power = [](size_t n) -> double { return n % 2 == 0 ? 1. : -1.; };
-    // Left part
+    // Left part on local interval ]-hwp-hwq, -hwp+hwq].
     {
         auto coefficients = std::vector<double>(border_parts_degree + 1, 0.);
         for(size_t k = 0; k <= p.degree(); ++k) {
             for(size_t j = 0; j <= q.degree(); ++j) {
                 for(size_t i = 0; i <= k; ++i) {
-                    const size_t ij1 = i + j + 1;
-                    const double factor =
-                        p.coefficients[k] * q.coefficients[j] * binomial(i, k) * minus_1_power(i) / double(ij1);
-                    coefficients[k - i] += -factor * iql_powers(ij1);
-                    for(size_t l = 0; l <= ij1; ++l) {
-                        coefficients[k + j + 1 - l] += factor * binomial(l, ij1) * minus_1_power(l) * ipl_powers(l);
+                    for(size_t l = 0; l <= k - i; ++l) {
+                        const double factor = p.coefficients[k] * q.coefficients[j] * hwp_powers(l) * binomial(i, k) *
+                                              binomial(l, k - i) * minus_1_power(i + l) / double(i + j + 1);
+                        coefficients[k + j + 1 - l] += factor;
+                        coefficients[(k - i) - l] += factor * minus_1_power(i + j) * hwq_powers(i + j + 1);
                     }
                 }
             }
         }
         components.emplace_back(
-            Interval<Bound::Open, Bound::Closed>{
-                p.interval_left + q.interval_left,
-                p.interval_left + q.interval_right,
-            },
+            (outer_shifting - p.half_width) + Interval<Bound::Open, Bound::Closed>{-q.half_width, q.half_width},
             std::move(coefficients));
     }
-    // Center part. Optimization : avoid computing it if zero width (would be discarded).
-    if(p.width() > q.width()) {
+    // Center part on local interval ]-hwp+hwq,hwp-hwq].
+    // Optimization : avoid computing it if zero width (would be discarded).
+    if(p.half_width > q.half_width) {
         auto coefficients = std::vector<double>(center_part_degree + 1, 0.);
         for(size_t k = 0; k <= p.degree(); ++k) {
             for(size_t j = 0; j <= q.degree(); ++j) {
                 for(size_t i = 0; i <= k; ++i) {
-                    const size_t ij1 = i + j + 1;
                     coefficients[k - i] += p.coefficients[k] * q.coefficients[j] * binomial(i, k) *
-                                           (minus_1_power(i) / double(ij1)) * (iqr_powers(ij1) - iql_powers(ij1));
+                                           hwq_powers(i + j + 1) * (1. - minus_1_power(i + j + 1)) * minus_1_power(i) /
+                                           double(i + j + 1);
                 }
             }
         }
+        const PointSpace half_width = p.half_width - q.half_width;
         components.emplace_back(
-            Interval<Bound::Open, Bound::Closed>{
-                p.interval_left + q.interval_right,
-                p.interval_right + q.interval_left,
-            },
-            std::move(coefficients));
+            outer_shifting + Interval<Bound::Open, Bound::Closed>{-half_width, half_width}, std::move(coefficients));
     }
-    // Right part
+    // Right part on local interval ]hwp-hwq, hwp+hwq].
     {
         auto coefficients = std::vector<double>(border_parts_degree + 1, 0.);
         for(size_t k = 0; k <= p.degree(); ++k) {
             for(size_t j = 0; j <= q.degree(); ++j) {
                 for(size_t i = 0; i <= k; ++i) {
-                    const size_t ij1 = i + j + 1;
-                    const double factor =
-                        p.coefficients[k] * q.coefficients[j] * binomial(i, k) * minus_1_power(i) / double(ij1);
-                    coefficients[k - i] += factor * iqr_powers(ij1);
-                    for(size_t l = 0; l <= ij1; ++l) {
-                        coefficients[k + j + 1 - l] += -factor * binomial(l, ij1) * minus_1_power(l) * ipr_powers(l);
+                    for(size_t l = 0; l <= k - i; ++l) {
+                        const double factor = p.coefficients[k] * q.coefficients[j] * hwp_powers(l) * binomial(i, k) *
+                                              binomial(l, k - i) * minus_1_power(i) / double(i + j + 1);
+                        coefficients[k + j + 1 - l] += -factor;
+                        coefficients[(k - i) - l] += factor * hwq_powers(i + j + 1);
                     }
                 }
             }
         }
         components.emplace_back(
-            Interval<Bound::Open, Bound::Closed>{
-                p.interval_right + q.interval_left,
-                p.interval_right + q.interval_right,
-            },
+            (outer_shifting + p.half_width) + Interval<Bound::Open, Bound::Closed>{-q.half_width, q.half_width},
             std::move(coefficients));
     }
 }
@@ -522,21 +522,22 @@ template <Bound lb, Bound rb> inline Indicator<lb, rb> indicator_approximation(c
 }
 
 // Compute integral of polynomial or sums of polynomials
-inline double integral(Polynomial polynomial) {
-    // int_R sum_i a_i x^i = int_[0,w] sum_i a_i x^i = sum_i a_i w^(i+1) / (i+1)
-    // Shift is ignored.
-    const double width = polynomial.width();
-    const span<const double> coefficients = polynomial.coefficients;
-    assert(coefficients.size() > 0);
-    // Horner strategy : sum_i a_i w^i / (i+1)
-    size_t i = coefficients.size() - 1;
-    double r = coefficients[i] / double(i + 1);
+inline double integral(Polynomial p) {
+    // int_R P = int_I sum_i a_i (x - I.center)^i
+    //         = int_[-hw,hw] sum_i a_i x^i
+    //         = sum_i a_i hw^(i+1) (1 - (-1)^i+1) / (i+1)
+    //         = 2 * sum_i a_2i hw^(2i+1) / (2i+1)
+    assert(p.coefficients.size() > 0);
+    const double hw2 = p.half_width * p.half_width;
+    // Horner strategy : sum_i a_2i hw^2i / (2i+1)
+    size_t i = (p.coefficients.size() - 1) / 2;
+    double r = p.coefficients[2 * i] / double(2 * i + 1);
     while(i > 0) {
         i -= 1;
-        r = coefficients[i] / double(i + 1) + width * r;
+        r = p.coefficients[2 * i] / double(2 * i + 1) + hw2 * r;
     }
     // Add final width multiplier
-    return r * width;
+    return r * 2. * p.half_width;
 }
 template <typename T> inline double integral(const Add<std::vector<T>> & sum) {
     double r = 0;

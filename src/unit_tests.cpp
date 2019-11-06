@@ -88,25 +88,23 @@ struct TriangleShape {
 };
 static double raw_evaluate_at(shape::Polynomial p, Point x) {
     // ignore nzd, used to test continuity between convolution components
-    return shape::compute_polynom_value(x, p.coefficients);
+    return shape::compute_polynom_value(x - p.origin, p.coefficients);
 }
 static shape::Polynom<Bound::Closed, Bound::Closed> positive_triangle(PointSpace size) {
     return {
         {0., size},
-        {0., 1.},
+        {size / 2., 1.},
     };
 }
 static shape::Polynom<Bound::Closed, Bound::Closed> negative_triangle(PointSpace size) {
     return {
         {-size, 0.},
-        {0., -1.},
+        {size / 2., -1.},
     };
 }
 
 TEST_SUITE("shape") {
     using namespace shape;
-
-    // FIXME tests for convolution/correlation of shapes
 
     TEST_CASE("reverse") {
         auto p = Polynom<Bound::Closed, Bound::Closed>{
@@ -345,15 +343,15 @@ TEST_SUITE("shape") {
         // Linear function with equal time negative and positive
         const auto linear_with_0_integral = Polynom<Bound::Closed, Bound::Closed>{
             {0., 2.},
-            {-1., 1.},
+            {0., 1.},
         };
         CHECK(integral(linear_with_0_integral) == doctest::Approx(0.));
         // Degree 2 simple function, integral = x^3/3
         const auto degree_2 = Polynom<Bound::Closed, Bound::Closed>{
-            {0., 10.},
+            {-10., 10.},
             {0., 0., 1.},
         };
-        CHECK(integral(degree_2) == doctest::Approx((10. * 10. * 10.) / 3.));
+        CHECK(integral(degree_2) == doctest::Approx(2. * (10. * 10. * 10.) / 3.));
     }
     TEST_CASE("indicator_approximation") {
         // Trivial case
@@ -361,17 +359,14 @@ TEST_SUITE("shape") {
         const Indicator<Bound::Closed, Bound::Closed> indicator_a = indicator_approximation(indicator);
         CHECK(indicator_a.interval == indicator.interval);
         // Linear function, "climbing" triangle of size 2.
-        const auto linear = Polynom<Bound::Closed, Bound::Closed>{
-            {0., 2.},
-            {0., 1.},
-        };
+        const auto linear = positive_triangle(2.);
         const auto linear_a = indicator_approximation(linear);
         CHECK(linear_a.non_zero_domain() == linear.non_zero_domain());
         CHECK(linear_a(0.) == doctest::Approx(1.));
         // Sum of linears : positive then negative slopes of lengths 2
         const auto mountain = Add<std::vector<Polynom<Bound::Open, Bound::Closed>>>{{
-            Polynom<Bound::Open, Bound::Closed>{{0., 2.}, {0., 1.}},  // Positive slope
-            Polynom<Bound::Open, Bound::Closed>{{2., 4.}, {2., -1.}}, // Negative slope
+            Polynom<Bound::Open, Bound::Closed>{{0., 2.}, {1., 1.}},  // Positive slope
+            Polynom<Bound::Open, Bound::Closed>{{2., 4.}, {1., -1.}}, // Negative slope
         }};
         const auto mountain_a = indicator_approximation(mountain);
         CHECK(mountain_a.non_zero_domain() == Interval<Bound::Open, Bound::Closed>{0., 4.});

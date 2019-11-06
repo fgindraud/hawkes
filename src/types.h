@@ -91,6 +91,7 @@ template <Bound lb, Bound rb> struct Interval {
     Interval(PointSpace left_, PointSpace right_) : left(left_), right(right_) { assert(left <= right); }
 
     PointSpace width() const noexcept { return right - left; }
+    Point center() const noexcept { return (left + right) / 2.; }
     bool in_left_bound(Point x) const noexcept { return BoundCompare<lb>()(left, x); }
     bool in_right_bound(Point x) const noexcept { return BoundCompare<rb>()(x, right); }
     bool contains(Point x) const noexcept { return BoundCompare<lb>()(left, x) && BoundCompare<rb>()(x, right); }
