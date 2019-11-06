@@ -9,6 +9,8 @@
 \newcommand\Shifted[2]{\Delta_{#1}(#2)}
 \newcommand\Reversed[1]{\overline{#1}} %TODO find a nice way to replace the line with a leftrightarrow
 
+\newcommand\Indicator[1]{\mathbbm{1}_{#1}}
+
 \newcommand\SymSquare{\begin{tikzpicture}[baseline=0.5ex]%
         \draw (0,0) -- (0,1em) -- (1em,1em) -- (1em,0) -- cycle;
 \end{tikzpicture}}
@@ -56,7 +58,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \title{Convolution formulas using shapes}
 \author{Francois Gindraud}
-\date{}
+\date{V3}
 \begin{document}
 \maketitle
 
@@ -76,13 +78,8 @@ Cons:
     \item More verbose than the flat strategy.
 \end{itemize}
 
-\paragraph{Convolution}
-Convolution is noted using the $\Convolution$ operator, with the usual definition:
-\[ \left[ f \Convolution g \right](x) = \IntR{f(x - t) g(t)}{t} \]
-Convolution is commutative and associative.
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Combinators}
+\section{Function operations}
 
 \paragraph{Time shifting}
 The time shift combinator of shift $h$ moves the shape $f$ forward along the time axis by $h$.
@@ -119,15 +116,17 @@ Convolution:
     \Reversed{f \Convolution g}(x) = \IntR{f(-x-t) g(t)}{t} = \IntR{f(-x+T) g(-T)}{T} = \left[ \Reversed{f} \Convolution \Reversed{g} \right] (x)
 \]
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Basic shapes}
+\paragraph{Convolution}
+Convolution is noted using the $\Convolution$ operator, with the usual definition:
+\[ \left[ f \Convolution g \right](x) = \IntR{f(x - t) g(t)}{t} \]
+Convolution is commutative and associative.
 
-%FIXME new indicator and Polynom
+\paragraph{Cross-correlation}
+Cross correlation is noted using the $\Correlation$ operator, with the usual definition:
+\[ \left[ f \Correlation g \right] (x) = \IntR{f(t-x) g(t)}{t} \]
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Cross-correlation}
-The \emph{cross-correlation} of two functions is defined by:
-\[ \left[ f \Correlation g \right] (x) = \IntR{f(t-x) g(t)}{t} = \IntR{\Reversed{f}(x-t) g(t)}{t} = \left[ \Reversed{f} \Convolution g \right] (x) \]
+It can be expressed using the convolution:
+\[ \left[ f \Correlation g \right] (x) = \IntR{\Reversed{f}(x-t) g(t)}{t} = \left[ \Reversed{f} \Convolution g \right] (x) \]
 
 Not commutative:
 \[
@@ -143,7 +142,63 @@ Relation with shifting is simple but not symmetric:
 \[ f \Correlation \Shifted{h}{g} = \Reversed{f} \Convolution \Shifted{h}{g} = \Shifted{h}{\Reversed{f} \Convolution g} = \Shifted{h}{f \Correlation g} \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Basic shapes}
+
+\paragraph{Indicator function}
+
+The \emph{indicator function} for an interval $I = [a,b]$ is a rectangle of height $1$, horizontally from $a$ to $b$.
+The interval can also have open bounds, changing the function value at the bounds, but not the overall shape.
+\begin{center}\begin{tikzpicture}
+    \SizedGridAxis{-0.5}{5.5}{-0.5}{1.7}
+    \begin{scope}[color=blue]
+        \draw (FuncStart) -- (1.5,0) coordinate(a) -- (1.5,1) -- (3.5,1) -- (3.5,0) coordinate(b) -- (FuncEnd);
+        \node[below] at (a) {$a$};
+        \node[below] at (b) {$b$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[
+    \Indicator{[a,b]}(x) = \begin{cases}
+        1 & x \in \left[ a, b \right] \\
+        0 & \text{otherwise}
+    \end{cases}
+\]
+
+\[ \Reversed{\Indicator{[a,b]}}(x) = \Indicator{[a,b]}(-x) = \Indicator{[-b, -a]}(x) \]
+\[ \Shifted{h}{\Indicator{[a,b]}}(x) = \Indicator{[a,b]}(x - h) = \Indicator{[a + h, b + h]}(x) = \Indicator{[a,b] + h}(x) \]
+
+\paragraph{Polynom chunk}
+
+A \emph{polynom chunk} is function whose value is a polynom on a interval $I$, and $0$ elsewhere.
+The polynom itself is defined with an origin at the center of $I$ : this choice is designed to reduce floating point errors during computation, as the polynom will be evaluated "as close to zero" as feasible.
+\begin{center}\begin{tikzpicture}
+    \SizedGridAxis{-0.5}{5.5}{-0.5}{2.7}
+    \begin{scope}[color=blue]
+        \draw (FuncStart) -- (1.5,0) coordinate(a) parabola[bend at end] (2.5,2) parabola (3.5,1) -- (3.5,0) coordinate(b) -- (FuncEnd);
+        \node[below] at (a) {$a$};
+        \node[below] at (b) {$b$};
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[
+    P_{I,a_k}(x) = \begin{cases}
+        \sum_{0 \le k \le N_P} a_k (x - \mathit{center}(I))^k & x \in I \\
+        0 & \text{otherwise}
+    \end{cases}
+\]
+
+Shifting does not change coefficients as the polynom is computed relative to the interval center:
+\[ \Shifted{h}{P_{I,a_k}} = P_{h+I, a_k} \]
+
+Reversion inverses the interval and odd coefficients:
+\[ \Reversed{P_{I,a_k}}(x) = \sum_k a_k (-x)^k = \sum_k a_k (-1)^k x^k = P_{-I, a_k (-1)^k}(x) \]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Convolution \& Cross-correlation}
+
+%FIXME
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Application to the Hawkes computations}
+%FIXME update
 
 \subsection{Histogram base with interval kernel}
 Histogram function base is almost a shifted and scaled indicator.
