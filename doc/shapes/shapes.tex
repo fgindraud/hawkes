@@ -1,6 +1,7 @@
 \documentclass[a4paper,10pt]{article}
 \usepackage[utf8]{inputenc}
 
+\usepackage[margin=1in,includefoot,footskip=30pt]{geometry}
 \usepackage{tikz}
 \usepackage{bbm}
 \usepackage{amsmath}
@@ -81,6 +82,11 @@ Cons:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Function operations}
 
+\paragraph{Convolution}
+Convolution is noted using the $\Convolution$ operator, with the usual definition:
+\[ \left[ f \Convolution g \right](x) = \IntR{f(x - t) g(t)}{t} \]
+Convolution is commutative and associative.
+
 \paragraph{Time shifting}
 The time shift combinator of shift $h$ moves the shape $f$ forward along the time axis by $h$.
 For a shape $f$ \emph{centered} on $c$, $\Shifted{h}{f}$ is \emph{centered} on $c+h$.
@@ -116,10 +122,13 @@ Convolution:
     \Reversed{f \Convolution g}(x) = \IntR{f(-x-t) g(t)}{t} = \IntR{f(-x+T) g(-T)}{T} = \left[ \Reversed{f} \Convolution \Reversed{g} \right] (x)
 \]
 
-\paragraph{Convolution}
-Convolution is noted using the $\Convolution$ operator, with the usual definition:
-\[ \left[ f \Convolution g \right](x) = \IntR{f(x - t) g(t)}{t} \]
-Convolution is commutative and associative.
+\paragraph{Sum}
+The sum combinator sums the value of multiple shapes.
+\[ [f+g](x) = f(x) + g(x) \]
+Distributes with most operations:
+\[ f \Convolution (g + h) = f \Convolution g + f \Convolution h \]
+\[ \Shifted{s}{f + g} = \Shifted{s}{f} + \Shifted{s}{g} \]
+\[ \Reversed{f + g} = \Reversed{f} + \Reversed{g} \]
 
 \paragraph{Cross-correlation}
 Cross correlation is noted using the $\Correlation$ operator, with the usual definition:
@@ -169,7 +178,7 @@ The interval can also have open bounds, changing the function value at the bound
 \paragraph{Polynom chunk}
 
 A \emph{polynom chunk} is function whose value is a polynom on a interval $I$, and $0$ elsewhere.
-The polynom itself is defined with an origin at the center of $I$ : this choice is designed to reduce floating point errors during computation, as the polynom will be evaluated "as close to zero" as feasible.
+The polynom itself is defined with an origin at the center of $I$ : this choice is designed to reduce floating point errors during computation, as the polynom will be evaluated "as close to its zero" as feasible.
 \begin{center}\begin{tikzpicture}
     \SizedGridAxis{-0.5}{5.5}{-0.5}{2.7}
     \begin{scope}[color=blue]
@@ -185,55 +194,197 @@ The polynom itself is defined with an origin at the center of $I$ : this choice 
     \end{cases}
 \]
 
-Shifting does not change coefficients as the polynom is computed relative to the interval center:
-\[ \Shifted{h}{P_{I,a_k}} = P_{h+I, a_k} \]
+Shifting does not change coefficients:
+\[ \begin{split}
+    \Shifted{h}{P_{I,a_k}}(x)
+    &= \sum_{0 \le k \le N_P} a_k ((x - h) - \mathit{center}(I))^k \qquad x - h \in I \\
+    &= \sum_{0 \le k \le N_P} a_k (x - (h + \mathit{center}(I)))^k \qquad x \in I + h \\
+    &= \sum_{0 \le k \le N_P} a_k (x - \mathit{center}(I + h))^k \qquad x \in I + h \\
+    &= P_{h+I, a_k}(x)
+\end{split} \]
 
 Reversion inverses the interval and odd coefficients:
-\[ \Reversed{P_{I,a_k}}(x) = \sum_k a_k (-x)^k = \sum_k a_k (-1)^k x^k = P_{-I, a_k (-1)^k}(x) \]
+\[ \begin{split}
+    \Reversed{P_{I,a_k}}(x)
+    &= \sum_{0 \le k \le N_P} a_k (-x - \mathit{center}(I))^k \qquad -x \in I \\
+    &= \sum_{0 \le k \le N_P} a_k (-(x - \mathit{center}(-I)))^k \qquad x \in -I \\
+    &= \sum_{0 \le k \le N_P} a_k (-1)^k (x - \mathit{center}(-I))^k \qquad x \in -I \\
+    &= P_{-I, a_k (-1)^k}(x)
+\end{split} \]
+
+An indicator is a subcase of polynomial:
+\[ \Indicator{I} = P_{I, a_k} \text{ with } (a_k) = \{a_0 = 1\} \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Convolution \& Cross-correlation}
+\section{Polynomial Convolution \& Cross-correlation}
 
-%FIXME
+Convolution and cross correlation are defined on polynom chunks, which covers a lot of cases.
+In particular it covers indicator functions which are polynom chunks of degree $0$.
+
+\subsection{Convolution}
+
+The target is to compute:
+\[ C = P_{I_p,a_k} \Convolution Q_{I_q,b_j} \]
+
+The polynoms can be expressed as a shift of a 0-centered polynom, and thus we only need to compute convolution for 0-centered polynoms:
+\[ P_{I_p,a_k} = \Shifted{s_p}{P_{[-w_p,w_p],a_k}} \]
+\[ C = \Shifted{s_p + s_q}{P_{[-w_p,w_p],a_k} \Convolution Q_{[-w_q,w_q],b_j}} \]
+
+In the following paragraphs the shifting $s_p + s_q$ is ignored for simplicity.
+We also suppose that $w_q \le w_p$ by using the commutativity of the convolution.
+\[ \begin{split}
+    C(x)
+    &= \left[ P_{[-w_p,w_p],a_k} \Convolution Q_{[-w_q,w_q],b_j} \right](x) \\
+    &= \IntR{ P_{[-w_p,w_p],a_k}(x-t) Q_{[-w_q,w_q],b_j}(t)}{t} \\
+    &= \int\limits_{\substack{x - t \in [-w_p,w_p] \\ t \in [-w_q,w_q]}} \left( \sum_{0 \le k \le N_p} a_k (x-t)^k \right) \left( \sum_{0 \le j \le N_q} b_j t^j \right) \D t \\
+    &= \int\limits_{t \in [x-w_p,x+w_p] \cap [-w_q,w_q]} \left( \sum_{0 \le i \le k \le N_p} a_k \binom{k}{i} x^{k-i} (-t)^i \right) \left( \sum_{0 \le j \le N_q} b_j t^j \right) \D t \\
+    &= \int\limits_{t \in I(x)} \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} (-1)^i x^{k-i} t^{i+j} \D t \\
+    &= \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} (-1)^i x^{k-i} \int\limits_{I(x)} t^{i+j} \D t \\
+    &= \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left[ t^{i+j+1} \right]^{I(x)} 
+\end{split} \]
+
+Thus the value of $C(x)$ is given by integrating a polynomial expression over an interval depending on $x$ : $I(x) = [x-w_p,x+w_p] \cap [-w_q,w_q]$.
+By using $w_q \le w_p$, we can compute the value of $I(x)$ which is defined piecewise in 5 cases:
+\begin{center}\begin{tikzpicture}
+    \coordinate (Origin) at (0,0);
+    \draw (0,0.1) -- (0,-0.1) node[below] {$0$};
+    \draw[->] (-6.5,0) -- (6,0) node[right] {$x$};
+    \begin{scope}[color=blue]
+        \draw (-1,1.6) coordinate(lwq) -- +(2,0) coordinate(rwq);
+        \draw[dashed] (lwq) -- (lwq |- Origin) node[below] {$-w_q$};
+        \draw[dashed] (rwq) -- (rwq |- Origin) node[below] {$w_q$};
+    \end{scope}
+    \begin{scope}[color=red]
+        \draw (-5.5,0.6) coordinate(x1l) node[left] {$1$} -- +(3,0) coordinate(x1r);
+        \draw[dashed] (x1l) -- (x1l |- Origin) node[below] {$x_1-w_p$};
+        \draw[dashed] (x1r) -- (x1r |- Origin) node[below] {$x_1+w_p$};
+        \draw (-3.5,0.8) node[left] {$2$} -- +(3,0);
+        \draw (-1.5,1) node[left] {$3$} -- +(3,0);
+        \draw (0.3,1.2) -- +(3,0) node[right] {$4$};
+        \draw (2,1.4) -- +(3,0) node[right] {$5$} ;
+    \end{scope}
+\end{tikzpicture}\end{center}
+\[ I(x) = \begin{cases}
+    \emptyset & x < -w_p-w_q \\
+    [-w_q, x+w_p] & x \in [-w_p-w_q, -w_p+w_q] \qquad \text{"left"} \\
+    [-w_q, w_q] & x \in [-w_p+w_q, w_p-w_q] \qquad \text{"center"} \\
+    [x-w_p, w_q] & x \in [w_p-w_q, w_p+w_q] \qquad \text{"right"} \\
+    \emptyset & x > w_p + w_q
+\end{cases} \]
+
+From the definition of $C(x)$ and the values of $I(x)$, we can determine that $C$ is defined piecewise with 3 components defined on consecutive intervals.
+Moreover, as the bounds of $I(x)$ are polynomial in $x$, the 3 components are polynoms of $x$.
+These 3 components are called \emph{left}, \emph{center} and \emph{right} parts.
+
+By choosing component bounds of the form $]a,b]$, components are non-overlapping, and we have $C(x) = C_\text{left}(x) + C_\text{center}(x) + C_\text{right}(x)$.
+As an additional constraint, all components are written as valid \emph{polynom chunks} : this lets us reuse the formulas to compute convolutions of convolutions like $P \Convolution Q \Convolution R$.
+Due to the properties of integral, $C(x)$ is continuous, and the various components must match at the border points:
+\[ C_\text{left}(-w_p-w_q) = 0 \]
+\[ C_\text{left}(-w_p+w_q) = C_\text{center}(-w_p+w_q) \]
+\[ C_\text{center}(w_p-w_q) = C_\text{right}(w_p-w_q) \]
+\[ C_\text{right}(w_p+w_q) = 0 \]
+
+\paragraph{Left part}
+The left part must be of the form:
+\[ C_\text{left}(x) = R_{]-w_p-w_q, -w_p+w_q], c_k}(x) = \sum_k c_k (x + w_p)^k \]
+
+Using the integral version of $C(x)$ and the interval $I(x)$:
+\[
+    C_\text{left}(x) = \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}}
+    a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left( (x+w_p)^{i+j+1} - (-w_q)^{i+j+1} \right)
+\]
+
+Using binomial decomposition:
+\[ x^{k-i} = ((x+w_p) - w_p)^{k-i} = \sum_{0 \le l \le k-i} \binom{k-i}{l} (x+w_p)^{k-i-l} (-w_p)^l \]
+
+Injecting that into $C_\text{left}(x)$:
+\[
+    C_\text{left}(x) = \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q \\ 0 \le l \le k-i}}
+    a_k b_j \binom{k}{i} \binom{k-i}{l} \frac{(-1)^{i+l}}{i+j+1} w_p^l \left( (x+w_p)^{k+j+1-l} - (-w_q)^{i+j+1} (x+w_p)^{k-i-l} \right)
+\]
+
+This expression is a polynom in $x+w_p$, which was the target.
+Due to its complexity, there is probably no nice closed expression for each coefficient.
+However each coefficient value can be computed easily, by accumulating the factors in from of $(x+w_p)^{k+j+1-l}$ and $(x+w_p)^{k-i-l}$ for all values of $i,j,k,l$.
+The degree of $C_\text{left}(x)$ is $N_p + N_q + 1$ (max of $k+j+1-l$ on the iteration space).
+
+\paragraph{Center part}
+The center part must be of the form:
+\[ C_\text{center}(x) = R_{]-(w_p-w_q), w_p-w_q], c_k}(x) = \sum_k c_k x^k \]
+
+Using the integral version of $C(x)$ and the interval $I(x)$:
+\[ \begin{split}
+    C_\text{center}(x)
+    &= \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left( w_q^{i+j+1} - (-w_q)^{i+j+1} \right) \\
+    &= \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} w_p^{i+j+1} (1 + (-1)^{i+j}) x^{k-i}
+\end{split} \]
+
+Coefficients can be computed by accumulations as for the left part.
+The degree of $C_\text{center}(x)$ is $N_p$ (max of $k-i$ on the iteration space).
+As an optimisation, the computation is not done if $w_p = w_q$ as the component is $0$.
+
+\paragraph{Right part}
+The right part must be of the form:
+\[ C_\text{right}(x) = R_{]w_p-w_q, w_p+w_q], c_k}(x) = \sum_k c_k (x - w_p)^k \]
+
+Using $C(x)$ and $I(x)$ expression:
+\[
+    C_\text{left}(x) = \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}}
+    a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left( w_q^{i+j+1} - (x-w_p)^{i+j+1} \right)
+\]
+
+Using binomial formula, and injecting it into $C_\text{right}(x)$:
+\[ x^{k-i} = ((x-w_p) + w_p)^{k-i} = \sum_{0 \le l \le k-i} \binom{k-i}{l} (x-w_p)^{k-i-l} w_p^l \]
+\[
+    C_\text{right}(x) = \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q \\ 0 \le l \le k-i}}
+    a_k b_j \binom{k}{i} \binom{k-i}{l} \frac{(-1)^i}{i+j+1} w_p^l \left( w_q^{i+j+1} (x+w_p)^{k-i-l} - (x-w_p)^{k+j+1-l} \right)
+\]
+
+This is a polynom of $x-w_p$ of degree $N_p + N_q + 1$.
+As for the other parts, the coefficients can be computed by accumulation.
+
+\subsection{Cross correlation}
+The cross correlation is computed using the reverse rule:
+\[ P \Correlation Q = \Reversed{P} \Convolution Q \]
+
+The computational cost of the convolution is greater than the small reverse operation for polynomials.
+
+\subsection{Piecewise polynoms}
+This is done using distributivity of addition with respect to convolution (and cross correlation):
+\[ \left[\sum_i P_i \right] \Convolution \left[\sum_j Q_j \right] = \sum_{i,j} P_i \Convolution Q_j \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Application to the Hawkes computations}
-%FIXME update
+Refer to the BRP18 paper for details.
 
-\subsection{Histogram base with interval kernel}
-Histogram function base is almost a shifted and scaled indicator.
-The only difference is the open left bound, but this does not change anything if used in convolution or correlation.
-\[
-    \varphi_k =
-    \frac{1}{\sqrt{\delta}} \mathbbm{1}_{\left] (k-1)\delta, k\delta \right]} \simeq
-    \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\OldIndicator{\delta}}
-\]
-The interval kernel is a scaled indicator function.
-\[ W_l = \frac{1}{\sqrt{\eta_l}} \mathbbm{1}_{\left[ -\frac{\eta_l}{2}, \frac{\eta_l}{2} \right]} = \frac{1}{\sqrt{\eta_l}} \OldIndicator{\eta_l} \]
+\subsection{Base shapes used}
+Basic functions considered are all piecewise polynoms
+
+\paragraph{Histogram base}
+\[ \varphi_k = \frac{1}{\sqrt{\delta}} \mathbbm{1}_{\left] k\delta, (k+1)\delta \right]} \qquad 0 \le k < K \]
+
+\paragraph{Haar wavelets}
+\[ \varphi_{s,p} = \frac{\sqrt{2}^s}{\sqrt{\delta}} \left(
+    \mathbbm{1}_{ \left] \frac{2p \delta}{2^{s+1}}, \frac{(2p+1) \delta}{2^{s+1}} \right] } -
+    \mathbbm{1}_{ \left] \frac{(2p +1) \delta}{2^{s+1}}, \frac{(2p + 2) \delta}{2^{s+1}} \right] }
+\right) \qquad \substack{0 \le s < \text{Nscale} \\ 0 \le p < 2^s} \]
+
+\paragraph{Interval kernel}
+\[ W_l = \frac{1}{\sqrt{\eta_l}} \mathbbm{1}_{\left[ -\frac{\eta_l}{2}, \frac{\eta_l}{2} \right]} \]
+
+\subsection{Non-kernel case}
+G can be expressed as a cross correlation of phi functions:
+\[ \begin{split}
+    \mathsf{G}_{l,l',k,k'} & = \IntR{\left( \sum_{X_l \in N_l} \varphi_k(x-X_l) \right)\left( \sum_{X_{l'} \in N_{l'}} \varphi_{k'}(x-X_{l'}) \right)}{x} \\
+    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \IntR{ \varphi_k(x-X_l) \varphi_{k'}(x-X_{l'}) }{x} \\
+    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \IntR{ \varphi_k(x-(X_l-X_l')) \varphi_{k'}(x) }{x} \\
+    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} [\varphi_k \Correlation \varphi_{k'}] (X_l-X_l')
+\end{split} \]
+
+\subsection{Kernel case}
 
 \paragraph{B}
-From the hawkes paper:
 \[ b_{W,k,l}^m = \sum_{X_l \in N_l, X_m \in N_m} [W_l \Convolution W_m \Convolution \varphi_k] (X_m - X_l) \]
-The convolution of the kernels is a simple trapezoid
-\[
-    W_l \Convolution W_m =
-    \frac{1}{\sqrt{\eta_l \eta_m}} \OldIndicator{\eta_l} \Convolution \OldIndicator{\eta_m} =
-    \frac{1}{\sqrt{\eta_l \eta_m}} \Trapezoid{\min(\eta_l,\eta_m)}{|\eta_l-\eta_m|}
-\]
-with $h = \min(\eta_l,\eta_m)$ and $b = |\eta_l-\eta_m|$.
-Thus the complete convolution is:
-\[ \begin{split}
-    W_l \Convolution W_m \Convolution \varphi_k
-    & = \frac{1}{\sqrt{\eta_l \eta_m}} \Trapezoid{h}{b} \Convolution \frac{1}{\sqrt{\delta}} \Shifted{(k-\frac{1}{2})\delta}{\OldIndicator{\delta}} \\
-    &= \frac{1}{\sqrt{\delta \eta_l \eta_m}} \Shifted{(k-\frac{1}{2})\delta}{\Trapezoid{h}{b} \Convolution \OldIndicator{\delta}}
-\end{split} \]
-We can decompose the trapezoid to easily compute the convolution:
-\[ \begin{split}
-    C & = \Trapezoid{h}{b} \Convolution \OldIndicator{\delta} \\
-    & = \Shifted{-(h+\frac{b}{2})}{\PositiveTriangle{h}} \Convolution \OldIndicator{\delta}  + (h \times \OldIndicator{b}) \Convolution \OldIndicator{\delta} + \Shifted{h+\frac{b}{2}}{\NegativeTriangle{h}} \Convolution \OldIndicator{\delta} \\
-    & = \Shifted{-(h+\frac{b}{2})}{\OldIndicator{\delta} \Convolution \PositiveTriangle{h}} + h \times (\OldIndicator{b} \Convolution \OldIndicator{\delta}) + \Shifted{h+\frac{b}{2}}{\Reversed{\OldIndicator{\delta} \Convolution \PositiveTriangle{h}}}
-\end{split} \]
-Each single shape convolution in the formula has already been described as a function by part.
 
 \paragraph{G}
 \[ \begin{split}
@@ -242,23 +393,6 @@ Each single shape convolution in the formula has already been described as a fun
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \IntR{ [W_l \Convolution \varphi_k](x-(X_l-X_l')) [W_{l'} \Convolution \varphi_{k'}](x) }{x} \\
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} [(W_l \Convolution \varphi_k) \Correlation (W_{l'} \Convolution \varphi_{k'})] (X_l-X_l')
 \end{split} \]
-Each of the two convolutions is a trapezoid
-\[
-    W_l \Convolution \varphi_k =
-    \frac{1}{\sqrt{\delta \eta_l}} \times \OldIndicator{\eta_l} \Convolution \Shifted{(k-\frac{1}{2})\delta}{\OldIndicator{\delta}} =
-    \frac{1}{\sqrt{\delta \eta_l}} \times \Shifted{(k-\frac{1}{2})\delta}{\Trapezoid{h_l}{b_l}}
-\]
-with $h_l = \min(\eta_l,\delta)$ and $b_l = |\eta_l - \delta|$ (independent of $k$).
-\[ \begin{split}
-    C
-    & = (W_l \Convolution \varphi_k) \Correlation (W_{l'} \Convolution \varphi_{k'}) \\
-    & = \frac{1}{\delta \sqrt{\eta_l \eta_{l'}}} \times \left( \Shifted{(k-\frac{1}{2})\delta}{\Trapezoid{h_l}{b_l}} \Correlation \Shifted{(k'-\frac{1}{2})\delta}{\Trapezoid{h_{l'}}{b_{l'}}} \right) \\
-    & = \frac{1}{\delta \sqrt{\eta_l \eta_{l'}}} \times \Shifted{(k'-\frac{1}{2})\delta - (k-\frac{1}{2})\delta}{\Trapezoid{h_l}{b_l} \Correlation \Trapezoid{h_{l'}}{b_{l'}}} \\
-    & = \frac{1}{\delta \sqrt{\eta_l \eta_{l'}}} \times \Shifted{(k'-k)\delta}{\Reversed{\Trapezoid{h_l}{b_l}} \Correlation \Trapezoid{h_{l'}}{b_{l'}}} \\
-    & = \frac{1}{\delta \sqrt{\eta_l \eta_{l'}}} \times \Shifted{(k'-k)\delta}{\Trapezoid{h_l}{b_l} \Convolution \Trapezoid{h_{l'}}{b_{l'}}}
-\end{split} \]
-This expression can be decomposed in the same way, giving a sum of convolutions of pairs of shapes from $\{\SymPositiveTriangle, \SymSquare, \SymNegativeTriangle \}$.
-Convolution for all pairs of shapes has been covered before, so we can compute $\mathsf{G}_{W,l,l',k,k'}$.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Old specifications and proofs}
