@@ -138,7 +138,10 @@ template <Bound lb, Bound rb> Indicator<lb, rb> shifted(PointSpace s, const Indi
     return {s + ind.interval};
 }
 template <Bound lb, Bound rb> Polynom<lb, rb> shifted(PointSpace s, const Polynom<lb, rb> & p) {
-    return {s + p.interval, std::vector<double>{p.coefficients}};
+    return {s + p.interval, p.coefficients};
+}
+template <Bound lb, Bound rb> Polynom<lb, rb> shifted(PointSpace s, Polynom<lb, rb> && p) {
+    return {s + p.interval, std::move(p.coefficients)};
 }
 
 /* Scale y dimension
@@ -151,12 +154,15 @@ template <typename Inner> struct Scaled {
     NzdIntervalType<Inner> non_zero_domain() const { return inner.non_zero_domain(); }
     double operator()(Point x) const { return scale * inner(x); }
 };
-template <typename Inner> inline auto scaled(double scale, const Inner & inner) {
-    return Scaled<Inner>{scale, inner};
+template <typename Inner> inline auto scaled(double scale, Inner && inner) {
+    return Scaled<Inner>{scale, std::forward<Inner>(inner)};
 }
 
 template <typename Inner> inline auto scaled(double scale, const Scaled<Inner> & s) {
     return scaled(scale * s.scale, s.inner);
+}
+template <typename Inner> inline auto scaled(double scale, Scaled<Inner> && s) {
+    return scaled(scale * s.scale, std::move(s.inner));
 }
 
 /* Addition / composition of multiple shapes.
@@ -617,6 +623,56 @@ inline Scaled<Indicator<lb, rb>> indicator_approximation(const Add<std::vector<P
             {non_zero_domain},
         };
     }
+}
+
+/******************************************************************************
+ * Cutting a shape to have positive support (nzd) only.
+ * This is used to prevent "dependence on the future" that can arise due to convolution in kernel cases.
+ *
+ * It is only defined for use cases required by hawkes computation.
+ *
+ * positive_support(f)(x) = f(x) if x > 0 else 0.
+ * FIXME add tests
+ */
+
+template <typename Inner> Scaled<Inner> positive_support(Scaled<Inner> && shape) {
+    return scaled(shape.scale, positive_support(std::move(shape.inner)));
+}
+
+// Modify an existing polynom
+template <Bound rb> void positive_support_in_place(Polynom<Bound::Open, rb> & p) {
+    if(p.interval.left > 0.) {
+        // Already with positive support
+    } else if(p.interval.right <= 0.) {
+        // Entirely negative support, make it zero
+        p.coefficients.resize(1);
+        p.coefficients[0] = 0.;
+    } else {
+        // Re-center polynom from ]l,r] to ]0,r]
+        // P(x) = sum_k a_k (x - (l+r)/2)^k = sum_k a_k ((x - r/2) -l/2)^k ; use binomial:
+        // P(x) = sum_k a_k sum_{0<=i<=k} (x-r/2)^i binom(i,k) (-l/2)^k-i
+        // P(x) = sum_{0<=i<=N} (x-r/2)^i sum_{i<=k<=N} a_k binom(i,k) (-l/2)^k-i
+        auto binomial = BinomialCoefficientsUpToN(p.degree());
+        auto ml2_powers = PowersUpToN(p.degree(), -p.interval.left / 2.);
+        auto new_coefficients = std::vector<double>(p.degree() + 1);
+        for(std::size_t i = 0; i <= p.degree(); ++i) {
+            double c = 0.;
+            for(std::size_t k = i; k <= p.degree(); ++k) {
+                c += p.coefficients[k] * binomial(i, k) * ml2_powers(k - i);
+            }
+            new_coefficients[i] = c;
+        }
+        p.coefficients = std::move(new_coefficients);
+        p.interval.left = 0.;
+    }
+}
+
+template <Bound rb>
+Add<std::vector<Polynom<Bound::Open, rb>>> positive_support(Add<std::vector<Polynom<Bound::Open, rb>>> && polynom_sum) {
+    for(Polynom<Bound::Open, rb> & p : polynom_sum.components) {
+        positive_support_in_place(p);
+    }
+    return optimized_add(std::move(polynom_sum.components)); // Re-apply optimizations, to remove zeros and maybe merge.
 }
 
 /******************************************************************************
