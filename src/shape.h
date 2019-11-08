@@ -163,7 +163,7 @@ template <typename Inner> inline auto scaled(double scale, const Scaled<Inner> &
  */
 template <typename Container> struct Add;
 
-// Vector of shapes of uniform type. Performs optimisations like dropping zero shapes.
+// Vector of shapes of uniform type.
 template <typename Inner> struct Add<std::vector<Inner>> {
     std::vector<Inner> components;
     NzdIntervalType<Inner> union_non_zero_domain{0., 0.};
@@ -171,14 +171,6 @@ template <typename Inner> struct Add<std::vector<Inner>> {
     Add() = default; // Zero function
 
     Add(std::vector<Inner> && components_) : components(std::move(components_)) {
-        if(NzdIntervalType<Inner>::left_bound_type == Bound::Open ||
-           NzdIntervalType<Inner>::right_bound_type == Bound::Open) {
-            // Remove zero width components, except if both bounds are closed (it changes the overall value).
-            auto new_end = std::remove_if(components.begin(), components.end(), [](const Inner & shape) {
-                return shape.non_zero_domain().width() == 0.;
-            });
-            components.erase(new_end, components.end());
-        }
         if(!components.empty()) {
             // Determine the non zero domain
             union_non_zero_domain = components[0].non_zero_domain();
@@ -201,6 +193,50 @@ template <typename Inner> struct Add<std::vector<Inner>> {
         }
     }
 };
+
+// Optimizations for sum of polynoms.
+template <Bound lb, Bound rb>
+Add<std::vector<Polynom<lb, rb>>> optimized_add(std::vector<Polynom<lb, rb>> && components) {
+    // Merge polynoms with same interval.
+    // This is cheap as we only need to sum the coefficients
+    {
+        // Use sort to group same intervals together and with increasing degree.
+        std::sort(components.begin(), components.end(), [](const auto & p, const auto & q) {
+            // Lexicographic order on (interval left, interval right, degree)
+            return p.interval.left < q.interval.left ||
+                   (p.interval.left == q.interval.left && p.interval.right < q.interval.right) ||
+                   (p.interval == q.interval && p.degree() < q.degree());
+        });
+        for(std::size_t i = 1; i < components.size(); ++i) {
+            auto & p = components[i - 1];
+            auto & q = components[i];
+            if(p.interval == q.interval) {
+                assert(p.degree() <= q.degree()); // From the sort
+                // Keep the higher degree one.
+                for(std::size_t k = 0; k <= p.degree(); ++k) {
+                    q.coefficients[k] += p.coefficients[k];
+                }
+                // Set p for removal by making it zero
+                p.coefficients.resize(1);
+                p.coefficients[0] = 0.;
+            }
+        }
+        // TODO a more efficient option would be to generate the minimum set of polynoms for the sum
+        // This means having a set of non overlapping polynoms, so only one is used for each x point.
+        // This would require a complex and costly "cutting" operation :
+        // Given P_[a,d] and a <= b <= c <= d, find Q_[b,c] with Q_[b,c](x) = P_[a,d](x) for x on [b,c].
+    }
+    // Remove zero polynoms : zero coefficients, or zero width with an open bound
+    {
+        auto new_end = std::remove_if(components.begin(), components.end(), [](const Polynom<lb, rb> & p) {
+            const bool zero_due_to_bounds = (lb == Bound::Open || rb == Bound::Open) && p.interval.width() == 0.;
+            return zero_due_to_bounds ||
+                   std::all_of(p.coefficients.begin(), p.coefficients.end(), [](double c) { return c == 0.; });
+        });
+        components.erase(new_end, components.end());
+    }
+    return {std::move(components)};
+}
 
 /******************************************************************************
  * Computation tools for convolution / cross_correlation of polynomials.
@@ -393,7 +429,7 @@ inline void append_convolution_components(
 inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> convolution_base(Polynomial lhs, Polynomial rhs) {
     std::vector<Polynom<Bound::Open, Bound::Closed>> components;
     append_convolution_components(components, lhs, rhs);
-    return {std::move(components)};
+    return optimized_add(std::move(components));
 }
 
 inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> convolution_base(
@@ -402,7 +438,7 @@ inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> convolution_base(
     for(const auto & lhs_component : lhs.components) {
         append_convolution_components(components, lhs_component, rhs);
     }
-    return {std::move(components)};
+    return optimized_add(std::move(components));
 }
 inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> convolution_base(
     Polynomial lhs, const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & rhs) {
@@ -418,7 +454,7 @@ inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> convolution_base(
             append_convolution_components(components, lhs_component, rhs_component);
         }
     }
-    return {std::move(components)};
+    return optimized_add(std::move(components));
 }
 
 /******************************************************************************
@@ -458,13 +494,13 @@ template <Bound lb, Bound rb> inline Add<std::vector<Polynom<Bound::Open, Bound:
     const Indicator<lb, rb> & lhs, Polynomial rhs) {
     std::vector<Polynom<Bound::Open, Bound::Closed>> components;
     append_convolution_components(components, reverse(lhs), rhs);
-    return {std::move(components)};
+    return optimized_add(std::move(components));
 }
 template <Bound lb, Bound rb> inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
     const Polynom<lb, rb> & lhs, Polynomial rhs) {
     std::vector<Polynom<Bound::Open, Bound::Closed>> components;
     append_convolution_components(components, reverse(lhs), rhs);
-    return {std::move(components)};
+    return optimized_add(std::move(components));
 }
 
 inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
@@ -473,7 +509,7 @@ inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_b
     for(const auto & lhs_component : lhs.components) {
         append_convolution_components(components, reverse(lhs_component), rhs);
     }
-    return {std::move(components)};
+    return optimized_add(std::move(components));
 }
 
 template <Bound lb, Bound rb> inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
@@ -483,7 +519,7 @@ template <Bound lb, Bound rb> inline Add<std::vector<Polynom<Bound::Open, Bound:
     for(const auto & rhs_component : rhs.components) {
         append_convolution_components(components, reverse_lhs, rhs_component);
     }
-    return {std::move(components)};
+    return optimized_add(std::move(components));
 }
 template <Bound lb, Bound rb> inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
     const Polynom<lb, rb> & lhs, const Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> & rhs) {
@@ -492,7 +528,7 @@ template <Bound lb, Bound rb> inline Add<std::vector<Polynom<Bound::Open, Bound:
     for(const auto & rhs_component : rhs.components) {
         append_convolution_components(components, reverse_lhs, rhs_component);
     }
-    return {std::move(components)};
+    return optimized_add(std::move(components));
 }
 
 inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_base(
@@ -505,7 +541,7 @@ inline Add<std::vector<Polynom<Bound::Open, Bound::Closed>>> cross_correlation_b
             append_convolution_components(components, reverse_lhs_component, rhs_component);
         }
     }
-    return {std::move(components)};
+    return optimized_add(std::move(components));
 }
 
 /******************************************************************************
