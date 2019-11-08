@@ -131,6 +131,12 @@ int main(int argc, const char * argv[]) {
             const auto phi = HistogramBase{5, 1000}.histogram(0);
             dump_shape(positive_support(convolution(to_shape(kernel), to_shape(phi))));
         },
+        []() {
+            const auto kernel = IntervalKernel{100};
+            const auto kernel2 = IntervalKernel{200};
+            const auto phi = HistogramBase{5, 1000}.histogram(0);
+            dump_shape(positive_support(convolution(convolution(to_shape(kernel), to_shape(phi)), to_shape(kernel2))));
+        },
     };
     const auto nb_cases = std::distance(std::begin(cases), std::end(cases));
 

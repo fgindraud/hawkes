@@ -33,6 +33,51 @@ using ::PointSpace;
 // Get non_zero_domain interval type from a shape
 template <typename Shape> using NzdIntervalType = decltype(std::declval<Shape>().non_zero_domain());
 
+/* Precompute a table of binomial coefficients.
+ */
+constexpr size_t triangular_number(size_t n) {
+    return n * (n + 1) / 2;
+}
+
+template <size_t N> struct BinomialCoefficients {
+    static_assert(N > 0, "N > 0");
+    double values_linearized[triangular_number(N)] = {}; // [{1}, {1,1}, {1,2,1}, ...]
+
+    // Choose k in n
+    double operator()(std::size_t k, std::size_t n) const {
+        assert(n < N);
+        assert(k <= n);
+        return values_linearized[triangular_number(n) + k];
+    }
+
+    void check_defined_up_to(size_t n) const {
+        if(!(n < N)) {
+            throw std::runtime_error(fmt::format(
+                "Binomial coefficients up to {} required, {} precomputed. "
+                "Increase the number precomputed at shape.h/constexpr binomial definition.",
+                n,
+                N));
+        }
+    }
+
+    constexpr BinomialCoefficients() {
+        values_linearized[0] = 1.;
+        for(size_t n = 1; n < N; ++n) {
+            size_t offset = triangular_number(n);
+            size_t prev_offset = triangular_number(n - 1);
+            values_linearized[offset] = 1.;
+            values_linearized[offset + n] = 1.;
+            for(size_t k = 1; k + 1 <= n; ++k) {
+                values_linearized[offset + k] =
+                    values_linearized[prev_offset + k - 1] + values_linearized[prev_offset + k];
+            }
+        }
+    }
+};
+
+// Fixed precomputed table. The number can be adjusted if more values are needed.
+constexpr auto binomial = BinomialCoefficients<20>();
+
 /******************************************************************************
  * Base shapes.
  */
@@ -276,31 +321,6 @@ struct Polynomial {
     size_t degree() const { return coefficients.size() - 1; }
 };
 
-struct BinomialCoefficientsUpToN {
-    std::vector<std::vector<size_t>> values;
-
-    explicit BinomialCoefficientsUpToN(size_t maximum_n) {
-        values.reserve(maximum_n + 1);
-        for(size_t n = 0; n <= maximum_n; ++n) {
-            std::vector<size_t> values_for_n(n + 1);
-            values_for_n[0] = 1;
-            values_for_n[n] = 1;
-            for(size_t k = 1; k + 1 <= n; ++k) {
-                // k <= n - 1 generates wrapping underflow for n = 0 !
-                values_for_n[k] = values[n - 1][k - 1] + values[n - 1][k];
-            }
-            values.emplace_back(std::move(values_for_n));
-        }
-    }
-
-    size_t maximum_n() const { return values.size() - 1; }
-    size_t operator()(size_t k, size_t n) const {
-        assert(k <= n);
-        assert(n <= maximum_n());
-        return values[n][k];
-    }
-};
-
 struct PowersUpToN {
     std::vector<double> values;
 
@@ -370,9 +390,9 @@ inline void append_convolution_components(
     const PointSpace outer_shifting = p.origin + q.origin;
     const size_t border_parts_degree = p.degree() + q.degree() + 1;
     const size_t center_part_degree = p.degree();
-    const auto binomial = BinomialCoefficientsUpToN(border_parts_degree);
     const auto hwp_powers = PowersUpToN(border_parts_degree, p.half_width);
     const auto hwq_powers = PowersUpToN(border_parts_degree, q.half_width);
+    binomial.check_defined_up_to(border_parts_degree);
     const auto minus_1_power = [](size_t n) -> double { return n % 2 == 0 ? 1. : -1.; };
     // Left part on local interval ]-hwp-hwq, -hwp+hwq].
     {
@@ -652,8 +672,8 @@ template <Bound rb> void positive_support_in_place(Polynom<Bound::Open, rb> & p)
         // P(x) = sum_k a_k (x - (l+r)/2)^k = sum_k a_k ((x - r/2) -l/2)^k ; use binomial:
         // P(x) = sum_k a_k sum_{0<=i<=k} (x-r/2)^i binom(i,k) (-l/2)^k-i
         // P(x) = sum_{0<=i<=N} (x-r/2)^i sum_{i<=k<=N} a_k binom(i,k) (-l/2)^k-i
-        auto binomial = BinomialCoefficientsUpToN(p.degree());
         auto ml2_powers = PowersUpToN(p.degree(), -p.interval.left / 2.);
+        binomial.check_defined_up_to(p.degree());
         auto new_coefficients = std::vector<double>(p.degree() + 1);
         for(std::size_t i = 0; i <= p.degree(); ++i) {
             double c = 0.;
