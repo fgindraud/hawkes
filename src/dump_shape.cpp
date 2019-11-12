@@ -61,81 +61,147 @@ template <typename Shape> void dump_shape(const Shape & shape) {
     }
 }
 
-int main(int argc, const char * argv[]) {
-    using DumpCase = void (*)();
+struct Case {
+    string_view description;
+    void (*action)();
+};
 
-    const DumpCase cases[] = {
-        []() {
-            const auto small = Indicator<Bound::Closed, Bound::Closed>{{-0.1, 0.1}};
-            const auto indicator = Indicator<Bound::Closed, Bound::Closed>{{-50., 50.}};
-            dump_shape(convolution(small, indicator));
+int main(int argc, const char * argv[]) {
+    const Case cases[] = {
+        {
+            "convolution(small_indicator, indicator)",
+            []() {
+                const auto small = Indicator<Bound::Closed, Bound::Closed>{{-0.1, 0.1}};
+                const auto indicator = Indicator<Bound::Closed, Bound::Closed>{{-50., 50.}};
+                dump_shape(convolution(small, indicator));
+            },
         },
-        []() {
-            const auto indicator = Indicator<Bound::Closed, Bound::Closed>{{-50., 50.}};
-            dump_shape(convolution(indicator, indicator));
+        {
+            "convolution(indicator, indicator)",
+            []() {
+                const auto indicator = Indicator<Bound::Closed, Bound::Closed>{{-50., 50.}};
+                dump_shape(convolution(indicator, indicator));
+            },
         },
-        []() {
-            const auto kernel = IntervalKernel{100};
-            const auto phi = HistogramBase{5, 1000}.histogram(0);
-            dump_shape(convolution(to_shape(kernel), to_shape(phi)));
+        {
+            "convolution(IntervalKernel{100}, HistogramBase{5, 1000}.histogram(0))",
+            []() {
+                const auto kernel = IntervalKernel{100};
+                const auto phi = HistogramBase{5, 1000}.histogram(0);
+                dump_shape(convolution(to_shape(kernel), to_shape(phi)));
+            },
         },
-        []() {
-            const auto kernel = IntervalKernel{100};
-            const auto kernel2 = IntervalKernel{200};
-            const auto phi = HistogramBase{5, 1000}.histogram(0);
-            dump_shape(convolution(convolution(to_shape(kernel), to_shape(phi)), to_shape(kernel2)));
+        {
+            "convolution(IntervalKernel{100}, HistogramBase{5, 1000}.histogram(0), IntervalKernel{200})",
+            []() {
+                const auto kernel = IntervalKernel{100};
+                const auto kernel2 = IntervalKernel{200};
+                const auto phi = HistogramBase{5, 1000}.histogram(0);
+                dump_shape(convolution(convolution(to_shape(kernel), to_shape(phi)), to_shape(kernel2)));
+            },
         },
-        []() {
-            const auto kernel = IntervalKernel{300};
-            const auto phi = HistogramBase{5, 1000}.histogram(0);
-            dump_shape(convolution(convolution(to_shape(kernel), to_shape(phi)), to_shape(kernel)));
+        {
+            "convolution(IntervalKernel{300}, HistogramBase{5, 1000}.histogram(0), IntervalKernel{300})",
+            []() {
+                const auto kernel = IntervalKernel{300};
+                const auto phi = HistogramBase{5, 1000}.histogram(0);
+                dump_shape(convolution(convolution(to_shape(kernel), to_shape(phi)), to_shape(kernel)));
+            },
         },
-        []() {
-            const auto base = HistogramBase{5, 1000};
-            const auto kernel = IntervalKernel{100};
-            const auto kernel2 = IntervalKernel{200};
-            const auto phi = base.histogram(0);
-            const auto phi2 = base.histogram(3);
-            dump_shape(convolution(
-                convolution(to_shape(kernel), to_shape(phi)), convolution(to_shape(kernel2), to_shape(phi2))));
+        {
+            "cross_correlation(convolution(IntervalKernel{100}, HistogramBase{5, 1000}.histogram(0)), "
+            "convolution(IntervalKernel{200}, HistogramBase{5, 1000}.histogram(3)))",
+            []() {
+                const auto base = HistogramBase{5, 1000};
+                const auto kernel = IntervalKernel{100};
+                const auto kernel2 = IntervalKernel{200};
+                const auto phi = base.histogram(0);
+                const auto phi2 = base.histogram(3);
+                dump_shape(cross_correlation(
+                    convolution(to_shape(kernel), to_shape(phi)), convolution(to_shape(kernel2), to_shape(phi2))));
+            },
         },
-        []() {
-            const auto base = HistogramBase{5, 10000};
-            const auto kernel = IntervalKernel{0.1};
-            const auto kernel2 = IntervalKernel{100};
-            const auto phi = base.histogram(0);
-            const auto phi2 = base.histogram(3);
-            dump_shape(convolution(
-                convolution(to_shape(kernel), to_shape(phi)), convolution(to_shape(kernel2), to_shape(phi2))));
+        {
+            "cross_correlation(convolution(IntervalKernel{0.1}, HistogramBase{5, 1000}.histogram(0)), "
+            "convolution(IntervalKernel{100}, HistogramBase{5, 1000}.histogram(3)))",
+            []() {
+                const auto base = HistogramBase{5, 10000};
+                const auto kernel = IntervalKernel{0.1};
+                const auto kernel2 = IntervalKernel{100};
+                const auto phi = base.histogram(0);
+                const auto phi2 = base.histogram(3);
+                dump_shape(cross_correlation(
+                    convolution(to_shape(kernel), to_shape(phi)), convolution(to_shape(kernel2), to_shape(phi2))));
+            },
         },
-        []() {
-            auto q = Polynom<Bound::Closed, Bound::Closed>{
-                {-10., 10.},
-                {0., -100., 0., 1.},
-            };
-            dump_shape(q);
+        {
+            "Polynom [-10., 10.] {0., -100., 0., 1.}",
+            []() {
+                auto q = Polynom<Bound::Closed, Bound::Closed>{
+                    {-10., 10.},
+                    {0., -100., 0., 1.},
+                };
+                dump_shape(q);
+            },
         },
-        []() {
-            auto p = Polynom<Bound::Closed, Bound::Closed>{
-                {-8., 8.},
-                {64., 0., -1.},
-            };
-            auto q = Polynom<Bound::Closed, Bound::Closed>{
-                {-10., 10.},
-                {0., -100., 0., 1.},
-            };
-            dump_shape(convolution(p, q));
+        {
+            "convolution(Polynom [-8., 8.] {64., 0., -1.}, Polynom [-10., 10.] {0., -100., 0., 1.})",
+            []() {
+                auto p = Polynom<Bound::Closed, Bound::Closed>{
+                    {-8., 8.},
+                    {64., 0., -1.},
+                };
+                auto q = Polynom<Bound::Closed, Bound::Closed>{
+                    {-10., 10.},
+                    {0., -100., 0., 1.},
+                };
+                dump_shape(convolution(p, q));
+            },
         },
-        []() {
-            const auto kernel = IntervalKernel{100};
-            const auto phi = HistogramBase{5, 1000}.histogram(0);
-            dump_shape(positive_support(convolution(to_shape(kernel), to_shape(phi))));
+        {
+            "positive_support(convolution(IntervalKernel{100}, HistogramBase{5, 1000}.histogram(0)))",
+            []() {
+                const auto kernel = IntervalKernel{100};
+                const auto phi = HistogramBase{5, 1000}.histogram(0);
+                dump_shape(positive_support(convolution(to_shape(kernel), to_shape(phi))));
+            },
         },
-        []() {
-            const auto kernel = IntervalKernel{100};
-            const auto kernel2 = IntervalKernel{200};
-            const auto phi = HistogramBase{5, 1000}.histogram(0);
-            dump_shape(positive_support(convolution(convolution(to_shape(kernel), to_shape(phi)), to_shape(kernel2))));
+        {
+            "positive_support(convolution(IntervalKernel{100}, HistogramBase{5, 1000}.histogram(0), "
+            "IntervalKernel{200}))",
+            []() {
+                const auto kernel = IntervalKernel{100};
+                const auto kernel2 = IntervalKernel{200};
+                const auto phi = HistogramBase{5, 1000}.histogram(0);
+                dump_shape(
+                    positive_support(convolution(convolution(to_shape(kernel), to_shape(phi)), to_shape(kernel2))));
+            },
+        },
+        {
+            "convolution(positive_support(convolution(IntervalKernel{100}, HistogramBase{5, 1000}.histogram(0))), "
+            "IntervalKernel{200})",
+            []() {
+                const auto kernel = IntervalKernel{100};
+                const auto kernel2 = IntervalKernel{200};
+                const auto phi = HistogramBase{5, 1000}.histogram(0);
+                dump_shape(
+                    convolution(positive_support(convolution(to_shape(kernel), to_shape(phi))), to_shape(kernel2)));
+            },
+        },
+        {
+            "cross_correlation("
+            "positive_support(convolution(IntervalKernel{100}, HistogramBase{5, 1000}.histogram(0))), "
+            "positive_support(convolution(IntervalKernel{200}, HistogramBase{5, 1000}.histogram(0)))"
+            ")",
+            []() {
+                const auto kernel = IntervalKernel{100};
+                const auto kernel2 = IntervalKernel{200};
+                const auto phi = HistogramBase{5, 1000}.histogram(0);
+                const auto phi2 = HistogramBase{5, 1000}.histogram(3);
+                dump_shape(cross_correlation(
+                    positive_support(convolution(to_shape(kernel), to_shape(phi))),
+                    positive_support(convolution(to_shape(kernel2), to_shape(phi2)))));
+            },
         },
     };
     const auto nb_cases = std::distance(std::begin(cases), std::end(cases));
@@ -143,10 +209,13 @@ int main(int argc, const char * argv[]) {
     if(argc == 2) {
         const int i = std::atoi(argv[1]);
         if(0 <= i && i < nb_cases) {
-            cases[i]();
+            cases[i].action();
             return 0;
         }
     }
-    fmt::print(stderr, "Usage: dump_shape [0-{}]\n", nb_cases - 1);
+    fmt::print(stderr, "Usage: dump_shape [0-{}]\n\n", nb_cases - 1);
+    for(int i = 0; i < nb_cases; ++i) {
+        fmt::print(stderr, "[{:02}] {}\n", i, cases[i].description);
+    }
     return int(nb_cases);
 }
