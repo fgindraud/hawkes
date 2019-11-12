@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <memory>
 #include <string>
 #include <unordered_set>
 
@@ -60,9 +61,6 @@ enum class KernelType {
     Interval,          // L2-normalized indicator function centered on 0
     IntervalRightHalf, // L2-normalized indicator function on [0, width/2]
 };
-
-using BaseType = variant<HistogramBase, HaarBase>;
-using BaseOption = variant<None, HistogramBase, HaarBase>; // Option type, maybe undefined (None).
 
 enum class ProcessDirection {
     Forward,  // Keep points coordinates
@@ -311,7 +309,7 @@ int main(int argc, char * argv[]) {
     double gamma = 1.;
     double lambda = 1.;
 
-    BaseOption base_option = None{}; // Base choice starts undefined and MUST be defined
+    std::unique_ptr<Base> base;
     KernelConfig kernel_config = KernelConfig::None;
     KernelType kernel_type = KernelType::Interval; // Defaults to centered intervals
     Optional<std::vector<PointSpace>> override_homogeneous_kernel_widths;
@@ -348,17 +346,17 @@ int main(int argc, char * argv[]) {
         "K",
         "delta",
         "Use an histogram base (k > 0, delta > 0)",
-        [&base_option](string_view k_value, string_view delta_value) {
+        [&base](string_view k_value, string_view delta_value) {
             const auto base_size = size_t(parse_strict_positive_int(k_value, "histogram K"));
             const auto delta = PointSpace(parse_strict_positive_double(delta_value, "histogram delta"));
-            base_option = HistogramBase{base_size, delta};
+            base = std::make_unique<HistogramBase>(base_size, delta);
         });
     parser.option2(
         {"haar"},
         "nb_scales",
         "delta",
         "Use Haar square wavelets (nb_scales > 0, delta > 0)",
-        [&base_option](string_view k_value, string_view delta_value) {
+        [&base](string_view k_value, string_view delta_value) {
             const auto nb_scales = size_t(parse_strict_positive_int(k_value, "haar nb_scales"));
             if(!(nb_scales <= HaarBase::max_nb_scales)) {
                 throw std::runtime_error(fmt::format("Haar nb_scales is limited to {}", HaarBase::max_nb_scales));
@@ -370,7 +368,7 @@ int main(int argc, char * argv[]) {
                     "Warning: Haar wavelet base: smallest scale is less than 1.\n"
                     "This may be an error for integer data coordinates.\n");
             }
-            base_option = HaarBase{nb_scales, delta};
+            base = std::make_unique<HaarBase>(nb_scales, delta);
         });
 
     // Kernel setup
@@ -444,13 +442,9 @@ int main(int argc, char * argv[]) {
             return EXIT_SUCCESS;
         }
 
-        // Check that base is set
-        struct CheckBase {
-            BaseType operator()(const None &) const { throw std::runtime_error("Function base is not defined"); }
-            BaseType operator()(const HistogramBase & base) const { return base; }
-            BaseType operator()(const HaarBase & base) const { return base; }
-        };
-        const BaseType base = visit(CheckBase{}, base_option);
+        if (base == nullptr) {
+            throw std::runtime_error("Function base is not defined");
+        }
 
         // Read input files
         const auto data_points = read_process_files(process_files);
@@ -513,16 +507,7 @@ int main(int argc, char * argv[]) {
                 fmt::print("#  [{}] {}{}\n", m, p.filename, suffix);
             }
             fmt::print("# }}\n");
-
-            struct PrintBaseLine {
-                void operator()(const HistogramBase & b) const {
-                    fmt::print("# base = Histogram(K = {}, delta = {})\n", b.base_size, b.delta);
-                }
-                void operator()(const HaarBase & b) const {
-                    fmt::print("# base = Haar(nb_scales = {}, delta = {})\n", b.nb_scales, b.delta);
-                }
-            };
-            visit(PrintBaseLine{}, base);
+            base->write_verbose_description(stdout);
 
             struct PrintKernelLine {
                 string_view kernel_type_text; // Distinguish interval types which are merged in variant<...> type.

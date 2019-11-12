@@ -70,7 +70,6 @@ Developer corner
 
 Hawkes uses 3 header-only libraries which are included in the current code:
 - [fmtlib](http://fmtlib.net) formatting library to generate output text
-- [mpark::variant](https://github.com/mpark/variant) to provide the C++17 variant sum type
 - [doctest](https://github.com/onqtam/doctest) as a test framework for unit tests
 
 License

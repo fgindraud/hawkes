@@ -33,14 +33,6 @@
 #include "external/fmt/format.h"
 #include "external/fmt/ostream.h"
 
-/* Use external standalone implementation of std::variant.
- * std::variant is only available from C++17 onwards.
- * File is from the release version 1.3.0.
- */
-#include "external/variant.hpp"
-using mpark::get;
-using mpark::variant;
-
 /*******************************************************************************
  * Optionally stores a value.
  * Simpler but less capable version of C++17 std::optional<T>.

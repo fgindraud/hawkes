@@ -113,11 +113,17 @@ template <Bound lb, Bound rb> inline Interval<lb, rb> union_(Interval<lb, rb> lh
 /******************************************************************************
  * Function bases.
  */
+struct Base {
+    virtual ~Base() = default;
+
+    // Base description generated in output file if verbose mode is used
+    virtual void write_verbose_description(FILE * out) const = 0;
+};
 
 /* Histogram(base_size, D) : shifted indicator functions, with L2-norm of 1
- * For k in [0, base_size[ : phi_k(x) = 1/sqrt(D) * IndicatorFunction_]k * D, (k + 1) * D](x)
+ * For k in [0, base_size[ : phi_k(x) = 1/sqrt(D) * Indicator_]k * D, (k + 1) * D](x)
  */
-struct HistogramBase {
+struct HistogramBase final : Base {
     size_t base_size; // [1, inf[
     PointSpace delta; // ]0, inf[
 
@@ -142,24 +148,34 @@ struct HistogramBase {
             normalization_factor,
         };
     }
+
+    void write_verbose_description(FILE * out) const final {
+        fmt::print(
+            out,
+            "# base = Histogram(K = {}, delta = {}) = {{\n"
+            "#   phi_k = 1/sqrt(delta) * 1_]k*delta, (k+1)*delta] for k in [0,K[\n"
+            "# }}\n",
+            base_size,
+            delta);
+    }
 };
 
 /** Haar(nb_scales, delta) : haar square wavelets, L2-norm of 1
  * For:
  * s = scale in [0, nb_scales[
  * p = position in [0, 2^s[
- * On ]0, 1], this is the set of function f_{s,p}(x) = sqrt(2)^s * (
- *   IndicatorFunction_] 2p / 2^(s+1), (2p + 1) / 2^(s+1) ](x) -
- *   IndicatorFunction_] (2p + 1) / 2^(s+1), (2p + 2) / 2^(s+1) ](x)
+ * delta > 0, so that base support is ]0, delta].
+ * This is the set of function f_{s,p}(x) = sqrt(2)^s/sqrt(delta) * (
+ *   Indicator_] delta * 2p / 2^(s+1), delta * (2p + 1) / 2^(s+1) ](x) -
+ *   Indicator_] delta * (2p + 1) / 2^(s+1), delta * (2p + 2) / 2^(s+1) ](x)
  * )
- * With delta scaling, on ]0, delta] this is the set: g_{s,p}(x) = (1 / sqrt(delta)) * f_{s,p}(x / delta).
  *
  * Mapping to phi_k:
  * Scale s has 2^s functions, so for [0, nb_scales[ : base_size = sum_s 2^s = 2^nb_scales - 1.
  * For k in [0, 2^nb_scales - 1[ : phi_k = g_{s,p} with 2^s + p == k + 1
  * Thus for a given k, s = floor(log2(k + 1)) and p = k + 1 - 2^s
  */
-struct HaarBase {
+struct HaarBase final : Base {
     size_t nb_scales; // [1, inf[
     PointSpace delta; // ]0, inf[
 
@@ -218,6 +234,22 @@ struct HaarBase {
     Wavelet wavelet(FunctionBaseId k) const {
         const ScalePosition sp = scale_and_position(k);
         return wavelet(sp.scale, sp.position);
+    }
+
+    void write_verbose_description(FILE * out) const final {
+        fmt::print(
+            out,
+            "# base = Haar(nb_scales = {}, delta = {}) = {{\n"
+            "#   w_{{s,p}} = sqrt(2)^s/sqrt(delta) * (\n"
+            "#     Indicator_] delta * 2p / 2^(s+1), delta * (2p + 1) / 2^(s+1) ] -\n"
+            "#     Indicator_] delta * (2p + 1) / 2^(s+1), delta * (2p + 2) / 2^(s+1) ]\n"
+            "#   ) for s in [0, nb_scales[ ('scale'), p in [0, 2^s[ ('position')\n"
+            "#   \n"
+            "#   phi_k = w_{{s,p}} with k = 2^s - 1 + p <=> s = floor(log2(k)) and p = k + 1 - 2^s\n"
+            "#   phi_k = {{w_{{0,0}}, w_{{1,0}}, w_{{1,1}}, w_{{2,0}}, w_{{2,1}}, w_{{2,2}}, w_{{2,3}}, ... }}\n"
+            "# }}\n",
+            nb_scales,
+            delta);
     }
 };
 
