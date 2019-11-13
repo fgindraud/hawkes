@@ -5,6 +5,7 @@
 #include <array>
 #include <cassert>
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
@@ -378,4 +379,38 @@ inline size_t floor_log2(size_t n) {
         log += 1;
     }
     return log - 1;
+}
+
+/******************************************************************************
+ * Time measurement primitives.
+ */
+template <typename Rep, typename Period> std::string duration_string(std::chrono::duration<Rep, Period> duration) {
+    namespace chrono = std::chrono;
+    using chrono::duration_cast;
+    const auto hours = duration_cast<chrono::hours>(duration).count();
+    if(hours > 10) {
+        return fmt::format("{}h", hours);
+    }
+    const auto minutes = duration_cast<chrono::minutes>(duration).count();
+    if(minutes > 10) {
+        return fmt::format("{}m", minutes);
+    }
+    const auto seconds = duration_cast<chrono::seconds>(duration).count();
+    if(seconds > 10) {
+        return fmt::format("{}s", seconds);
+    }
+    const auto milliseconds = duration_cast<chrono::milliseconds>(duration).count();
+    if(milliseconds > 10) {
+        return fmt::format("{}ms", milliseconds);
+    }
+    const auto microseconds = duration_cast<chrono::microseconds>(duration).count();
+    if(microseconds > 10) {
+        return fmt::format("{}us", microseconds);
+    }
+    const auto nanoseconds = duration_cast<chrono::nanoseconds>(duration).count();
+    return fmt::format("{}ns", nanoseconds);
+}
+
+inline std::chrono::high_resolution_clock::time_point instant() {
+    return std::chrono::high_resolution_clock::now();
 }

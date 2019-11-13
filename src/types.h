@@ -257,24 +257,17 @@ struct HaarBase final : Base {
  * Kernels.
  */
 
-// Interval kernel : 1_[-width/2 + center, width/2 + center](x) (L2-normalized)
-// 'center' allows this struct to support both centered (center = 0) and uncentered intervals.
+// Interval kernel : 1_[-width/2, width/2](x) (L2-normalized)
 struct IntervalKernel {
     PointSpace width; // ]0, inf[ due to the normalization factor
-    Point center;
 
-    IntervalKernel(PointSpace width, Point center) : width(width), center(center) { assert(width > 0.); }
-    IntervalKernel(PointSpace width) : IntervalKernel(width, 0) {}
+    IntervalKernel(PointSpace width_) : width(width_) { assert(width > 0.); }
+
+    static string_view name() { return "Interval"; }
 };
 inline double normalization_factor(IntervalKernel kernel) {
     return 1. / std::sqrt(kernel.width);
 }
-
-// Store kernels and maximum width kernels for heterogeneous mode
-template <typename T> struct HeterogeneousKernels {
-    DataByProcessRegion<std::vector<T>> kernels;
-    std::vector<T> maximum_width_kernels; // For each process
-};
 
 // Zero width kernels are not supported by computation, replace their width with a 'default' value.
 inline PointSpace fix_zero_width(PointSpace width) {
@@ -285,6 +278,53 @@ inline PointSpace fix_zero_width(PointSpace width) {
         return width;
     }
 }
+
+/* Kernel configuration is a combination of :
+ * - kernel type (interval, etc)
+ * - kernel granularity : no kernel, kernel by process (homogeneous), kernel by point (heterogeneous)
+ *
+ * Kernel configuration structures store kernel values for the selected granularity.
+ * They all inherit KernelConfig for polymorphic storage ; it emulates a variant type.
+ */
+struct KernelConfig {
+    virtual ~KernelConfig() = default;
+
+    virtual void write_verbose_description(FILE * out) const = 0;
+};
+
+// No kernel, "point" mode.
+struct NoKernel final : KernelConfig {
+    void write_verbose_description(FILE * out) const final { fmt::print(out, "# kernels = None\n"); }
+};
+
+// One kernel for each process.
+// By default, chosen as the median of data_point interval widths.
+template <typename KT> struct HomogeneousKernels final : KernelConfig {
+    std::vector<KT> kernels; // For each process
+
+    HomogeneousKernels(std::vector<KT> && kernels_) : kernels(std::move(kernels_)) {}
+
+    void write_verbose_description(FILE * out) const final {
+        auto widths = map_to_vector(kernels, [](const KT & kernel) -> double { return kernel.width; });
+        fmt::print(out, "# kernels = Homogeneous {}, widths = {{{}}}\n", KT::name(), fmt::join(widths, ", "));
+    }
+};
+
+// One kernel for each point in each process
+template <typename KT> struct HeterogeneousKernels final : KernelConfig {
+    DataByProcessRegion<std::vector<KT>> kernels; // With same order as points
+    std::vector<KT> maximum_width_kernels;        // Maximum support of each process kernels (used for optimizations)
+
+    HeterogeneousKernels(DataByProcessRegion<std::vector<KT>> && kernels_, std::vector<KT> && maximum_width_kernels_)
+        : kernels(std::move(kernels_)), maximum_width_kernels(std::move(maximum_width_kernels_)) {
+        assert(kernels.nb_processes() == maximum_width_kernels.size());
+    }
+
+    void write_verbose_description(FILE * out) const final {
+        // Do not print widths, as they are too numerous
+        fmt::print(out, "# kernels = Heterogeneous {}\n", KT::name());
+    }
+};
 
 /******************************************************************************
  * Computation matrices.
