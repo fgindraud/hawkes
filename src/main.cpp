@@ -72,6 +72,40 @@ static std::unique_ptr<KernelConfig> build_kernel_config(
 }
 
 /******************************************************************************
+ * Computation case selection.
+ */
+struct SupportedComputationCase {
+    std::string name;
+
+    // Should return nullptr if not matching
+    std::unique_ptr<CommonIntermediateValues> (*compute_intermediate_values)(
+        const DataByProcessRegion<SortedVec<Point>> & points, const Base & base, const KernelConfig & kernel_config);
+};
+static const SupportedComputationCase supported_computation_cases[] = {
+    // FIXME add !
+};
+
+// Print the list of cases line by line to stdout.
+static void print_supported_computation_cases() {
+    for(const SupportedComputationCase & c : supported_computation_cases) {
+        fmt::print("{}\n", c.name);
+    }
+}
+
+static std::unique_ptr<CommonIntermediateValues> compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & points, const Base & base, const KernelConfig & kernel_config) {
+
+    for(const SupportedComputationCase & c : supported_computation_cases) {
+        std::unique_ptr<CommonIntermediateValues> result = c.compute_intermediate_values(points, base, kernel_config);
+        if(result != nullptr) {
+            return result;
+        }
+    }
+    throw std::runtime_error(
+        fmt::format("The combination of '{}' and '{}' is not supported", base.name(), kernel_config.name()));
+}
+
+/******************************************************************************
  * Program entry point.
  */
 int main(int argc, char * argv[]) {
@@ -179,6 +213,10 @@ int main(int argc, char * argv[]) {
         {"dump-region-info"}, "Stop after parsing and print region/process point counts", [&dump_region_info_option]() {
             dump_region_info_option = true;
         });
+    parser.flag({"print-supported-computation-list"}, "Print the list of supported computations and stops", []() {
+        print_supported_computation_cases();
+        std::exit(EXIT_SUCCESS);
+    });
     parser.flag({"dump-intermediate-values"}, "Print the B,G,D matrices used in Lasso", [&dump_intermediate_values]() {
         dump_intermediate_values = true;
     });
@@ -214,7 +252,8 @@ int main(int argc, char * argv[]) {
         // For each case, an overload of compute_intermediate_values indicated by its argument types does the
         // computation.
         const auto compute_b_g_start = instant();
-        const CommonIntermediateValues intermediate_values{}; // FIXME
+        std::unique_ptr<CommonIntermediateValues> intermediate_values =
+            compute_intermediate_values(points, *base, *kernel_config);
         const auto compute_b_g_end = instant();
         fmt::print(
             stderr,
@@ -223,7 +262,7 @@ int main(int argc, char * argv[]) {
 
         // Perform lassoshooting and final re-estimation
         const auto lasso_start = instant();
-        const LassoParameters lasso_parameters = compute_lasso_parameters(intermediate_values, gamma);
+        const LassoParameters lasso_parameters = compute_lasso_parameters(*intermediate_values, gamma);
         if(dump_intermediate_values) {
             fmt::print(
                 "# B matrix (rows = {{0}} U {{(l,k)}}, cols = {{m}})\n{}\n",

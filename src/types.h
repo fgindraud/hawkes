@@ -116,6 +116,8 @@ template <Bound lb, Bound rb> inline Interval<lb, rb> union_(Interval<lb, rb> lh
 struct Base {
     virtual ~Base() = default;
 
+    // Short name
+    virtual std::string name() const = 0;
     // Base description generated in output file if verbose mode is used
     virtual void write_verbose_description(FILE * out) const = 0;
 };
@@ -149,6 +151,7 @@ struct HistogramBase final : Base {
         };
     }
 
+    std::string name() const final { return "histogram base"; }
     void write_verbose_description(FILE * out) const final {
         fmt::print(
             out,
@@ -236,6 +239,7 @@ struct HaarBase final : Base {
         return wavelet(sp.scale, sp.position);
     }
 
+    std::string name() const final { return "haar wavelets base"; }
     void write_verbose_description(FILE * out) const final {
         fmt::print(
             out,
@@ -263,7 +267,7 @@ struct IntervalKernel {
 
     IntervalKernel(PointSpace width_) : width(width_) { assert(width > 0.); }
 
-    static string_view name() { return "Interval"; }
+    static string_view name() { return "interval"; }
 };
 inline double normalization_factor(IntervalKernel kernel) {
     return 1. / std::sqrt(kernel.width);
@@ -289,11 +293,13 @@ inline PointSpace fix_zero_width(PointSpace width) {
 struct KernelConfig {
     virtual ~KernelConfig() = default;
 
+    virtual std::string name() const = 0;
     virtual void write_verbose_description(FILE * out) const = 0;
 };
 
 // No kernel, "point" mode.
 struct NoKernel final : KernelConfig {
+    std::string name() const final { return "no kernel"; }
     void write_verbose_description(FILE * out) const final { fmt::print(out, "# kernels = None\n"); }
 };
 
@@ -304,9 +310,10 @@ template <typename KT> struct HomogeneousKernels final : KernelConfig {
 
     HomogeneousKernels(std::vector<KT> && kernels_) : kernels(std::move(kernels_)) {}
 
+    std::string name() const final { return fmt::format("homogeneous kernels ({})", KT::name()); }
     void write_verbose_description(FILE * out) const final {
         auto widths = map_to_vector(kernels, [](const KT & kernel) -> double { return kernel.width; });
-        fmt::print(out, "# kernels = Homogeneous {}, widths = {{{}}}\n", KT::name(), fmt::join(widths, ", "));
+        fmt::print(out, "# kernels = homogeneous {}, widths = {{{}}}\n", KT::name(), fmt::join(widths, ", "));
     }
 };
 
@@ -320,9 +327,10 @@ template <typename KT> struct HeterogeneousKernels final : KernelConfig {
         assert(kernels.nb_processes() == maximum_width_kernels.size());
     }
 
+    std::string name() const final { return fmt::format("heterogeneous kernels ({})", KT::name()); }
     void write_verbose_description(FILE * out) const final {
         // Do not print widths, as they are too numerous
-        fmt::print(out, "# kernels = Heterogeneous {}\n", KT::name());
+        fmt::print(out, "# kernels = heterogeneous {}\n", KT::name());
     }
 };
 

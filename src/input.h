@@ -284,6 +284,7 @@ inline DataByProcessRegion<SortedVec<DataPoint>> read_process_files(const std::v
     return points;
 }
 
+// Print a table with region statistics to stdout. Used for checking data parsing.
 inline void print_region_info(const std::vector<ProcessFile> & files) {
     auto bed_files_content = map_to_vector(files, [](const ProcessFile & f) { return read_regions_from(f.filename); });
     // Header

@@ -12,11 +12,11 @@
 /******************************************************************************
  * Compute B, G, B_hat intermediate values.
  *
+ * FIXME doc
  * This file defines overloads of compute_intermediate_values for many cases.
  * Each case is defined by the type of arguments:
  * - function base,
- * - kernel width configuration,
- * - kernel type.
+ * - kernel configuration.
  * All cases returns the same type of values, but use the specific computation code for this case.
  * A default version returns a "not implemented" error, but with no text for now.
  */
@@ -28,15 +28,8 @@ struct CommonIntermediateValues {
     Matrix_M_MK1 b_hat;
 };
 
-// Default case for compute_intermediate_values
-template <typename Base, typename Kernels> inline CommonIntermediateValues compute_intermediate_values(
-    const DataByProcessRegion<SortedVec<Point>> & /*points*/, const Base &, const Kernels &) {
-    throw std::runtime_error("Unsupported base/kernel configuration combination");
-}
-
 /******************************************************************************
  * Generic building blocks useful for all cases.
- * TODO move stuff to shape, add indicator with any bounds
  */
 
 /* Compute Tmax (used in G).
