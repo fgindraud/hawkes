@@ -13,66 +13,29 @@
 
 /******************************************************************************
  * Kernel configuration selection and construction.
- *
- * List of "cases" tying together a name and a type of kernel with how to construct it.
- * This generate a single point of definition for all possible kernel configurations.
- * This would be easier if sum types (variant, enums) were available...
  */
-struct SupportedKernelConfig {
-    string_view name;
-
-    // Function used to build config from input
-    std::unique_ptr<KernelConfig> (*build_function)(
-        const DataByProcessRegion<SortedVec<DataPoint>> & data_points,
-        const Optional<std::vector<PointSpace>> & override_homogeneous_kernel_widths);
+static const string_view kernel_config_option_values[] = {
+    "none",
+    "homogeneous_interval",
+    "heterogeneous_interval",
 };
-static const SupportedKernelConfig supported_kernel_configs[] = {
-    {
-        "none",
-        [](const DataByProcessRegion<SortedVec<DataPoint>> &, const Optional<std::vector<PointSpace>> &)
-            -> std::unique_ptr<KernelConfig> { return std::make_unique<NoKernel>(); },
-    },
-    {
-        "homogeneous_interval",
-        [](const DataByProcessRegion<SortedVec<DataPoint>> & data_points,
-           const Optional<std::vector<PointSpace>> & override_homogeneous_kernel_widths)
-            -> std::unique_ptr<KernelConfig> {
-            return std::make_unique<HomogeneousKernels<IntervalKernel>>(
-                determine_homogeneous_kernels<IntervalKernel>(data_points, override_homogeneous_kernel_widths));
-        },
-    },
-    {
-        "heterogeneous_interval",
-        [](const DataByProcessRegion<SortedVec<DataPoint>> & data_points,
-           const Optional<std::vector<PointSpace>> &) -> std::unique_ptr<KernelConfig> {
-            return std::make_unique<HeterogeneousKernels<IntervalKernel>>(
-                extract_heterogeneous_kernels<IntervalKernel>(data_points));
-        },
-    },
-};
-
-static std::string kernel_config_joined_names() {
-    std::string joined;
-    for(const SupportedKernelConfig & config : supported_kernel_configs) {
-        if(!joined.empty()) {
-            joined.push_back('|');
-        }
-        joined.append(config.name.begin(), config.name.end());
-    }
-    return joined;
-}
 
 static std::unique_ptr<KernelConfig> build_kernel_config(
-    string_view name,
+    string_view option_value,
     const DataByProcessRegion<SortedVec<DataPoint>> & data_points,
     const Optional<std::vector<PointSpace>> & override_homogeneous_kernel_widths) {
 
-    for(const SupportedKernelConfig & config : supported_kernel_configs) {
-        if(config.name == name) {
-            return config.build_function(data_points, override_homogeneous_kernel_widths);
-        }
+    if(option_value == "none") {
+        return std::make_unique<NoKernel>();
+    } else if(option_value == "homogeneous_interval") {
+        return std::make_unique<HomogeneousKernels<IntervalKernel>>(
+            determine_homogeneous_kernels<IntervalKernel>(data_points, override_homogeneous_kernel_widths));
+    } else if(option_value == "heterogeneous_interval") {
+        return std::make_unique<HeterogeneousKernels<IntervalKernel>>(
+            extract_heterogeneous_kernels<IntervalKernel>(data_points));
+    } else {
+        throw std::runtime_error(fmt::format("Unknown kernel configuration name: {}", option_value));
     }
-    throw std::runtime_error(fmt::format("Unknown kernel configuration name: {}", name));
 }
 
 /******************************************************************************
@@ -149,7 +112,7 @@ int main(int argc, char * argv[]) {
     // Kernel setup
     parser.option(
         {"k", "kernel"},
-        kernel_config_joined_names(),
+        fmt::format("{}", fmt::join(kernel_config_option_values, "|")),
         "Kernel configuration (default=none)",
         [&kernel_config_option](string_view value) { kernel_config_option = value; });
     parser.option(
