@@ -9,9 +9,6 @@
 
 #include "utils.h"
 
-// Type tag for "no value"
-struct None {};
-
 /******************************************************************************
  * Index types.
  *
@@ -116,7 +113,7 @@ template <Bound lb, Bound rb> inline Interval<lb, rb> union_(Interval<lb, rb> lh
 struct Base {
     virtual ~Base() = default;
 
-    // Short name
+    // User printable name
     virtual std::string name() const = 0;
     // Base description generated in output file if verbose mode is used
     virtual void write_verbose_description(FILE * out) const = 0;
@@ -267,7 +264,7 @@ struct IntervalKernel {
 
     IntervalKernel(PointSpace width_) : width(width_) { assert(width > 0.); }
 
-    static string_view name() { return "interval"; }
+    static std::string name() { return "interval"; }
 };
 inline double normalization_factor(IntervalKernel kernel) {
     return 1. / std::sqrt(kernel.width);
@@ -293,7 +290,9 @@ inline PointSpace fix_zero_width(PointSpace width) {
 struct KernelConfig {
     virtual ~KernelConfig() = default;
 
+    // User printable name
     virtual std::string name() const = 0;
+    // Description generated in output file if verbose mode is used
     virtual void write_verbose_description(FILE * out) const = 0;
 };
 

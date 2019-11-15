@@ -12,13 +12,12 @@
 /******************************************************************************
  * Compute B, G, B_hat intermediate values.
  *
- * FIXME doc
  * This file defines overloads of compute_intermediate_values for many cases.
  * Each case is defined by the type of arguments:
  * - function base,
  * - kernel configuration.
  * All cases returns the same type of values, but use the specific computation code for this case.
- * A default version returns a "not implemented" error, but with no text for now.
+ * The right implementation is then selected depending on the actual types of base and kernel configuration.
  */
 
 // Common struct storing computation results.
@@ -27,6 +26,50 @@ struct CommonIntermediateValues {
     std::vector<MatrixG> g_by_region;
     Matrix_M_MK1 b_hat;
 };
+
+// List of defined overloads for implemented cases
+inline CommonIntermediateValues compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & points, const HistogramBase & base);
+inline CommonIntermediateValues compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & points,
+    const HistogramBase & base,
+    const HomogeneousKernels<IntervalKernel> & kernels);
+inline CommonIntermediateValues compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & points,
+    const HistogramBase & base,
+    const HeterogeneousKernels<IntervalKernel> & kernels);
+inline CommonIntermediateValues compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & points, const HaarBase & base);
+
+inline void print_supported_computation_cases() {
+    fmt::print("histogram base with no kernel\n");
+    fmt::print("histogram base with homogenous interval kernels\n");
+    fmt::print("histogram base with heterogeneous interval kernels\n");
+    fmt::print("haar wavelet base with no kernel\n");
+}
+
+// Overload on base classes : perform selection.
+// This emulates pattern matching on sum types.
+inline CommonIntermediateValues compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & points, const Base & base, const KernelConfig & kernel_config) {
+    // First select on base type, then kernel config
+    if(auto * histogram = dynamic_cast<const HistogramBase *>(&base)) {
+        if(dynamic_cast<const NoKernel *>(&kernel_config)) {
+            return compute_intermediate_values(points, *histogram);
+        } else if(auto * kernels = dynamic_cast<const HomogeneousKernels<IntervalKernel> *>(&kernel_config)) {
+            return compute_intermediate_values(points, *histogram, *kernels);
+        } else if(auto * kernels = dynamic_cast<const HeterogeneousKernels<IntervalKernel> *>(&kernel_config)) {
+            return compute_intermediate_values(points, *histogram, *kernels);
+        }
+    } else if(auto * haar = dynamic_cast<const HaarBase *>(&base)) {
+        if(dynamic_cast<const NoKernel *>(&kernel_config)) {
+            return compute_intermediate_values(points, *haar);
+        }
+    }
+
+    throw std::runtime_error(
+        fmt::format("The combination of '{}' with '{}' is not supported", base.name(), kernel_config.name()));
+}
 
 /******************************************************************************
  * Generic building blocks useful for all cases.
@@ -237,7 +280,7 @@ inline Matrix_M_MK1 compute_b_hat(const DataByProcessRegion<SortedVec<Point>> & 
 }
 
 inline CommonIntermediateValues compute_intermediate_values(
-    const DataByProcessRegion<SortedVec<Point>> & points, const HistogramBase & base, None /*kernels*/) {
+    const DataByProcessRegion<SortedVec<Point>> & points, const HistogramBase & base) {
     const auto nb_regions = points.nb_regions();
     std::vector<Matrix_M_MK1> b_by_region;
     std::vector<MatrixG> g_by_region;
@@ -383,17 +426,17 @@ inline Matrix_M_MK1 compute_b_hat(
 inline CommonIntermediateValues compute_intermediate_values(
     const DataByProcessRegion<SortedVec<Point>> & points,
     const HistogramBase & base,
-    const std::vector<IntervalKernel> & kernels) {
+    const HomogeneousKernels<IntervalKernel> & kernels) {
     const auto nb_regions = points.nb_regions();
     std::vector<Matrix_M_MK1> b_by_region;
     std::vector<MatrixG> g_by_region;
     b_by_region.reserve(nb_regions);
     g_by_region.reserve(nb_regions);
     for(RegionId r = 0; r < nb_regions; ++r) {
-        b_by_region.emplace_back(compute_b(points.data_for_region(r), base, kernels));
-        g_by_region.emplace_back(compute_g(points.data_for_region(r), base, kernels));
+        b_by_region.emplace_back(compute_b(points.data_for_region(r), base, kernels.kernels));
+        g_by_region.emplace_back(compute_g(points.data_for_region(r), base, kernels.kernels));
     }
-    return {std::move(b_by_region), std::move(g_by_region), compute_b_hat(points, base, kernels)};
+    return {std::move(b_by_region), std::move(g_by_region), compute_b_hat(points, base, kernels.kernels)};
 }
 
 /******************************************************************************
@@ -658,7 +701,7 @@ inline MatrixG compute_g(span<const SortedVec<Point>> points, const HaarBase & b
 }
 
 inline CommonIntermediateValues compute_intermediate_values(
-    const DataByProcessRegion<SortedVec<Point>> & points, const HaarBase & base, None /*kernels*/) {
+    const DataByProcessRegion<SortedVec<Point>> & points, const HaarBase & base) {
     const auto nb_regions = points.nb_regions();
     std::vector<Matrix_M_MK1> b_by_region;
     std::vector<MatrixG> g_by_region;

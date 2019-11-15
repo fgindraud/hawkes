@@ -13,6 +13,10 @@
 
 /******************************************************************************
  * Kernel configuration selection and construction.
+ *
+ * List of "cases" tying together a name and a type of kernel with how to construct it.
+ * This generate a single point of definition for all possible kernel configurations.
+ * This would be easier if sum types (variant, enums) were available...
  */
 struct SupportedKernelConfig {
     string_view name;
@@ -69,40 +73,6 @@ static std::unique_ptr<KernelConfig> build_kernel_config(
         }
     }
     throw std::runtime_error(fmt::format("Unknown kernel configuration name: {}", name));
-}
-
-/******************************************************************************
- * Computation case selection.
- */
-struct SupportedComputationCase {
-    std::string name;
-
-    // Should return nullptr if not matching
-    std::unique_ptr<CommonIntermediateValues> (*compute_intermediate_values)(
-        const DataByProcessRegion<SortedVec<Point>> & points, const Base & base, const KernelConfig & kernel_config);
-};
-static const SupportedComputationCase supported_computation_cases[] = {
-    // FIXME add !
-};
-
-// Print the list of cases line by line to stdout.
-static void print_supported_computation_cases() {
-    for(const SupportedComputationCase & c : supported_computation_cases) {
-        fmt::print("{}\n", c.name);
-    }
-}
-
-static std::unique_ptr<CommonIntermediateValues> compute_intermediate_values(
-    const DataByProcessRegion<SortedVec<Point>> & points, const Base & base, const KernelConfig & kernel_config) {
-
-    for(const SupportedComputationCase & c : supported_computation_cases) {
-        std::unique_ptr<CommonIntermediateValues> result = c.compute_intermediate_values(points, base, kernel_config);
-        if(result != nullptr) {
-            return result;
-        }
-    }
-    throw std::runtime_error(
-        fmt::format("The combination of '{}' and '{}' is not supported", base.name(), kernel_config.name()));
 }
 
 /******************************************************************************
@@ -213,7 +183,7 @@ int main(int argc, char * argv[]) {
         {"dump-region-info"}, "Stop after parsing and print region/process point counts", [&dump_region_info_option]() {
             dump_region_info_option = true;
         });
-    parser.flag({"print-supported-computation-list"}, "Print the list of supported computations and stops", []() {
+    parser.flag({"print-supported-computations"}, "Print the list of supported computations and stops", []() {
         print_supported_computation_cases();
         std::exit(EXIT_SUCCESS);
     });
@@ -252,8 +222,7 @@ int main(int argc, char * argv[]) {
         // For each case, an overload of compute_intermediate_values indicated by its argument types does the
         // computation.
         const auto compute_b_g_start = instant();
-        std::unique_ptr<CommonIntermediateValues> intermediate_values =
-            compute_intermediate_values(points, *base, *kernel_config);
+        CommonIntermediateValues intermediate_values = compute_intermediate_values(points, *base, *kernel_config);
         const auto compute_b_g_end = instant();
         fmt::print(
             stderr,
@@ -262,7 +231,7 @@ int main(int argc, char * argv[]) {
 
         // Perform lassoshooting and final re-estimation
         const auto lasso_start = instant();
-        const LassoParameters lasso_parameters = compute_lasso_parameters(*intermediate_values, gamma);
+        const LassoParameters lasso_parameters = compute_lasso_parameters(intermediate_values, gamma);
         if(dump_intermediate_values) {
             fmt::print(
                 "# B matrix (rows = {{0}} U {{(l,k)}}, cols = {{m}})\n{}\n",
