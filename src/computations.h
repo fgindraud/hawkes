@@ -286,8 +286,8 @@ inline CommonIntermediateValues compute_intermediate_values(
             for(ProcessId l = 0; l < nb_processes; ++l) {
                 for(FunctionBaseId k = 0; k < base_size; ++k) {
                     const auto shape = convolution(
-                        to_shape(base.histogram(k)),
-                        convolution(to_shape(kernels.kernels[m]), to_shape(kernels.kernels[l])));
+                        to_shape(kernels.kernels[m]),
+                        positive_support(convolution(to_shape(kernels.kernels[l]), to_shape(base.histogram(k)))));
                     const double b_mlk = sum_of_point_differences(points[m], points[l], shape);
                     b.set_lk(m, l, k, b_mlk);
                 }
@@ -313,8 +313,8 @@ inline CommonIntermediateValues compute_intermediate_values(
 
         const auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
             const auto shape = cross_correlation(
-                convolution(to_shape(kernels.kernels[l]), to_shape(base.histogram(k))),
-                convolution(to_shape(kernels.kernels[l2]), to_shape(base.histogram(k2))));
+                positive_support(convolution(to_shape(kernels.kernels[l]), to_shape(base.histogram(k)))),
+                positive_support(convolution(to_shape(kernels.kernels[l2]), to_shape(base.histogram(k2)))));
             return sum_of_point_differences(points[l], points[l2], shape);
         };
         set_G_values_histogram(g, nb_processes, base_size, G_ll2kk2);
@@ -327,8 +327,8 @@ inline CommonIntermediateValues compute_intermediate_values(
             for(ProcessId m = 0; m < nb_processes; ++m) {
                 for(FunctionBaseId k = 0; k < base_size; ++k) {
                     const auto approximated = indicator_approximation(convolution(
-                        to_shape(base.histogram(k)),
-                        convolution(to_shape(kernels.kernels[m]), to_shape(kernels.kernels[l]))));
+                        to_shape(kernels.kernels[m]),
+                        positive_support(convolution(to_shape(kernels.kernels[l]), to_shape(base.histogram(k))))));
 
                     double sum_of_region_sups = 0;
                     for(RegionId r = 0; r < nb_regions; ++r) {
@@ -374,13 +374,15 @@ inline CommonIntermediateValues compute_intermediate_values(
                     const auto phi_k = to_shape(base.histogram(k));
 
                     const auto maximum_width_shape = convolution(
-                        phi_k, convolution(to_shape(maximum_width_kernels[m]), to_shape(maximum_width_kernels[l])));
+                        to_shape(maximum_width_kernels[m]),
+                        positive_support(convolution(to_shape(maximum_width_kernels[l]), phi_k)));
                     const auto union_non_zero_domain = maximum_width_shape.non_zero_domain();
 
                     const auto shape_generator = [&](size_t i_m, size_t i_l) {
                         assert(i_m < kernels[m].size());
                         assert(i_l < kernels[l].size());
-                        return convolution(phi_k, convolution(to_shape(kernels[m][i_m]), to_shape(kernels[l][i_l])));
+                        return convolution(
+                            to_shape(kernels[m][i_m]), positive_support(convolution(to_shape(kernels[l][i_l]), phi_k)));
                     };
                     const double v =
                         shape::sum_of_point_differences(points[m], points[l], shape_generator, union_non_zero_domain);
@@ -414,15 +416,16 @@ inline CommonIntermediateValues compute_intermediate_values(
             const auto phi_k2 = to_shape(base.histogram(k2));
 
             const auto maximum_width_shape = cross_correlation(
-                convolution(to_shape(maximum_width_kernels[l]), phi_k),
-                convolution(to_shape(maximum_width_kernels[l2]), phi_k2));
+                positive_support(convolution(to_shape(maximum_width_kernels[l]), phi_k)),
+                positive_support(convolution(to_shape(maximum_width_kernels[l2]), phi_k2)));
             const auto union_non_zero_domain = maximum_width_shape.non_zero_domain();
 
             const auto shape_generator = [&](size_t i_l, size_t i_l2) {
                 assert(i_l < kernels[l].size());
                 assert(i_l2 < kernels[l2].size());
                 return cross_correlation(
-                    convolution(to_shape(kernels[l][i_l]), phi_k), convolution(to_shape(kernels[l2][i_l2]), phi_k2));
+                    positive_support(convolution(to_shape(kernels[l][i_l]), phi_k)),
+                    positive_support(convolution(to_shape(kernels[l2][i_l2]), phi_k2)));
             };
             return shape::sum_of_point_differences(points[l], points[l2], shape_generator, union_non_zero_domain);
         };

@@ -76,7 +76,3 @@ License
 
 TODO
 
-TODO
-----
-
-* Use PositiveSupport(shape) instead of interval\_right\_half.
