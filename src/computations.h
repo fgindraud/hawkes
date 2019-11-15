@@ -9,49 +9,6 @@
 #include "shape.h"
 #include "types.h"
 
-/* Compute Tmax (used in G).
- * Tmax is the maximum width covered by points of all processes for a specific region.
- */
-inline PointSpace tmax(span<const SortedVec<Point>> processes) {
-    PointSpace min = std::numeric_limits<PointSpace>::max();
-    PointSpace max = std::numeric_limits<PointSpace>::min();
-
-    for(const auto & points : processes) {
-        if(points.size() > 0) {
-            min = std::min(min, points[0]);
-            max = std::max(max, points[points.size() - 1]);
-        }
-    }
-
-    if(min <= max) {
-        return max - min;
-    } else {
-        return 0.; // If there are no points at all, return 0
-    }
-}
-
-/* Conversion of objects to shapes.
- */
-
-inline auto to_shape(IntervalKernel kernel) {
-    return shape::scaled(
-        normalization_factor(kernel),
-        shape::Indicator<Bound::Closed, Bound::Closed>{
-            {-kernel.width / 2., kernel.width / 2.},
-        });
-}
-inline auto to_shape(const HistogramBase::Histogram & histogram) {
-    return shape::scaled(
-        histogram.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{histogram.interval});
-}
-
-inline auto up_shape(const HaarBase::Wavelet & w) {
-    return shape::scaled(w.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{w.up_part});
-}
-inline auto down_shape(const HaarBase::Wavelet & w) {
-    return shape::scaled(w.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{w.down_part});
-}
-
 /******************************************************************************
  * Compute B, G, B_hat intermediate values.
  *
@@ -115,552 +72,441 @@ inline CommonIntermediateValues compute_intermediate_values(
 }
 
 /******************************************************************************
- * Basic histogram case, no kernel.
+ * Helpers.
  */
-inline Matrix_M_MK1 compute_b(span<const SortedVec<Point>> points, const HistogramBase & base) {
-    const auto nb_processes = points.size();
-    const auto base_size = base.base_size;
-    Matrix_M_MK1 b(nb_processes, base_size);
 
-    for(ProcessId m = 0; m < nb_processes; ++m) {
-        // b_0
-        b.set_0(m, double(points[m].size()));
-        // b_lk
-        for(ProcessId l = 0; l < nb_processes; ++l) {
-            for(FunctionBaseId k = 0; k < base_size; ++k) {
-                const double b_mlk = sum_of_point_differences(points[m], points[l], to_shape(base.histogram(k)));
-                b.set_lk(m, l, k, b_mlk);
-            }
-        }
-    }
-    return b;
-}
-
-inline MatrixG compute_g(span<const SortedVec<Point>> points, const HistogramBase & base) {
-    const auto nb_processes = points.size();
-    const auto base_size = base.base_size;
-    MatrixG g(nb_processes, base_size);
-
-    g.set_tmax(tmax(points));
-
-    const auto sqrt_delta = std::sqrt(base.delta);
-    for(ProcessId l = 0; l < nb_processes; ++l) {
-        const auto g_lk = double(points[l].size()) * sqrt_delta;
-        for(FunctionBaseId k = 0; k < base_size; ++k) {
-            g.set_g(l, k, g_lk);
-        }
-    }
-
-    auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
-        const auto shape = cross_correlation(to_shape(base.histogram(k)), to_shape(base.histogram(k2)));
-        return sum_of_point_differences(points[l], points[l2], shape);
-    };
-    /* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
-     *
-     * G_{l,l2,k,k2} = integral_x sum_{x_l,x_l2} phi_k (x - x_l) phi_k2 (x - x_l2) dx.
-     * By change of variable x -> x + c*delta: G_{l,l2,k,k2} = G_{l,l2,k+c,k2+c}.
-     * Thus for each block of G for (l,l2), we only need to compute 2K+1 values of G.
-     * We compute the values on two borders, and copy the values for all inner cells.
-     */
-    for(ProcessId l = 0; l < nb_processes; ++l) {
-        // Case l2 == l: compute for k2 >= k:
-        for(FunctionBaseId k = 0; k < base_size; ++k) {
-            // Compute G_{l,l,0,k} and copy to G_{l,l,c,k+c} for k in [0,K[.
-            const auto v = G_ll2kk2(l, l, FunctionBaseId{0}, k);
-            for(size_t c = 0; k + c < base_size; ++c) {
-                g.set_G(l, l, FunctionBaseId{c}, FunctionBaseId{k + c}, v);
-            }
-        }
-        // Case l2 > l: compute for all (k,k2):
-        for(ProcessId l2 = l; l2 < nb_processes; ++l2) {
-            // Compute G_{l,l2,0,0} and copy to G_{l,l2,c,c}.
-            {
-                const auto v = G_ll2kk2(l, l2, FunctionBaseId{0}, FunctionBaseId{0});
-                for(size_t c = 0; c < base_size; ++c) {
-                    g.set_G(l, l2, FunctionBaseId{c}, FunctionBaseId{c}, v);
-                }
-            }
-            /* for k in [1,K[:
-             * Compute G_{l,l2,0,k} and copy to G_{l,l2,c,k+c}.
-             * Compute G_{l,l2,k,0} and copy to G_{l,l2,k+c,c}.
-             */
-            for(FunctionBaseId k = 1; k < base_size; ++k) {
-                const auto v_0k = G_ll2kk2(l, l2, FunctionBaseId{0}, k);
-                const auto v_k0 = G_ll2kk2(l, l2, k, FunctionBaseId{0});
-                for(size_t c = 0; k + c < base_size; ++c) {
-                    g.set_G(l, l2, FunctionBaseId{c}, FunctionBaseId{k + c}, v_0k);
-                    g.set_G(l, l2, FunctionBaseId{k + c}, FunctionBaseId{c}, v_k0);
-                }
-            }
-        }
-    }
-    return g;
-}
-
-// Complexity: O( M^2 * K + M * max(|N_m|) )
-// Computation is exact (sup can be evaluated perfectly).
-inline Matrix_M_MK1 compute_b_hat(const DataByProcessRegion<SortedVec<Point>> & points, const HistogramBase & base) {
-    const auto nb_processes = points.nb_processes();
-    const auto nb_regions = points.nb_regions();
-    const auto base_size = base.base_size;
-    Matrix_M_MK1 b_hat(nb_processes, base_size);
-
-    // The sup is not affected by translation, so sup(phi_0) = sup(phi_k)
-    // Only compute for phi_0 and replicate for all phi_k.
-    const auto phi_0 = to_shape(base.histogram(FunctionBaseId{0}));
-
-    for(ProcessId l = 0; l < nb_processes; ++l) {
-        double b_hat_l = 0.;
-        for(RegionId r = 0; r < nb_regions; ++r) {
-            b_hat_l += sup_of_sum_of_differences_to_points(points.data(l, r), phi_0);
-        }
-
-        for(ProcessId m = 0; m < nb_processes; ++m) {
-            for(FunctionBaseId k = 0; k < base_size; ++k) {
-                b_hat.set_lk(m, l, k, b_hat_l);
-            }
-        }
-    }
-    return b_hat;
-}
-
-inline CommonIntermediateValues compute_intermediate_values(
-    const DataByProcessRegion<SortedVec<Point>> & points, const HistogramBase & base) {
-    const auto nb_regions = points.nb_regions();
-    std::vector<Matrix_M_MK1> b_by_region;
-    std::vector<MatrixG> g_by_region;
-    b_by_region.reserve(nb_regions);
-    g_by_region.reserve(nb_regions);
-    for(RegionId r = 0; r < nb_regions; ++r) {
-        b_by_region.emplace_back(compute_b(points.data_for_region(r), base));
-        g_by_region.emplace_back(compute_g(points.data_for_region(r), base));
-    }
-    return {std::move(b_by_region), std::move(g_by_region), compute_b_hat(points, base)};
-}
-
-/******************************************************************************
- * Histogram with interval convolution kernels.
- *
- * In this case we use the shape strategy.
- * Values of B/G are expressed from convolution of shapes coming from the base and kernels.
+/* Conversion of objects to shapes.
  */
-inline Matrix_M_MK1 compute_b(
-    span<const SortedVec<Point>> points, const HistogramBase & base, const std::vector<IntervalKernel> & kernels) {
-    assert(kernels.size() == points.size());
-    const auto nb_processes = points.size();
-    const auto base_size = base.base_size;
-    Matrix_M_MK1 b(nb_processes, base_size);
 
-    for(ProcessId m = 0; m < nb_processes; ++m) {
-        // b0
-        b.set_0(m, double(points[m].size()) * std::sqrt(kernels[m].width));
-        // b_lk
-        for(ProcessId l = 0; l < nb_processes; ++l) {
-            for(FunctionBaseId k = 0; k < base_size; ++k) {
-                const auto shape =
-                    convolution(to_shape(base.histogram(k)), convolution(to_shape(kernels[m]), to_shape(kernels[l])));
-                const double b_mlk = sum_of_point_differences(points[m], points[l], shape);
-                b.set_lk(m, l, k, b_mlk);
-            }
-        }
-    }
-    return b;
+inline auto to_shape(IntervalKernel kernel) {
+    return shape::scaled(
+        normalization_factor(kernel),
+        shape::Indicator<Bound::Closed, Bound::Closed>{
+            {-kernel.width / 2., kernel.width / 2.},
+        });
+}
+inline auto to_shape(const HistogramBase::Histogram & histogram) {
+    return shape::scaled(
+        histogram.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{histogram.interval});
 }
 
-inline MatrixG compute_g(
-    span<const SortedVec<Point>> points, const HistogramBase & base, const std::vector<IntervalKernel> & kernels) {
-    assert(kernels.size() == points.size());
-    const auto nb_processes = points.size();
-    const auto base_size = base.base_size;
-    const auto sqrt_delta = std::sqrt(double(base.delta));
-    MatrixG g(nb_processes, base_size);
-
-    g.set_tmax(tmax(points));
-
-    for(ProcessId l = 0; l < nb_processes; ++l) {
-        /* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
-         * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l sqrt(delta) = |N_m| eta_l sqrt(delta).
-         */
-        const auto g_lk = double(points[l].size()) * std::sqrt(kernels[l].width) * sqrt_delta;
-        for(FunctionBaseId k = 0; k < base_size; ++k) {
-            g.set_g(l, k, g_lk);
-        }
-    }
-
-    const auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
-        // V = sum_{x_l,x_l2} corr(conv(W_l,phi_k),conv(W_l2,phi_k2)) (x_l-x_l2)
-        const auto shape = cross_correlation(
-            convolution(to_shape(kernels[l]), to_shape(base.histogram(k))),
-            convolution(to_shape(kernels[l2]), to_shape(base.histogram(k2))));
-        return sum_of_point_differences(points[l], points[l2], shape);
-    };
-    /* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
-     *
-     * G_{l,l2,k,k2} = integral_x sum_{x_l,x_l2} conv(w_l,phi_k) (x - x_l) conv(w_l2,phi_k2) (x - x_l2) dx.
-     * By change of variable x -> x + c*delta: G_{l,l2,k,k2} = G_{l,l2,k+c,k2+c}.
-     * Thus for each block of G for (l,l2), we only need to compute 2K+1 values of G.
-     * We compute the values on two borders, and copy the values for all inner cells.
-     */
-    for(ProcessId l = 0; l < nb_processes; ++l) {
-        // Case l2 == l: compute for k2 >= k:
-        for(FunctionBaseId k = 0; k < base_size; ++k) {
-            // Compute G_{l,l,0,k} and copy to G_{l,l,c,k+c} for k in [0,K[.
-            const auto v = G_ll2kk2(l, l, FunctionBaseId{0}, k);
-            for(size_t c = 0; k + c < base_size; ++c) {
-                g.set_G(l, l, FunctionBaseId{c}, FunctionBaseId{k + c}, v);
-            }
-        }
-        // Case l2 > l: compute for all (k,k2):
-        for(ProcessId l2 = l; l2 < nb_processes; ++l2) {
-            // Compute G_{l,l2,0,0} and copy to G_{l,l2,c,c}.
-            {
-                const auto v = G_ll2kk2(l, l2, FunctionBaseId{0}, FunctionBaseId{0});
-                for(size_t c = 0; c < base_size; ++c) {
-                    g.set_G(l, l2, FunctionBaseId{c}, FunctionBaseId{c}, v);
-                }
-            }
-            /* for k in [1,K[:
-             * Compute G_{l,l2,0,k} and copy to G_{l,l2,c,k+c}.
-             * Compute G_{l,l2,k,0} and copy to G_{l,l2,k+c,c}.
-             */
-            for(FunctionBaseId k = 1; k < base_size; ++k) {
-                const auto v_0k = G_ll2kk2(l, l2, FunctionBaseId{0}, k);
-                const auto v_k0 = G_ll2kk2(l, l2, k, FunctionBaseId{0});
-                for(size_t c = 0; k + c < base_size; ++c) {
-                    g.set_G(l, l2, FunctionBaseId{c}, FunctionBaseId{k + c}, v_0k);
-                    g.set_G(l, l2, FunctionBaseId{k + c}, FunctionBaseId{c}, v_k0);
-                }
-            }
-        }
-    }
-    return g;
+inline shape::Add<std::vector<shape::Polynom<Bound::Open, Bound::Closed>>> to_shape(const HaarBase::Wavelet & wavelet) {
+    return {{
+        {wavelet.up_part, {wavelet.normalization_factor}},    // Up indicator
+        {wavelet.down_part, {-wavelet.normalization_factor}}, // Down indicator
+    }};
 }
 
-// Approximated
-inline Matrix_M_MK1 compute_b_hat(
-    const DataByProcessRegion<SortedVec<Point>> & points,
-    const HistogramBase & base,
-    const std::vector<IntervalKernel> & kernels) {
-    assert(kernels.size() == points.nb_processes());
-    const auto nb_processes = points.nb_processes();
-    const auto nb_regions = points.nb_regions();
-    const auto base_size = base.base_size;
-    Matrix_M_MK1 b_hat(nb_processes, base_size);
-
-    for(ProcessId l = 0; l < nb_processes; ++l) {
-        for(ProcessId m = 0; m < nb_processes; ++m) {
-            for(FunctionBaseId k = 0; k < base_size; ++k) {
-                // Base shapes
-                const auto w_m = to_shape(kernels[m]);
-                const auto w_l = to_shape(kernels[l]);
-                const auto phi_k = to_shape(base.histogram(k));
-                // Approximate trapezoids with an interval of height=avg, width=width of trapezoid
-                const auto approx = indicator_approximation(convolution(phi_k, convolution(w_m, w_l)));
-
-                double sum_of_region_sups = 0;
-                for(RegionId r = 0; r < nb_regions; ++r) {
-                    sum_of_region_sups += sup_of_sum_of_differences_to_points(points.data(l, r), approx);
-                }
-                b_hat.set_lk(m, l, k, sum_of_region_sups);
-            }
-        }
-    }
-    return b_hat;
-}
-
-inline CommonIntermediateValues compute_intermediate_values(
-    const DataByProcessRegion<SortedVec<Point>> & points,
-    const HistogramBase & base,
-    const HomogeneousKernels<IntervalKernel> & kernels) {
-    const auto nb_regions = points.nb_regions();
-    std::vector<Matrix_M_MK1> b_by_region;
-    std::vector<MatrixG> g_by_region;
-    b_by_region.reserve(nb_regions);
-    g_by_region.reserve(nb_regions);
-    for(RegionId r = 0; r < nb_regions; ++r) {
-        b_by_region.emplace_back(compute_b(points.data_for_region(r), base, kernels.kernels));
-        g_by_region.emplace_back(compute_g(points.data_for_region(r), base, kernels.kernels));
-    }
-    return {std::move(b_by_region), std::move(g_by_region), compute_b_hat(points, base, kernels.kernels)};
-}
-
-/******************************************************************************
- * Experimental: heterogeneous kernels (kernel width for each point).
- * Data set is composed of points, kernels.
+/* Compute Tmax (used in G).
+ * Tmax is the maximum width covered by points of all processes for a specific region.
  */
-inline Matrix_M_MK1 compute_b(
-    span<const SortedVec<Point>> points,
-    const HistogramBase & base,
-    span<const std::vector<IntervalKernel>> kernels,
-    const std::vector<IntervalKernel> & maximum_width_kernels) {
-    assert(points.size() == kernels.size());
-    assert(points.size() == maximum_width_kernels.size());
-    const auto nb_processes = points.size();
-    const auto base_size = base.base_size;
-    Matrix_M_MK1 b(nb_processes, base_size);
+inline PointSpace tmax(span<const SortedVec<Point>> processes) {
+    PointSpace min = std::numeric_limits<PointSpace>::max();
+    PointSpace max = std::numeric_limits<PointSpace>::min();
 
-    const auto sum_sqrt_kernel_width = [](const std::vector<IntervalKernel> & kernels) {
-        double sum = 0.;
-        for(const auto & kernel : kernels) {
-            sum += std::sqrt(kernel.width);
-        }
-        return sum;
-    };
-    const auto b_mlk = [&base](
-                           const SortedVec<Point> & m_points,
-                           const std::vector<IntervalKernel> & m_kernels,
-                           IntervalKernel m_maximum_width_kernel,
-                           const SortedVec<Point> & l_points,
-                           const std::vector<IntervalKernel> & l_kernels,
-                           IntervalKernel l_maximum_width_kernel,
-                           FunctionBaseId k) {
-        assert(m_points.size() == m_kernels.size());
-        assert(l_points.size() == l_kernels.size());
-        const auto phi_shape = to_shape(base.histogram(k));
-
-        const auto maximum_width_shape =
-            convolution(phi_shape, convolution(to_shape(m_maximum_width_kernel), to_shape(l_maximum_width_kernel)));
-        const auto union_non_zero_domain = maximum_width_shape.non_zero_domain();
-
-        const auto shape_generator = [&](size_t i_m, size_t i_l) {
-            assert(i_m < m_kernels.size());
-            assert(i_l < l_kernels.size());
-            return convolution(phi_shape, convolution(to_shape(m_kernels[i_m]), to_shape(l_kernels[i_l])));
-        };
-        return shape::sum_of_point_differences(m_points, l_points, shape_generator, union_non_zero_domain);
-    };
-
-    for(ProcessId m = 0; m < nb_processes; ++m) {
-        // b0
-        b.set_0(m, sum_sqrt_kernel_width(kernels[m]));
-        // b_lk
-        for(ProcessId l = 0; l < nb_processes; ++l) {
-            for(FunctionBaseId k = 0; k < base_size; ++k) {
-                const auto v = b_mlk(
-                    points[m],
-                    kernels[m],
-                    maximum_width_kernels[m],
-                    points[l],
-                    kernels[l],
-                    maximum_width_kernels[l],
-                    k);
-                b.set_lk(m, l, k, v);
-            }
+    for(const auto & points : processes) {
+        if(points.size() > 0) {
+            min = std::min(min, points[0]);
+            max = std::max(max, points[points.size() - 1]);
         }
     }
-    return b;
+
+    if(min <= max) {
+        return max - min;
+    } else {
+        return 0.; // If there are no points at all, return 0
+    }
 }
 
-inline MatrixG compute_g(
-    span<const SortedVec<Point>> points,
-    const HistogramBase & base,
-    span<const std::vector<IntervalKernel>> kernels,
-    const std::vector<IntervalKernel> & maximum_width_kernels) {
-    assert(points.size() == kernels.size());
-    assert(points.size() == maximum_width_kernels.size());
-    const auto nb_processes = points.size();
-    const auto base_size = base.base_size;
-    const auto sqrt_delta = std::sqrt(base.delta);
-    MatrixG g(nb_processes, base_size);
-
-    g.set_tmax(tmax(points));
-
-    const auto sum_sqrt_kernel_width = [](const std::vector<IntervalKernel> & kernels) {
-        double sum = 0.;
-        for(const auto & kernel : kernels) {
-            sum += std::sqrt(kernel.width);
-        }
-        return sum;
-    };
-    for(ProcessId l = 0; l < nb_processes; ++l) {
-        /* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
-         * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l sqrt(delta) = |N_m| eta_l sqrt(delta).
-         */
-        const auto g_lk = sum_sqrt_kernel_width(kernels[l]) * sqrt_delta;
-        for(FunctionBaseId k = 0; k < base_size; ++k) {
-            g.set_g(l, k, g_lk);
-        }
-    }
-
-    const auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
-        assert(points[l].size() == kernels[l].size());
-        assert(points[l2].size() == kernels[l2].size());
-        const auto & l_points = points[l];
-        const auto & l2_points = points[l2];
-        const auto & l_kernels = kernels[l];
-        const auto & l2_kernels = kernels[l2];
-
-        const auto phi_shape = to_shape(base.histogram(k));
-        const auto phi_shape_2 = to_shape(base.histogram(k2));
-
-        const auto maximum_width_shape = cross_correlation(
-            convolution(to_shape(maximum_width_kernels[l]), phi_shape),
-            convolution(to_shape(maximum_width_kernels[l2]), phi_shape_2));
-        const auto union_non_zero_domain = maximum_width_shape.non_zero_domain();
-
-        const auto shape_generator = [&](size_t i_l, size_t i_l2) {
-            assert(i_l < l_kernels.size());
-            assert(i_l2 < l2_kernels.size());
-            return cross_correlation(
-                convolution(to_shape(l_kernels[i_l]), phi_shape), convolution(to_shape(l2_kernels[i_l2]), phi_shape_2));
-        };
-        return shape::sum_of_point_differences(l_points, l2_points, shape_generator, union_non_zero_domain);
-    };
-    /* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
-     *
-     * G_{l,l2,k,k2} = integral_x sum_{x_l,x_l2} conv(w_l,phi_k) (x - x_l) conv(w_l2,phi_k2) (x - x_l2) dx.
-     * By change of variable x -> x + c*delta: G_{l,l2,k,k2} = G_{l,l2,k+c,k2+c}.
-     * Thus for each block of G for (l,l2), we only need to compute 2K+1 values of G.
-     * We compute the values on two borders, and copy the values for all inner cells.
-     */
-    for(ProcessId l = 0; l < nb_processes; ++l) {
-        // Case l2 == l: compute for k2 >= k:
-        for(FunctionBaseId k = 0; k < base_size; ++k) {
-            // Compute G_{l,l,0,k} and copy to G_{l,l,c,k+c} for k in [0,K[.
-            const auto v = G_ll2kk2(l, l, FunctionBaseId{0}, k);
-            for(size_t c = 0; k + c < base_size; ++c) {
-                g.set_G(l, l, FunctionBaseId{c}, FunctionBaseId{k + c}, v);
-            }
-        }
-        // Case l2 > l: compute for all (k,k2):
-        for(ProcessId l2 = l; l2 < nb_processes; ++l2) {
-            // Compute G_{l,l2,0,0} and copy to G_{l,l2,c,c}.
-            {
-                const auto v = G_ll2kk2(l, l2, FunctionBaseId{0}, FunctionBaseId{0});
-                for(size_t c = 0; c < base_size; ++c) {
-                    g.set_G(l, l2, FunctionBaseId{c}, FunctionBaseId{c}, v);
-                }
-            }
-            /* for k in [1,K[:
-             * Compute G_{l,l2,0,k} and copy to G_{l,l2,c,k+c}.
-             * Compute G_{l,l2,k,0} and copy to G_{l,l2,k+c,c}.
-             */
-            for(FunctionBaseId k = 1; k < base_size; ++k) {
-                const auto v_0k = G_ll2kk2(l, l2, FunctionBaseId{0}, k);
-                const auto v_k0 = G_ll2kk2(l, l2, k, FunctionBaseId{0});
-                for(size_t c = 0; k + c < base_size; ++c) {
-                    g.set_G(l, l2, FunctionBaseId{c}, FunctionBaseId{k + c}, v_0k);
-                    g.set_G(l, l2, FunctionBaseId{k + c}, FunctionBaseId{c}, v_k0);
-                }
-            }
-        }
-    }
-    return g;
-}
-
-inline CommonIntermediateValues compute_intermediate_values(
-    const DataByProcessRegion<SortedVec<Point>> & points,
-    const HistogramBase & base,
-    const HeterogeneousKernels<IntervalKernel> & kernels) {
-    const auto nb_regions = points.nb_regions();
-    std::vector<Matrix_M_MK1> b_by_region;
-    std::vector<MatrixG> g_by_region;
-    b_by_region.reserve(nb_regions);
-    g_by_region.reserve(nb_regions);
-    for(RegionId r = 0; r < nb_regions; ++r) {
-        b_by_region.emplace_back(compute_b(
-            points.data_for_region(r), base, kernels.kernels.data_for_region(r), kernels.maximum_width_kernels));
-        g_by_region.emplace_back(compute_g(
-            points.data_for_region(r), base, kernels.kernels.data_for_region(r), kernels.maximum_width_kernels));
-    }
-    // B_hat too complex to compute
-    Matrix_M_MK1 b_hat(points.nb_processes(), base.base_size);
-    b_hat.inner.setZero();
-    return {std::move(b_by_region), std::move(g_by_region), std::move(b_hat)};
-}
-
-/******************************************************************************
- * Haar base, no kernel, not optimized.
- * TODO improve
- */
-inline Matrix_M_MK1 compute_b(span<const SortedVec<Point>> points, const HaarBase & base) {
-    const size_t nb_processes = points.size();
-    const size_t base_size = base.base_size();
-    Matrix_M_MK1 b(nb_processes, base_size);
-
-    const auto b_mlk =
-        [](const SortedVec<Point> & m_points, const SortedVec<Point> & l_points, const HaarBase::Wavelet & wavelet) {
-            // Using linear properties of sum_of_point_differences
-            // TODO can be optimized as down_part(scale, pos) = -up_part(scale, pos + 1)
-            return sum_of_point_differences(m_points, l_points, up_shape(wavelet)) -
-                   sum_of_point_differences(m_points, l_points, down_shape(wavelet));
-        };
-    for(ProcessId m = 0; m < nb_processes; ++m) {
-        // b_0
-        b.set_0(m, double(points[m].size()));
-        // b_lk
-        for(ProcessId l = 0; l < nb_processes; ++l) {
-            for(FunctionBaseId k = 0; k < base_size; ++k) {
-                const auto v = b_mlk(points[m], points[l], base.wavelet(k));
-                b.set_lk(m, l, k, v);
-            }
-        }
-    }
-    return b;
-}
-
-inline MatrixG compute_g(span<const SortedVec<Point>> points, const HaarBase & base) {
-    const size_t nb_processes = points.size();
-    const size_t base_size = base.base_size();
-    MatrixG g(nb_processes, base_size);
-
-    g.set_tmax(tmax(points));
-
-    for(ProcessId l = 0; l < nb_processes; ++l) {
-        for(FunctionBaseId k = 0; k < base_size; ++k) {
-            g.set_g(l, k, 0.); // integral_R phi_k = 0
-        }
-    }
-
-    auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
-        const auto wavelet1 = base.wavelet(k);
-        const auto wavelet2 = base.wavelet(k2);
-        // Decompose shape by cross_correlation
-        const auto shape_uu = cross_correlation(up_shape(wavelet1), up_shape(wavelet2));
-        const auto shape_ud = cross_correlation(up_shape(wavelet1), down_shape(wavelet2));
-        const auto shape_du = cross_correlation(down_shape(wavelet1), up_shape(wavelet2));
-        const auto shape_dd = cross_correlation(down_shape(wavelet1), down_shape(wavelet2));
-        return sum_of_point_differences(points[l], points[l2], shape_uu) +
-               sum_of_point_differences(points[l], points[l2], shape_ud) +
-               sum_of_point_differences(points[l], points[l2], shape_du) +
-               sum_of_point_differences(points[l], points[l2], shape_dd);
-    };
-    // G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
+// Set G(l,l2,k,k2) = f(l,l2,k,k2). G is symmetric so only compute for (l,k) <= (l2,k2).
+template <typename F> void set_G_values(MatrixG & g, size_t nb_processes, size_t base_size, F compute_l_l2_k_k2) {
     for(ProcessId l = 0; l < nb_processes; ++l) {
         // Case l2 == l: compute for k2 >= k:
         for(FunctionBaseId k = 0; k < base_size; ++k) {
             for(FunctionBaseId k2 = k; k2 < base_size; ++k2) {
-                g.set_G(l, l, k, k2, G_ll2kk2(l, l, k, k2));
+                g.set_G(l, l, k, k2, compute_l_l2_k_k2(l, l, k, k2));
             }
         }
         // Case l2 > l: compute for all (k,k2):
         for(ProcessId l2 = l; l2 < nb_processes; ++l2) {
             for(FunctionBaseId k = 0; k < base_size; ++k) {
                 for(FunctionBaseId k2 = 0; k2 < base_size; ++k2) {
-                    g.set_G(l, l2, k, k2, G_ll2kk2(l, l2, k, k2));
+                    g.set_G(l, l2, k, k2, compute_l_l2_k_k2(l, l2, k, k2));
                 }
             }
         }
     }
-    return g;
 }
 
+/* Set G(l,l2,k,k2) = f(l,l2,k,k2). G is symmetric so only compute for (l,k) <= (l2,k2).
+ *
+ * G_{l,l2,k,k2} = integral_x sum_{x_l,x_l2} phi_k (x - x_l) phi_k2 (x - x_l2) dx.
+ * By change of variable x -> x + c*delta: G_{l,l2,k,k2} = G_{l,l2,k+c,k2+c}.
+ * Thus for each block of G for (l,l2), we only need to compute 2K+1 values instead of K^2.
+ * We compute the values on two borders, and copy the values for all inner cells.
+ */
+template <typename F>
+void set_G_values_histogram(MatrixG & g, size_t nb_processes, size_t base_size, F compute_l_l2_k_k2) {
+    for(ProcessId l = 0; l < nb_processes; ++l) {
+        // Case l2 == l: compute for k2 >= k:
+        for(FunctionBaseId k = 0; k < base_size; ++k) {
+            // Compute G_{l,l,0,k} and copy to G_{l,l,c,k+c} for k in [0,K[.
+            const auto v = compute_l_l2_k_k2(l, l, FunctionBaseId{0}, k);
+            for(size_t c = 0; k + c < base_size; ++c) {
+                g.set_G(l, l, FunctionBaseId{c}, FunctionBaseId{k + c}, v);
+            }
+        }
+        // Case l2 > l: compute for all (k,k2):
+        for(ProcessId l2 = l; l2 < nb_processes; ++l2) {
+            // Compute G_{l,l2,0,0} and copy to G_{l,l2,c,c}.
+            {
+                const auto v = compute_l_l2_k_k2(l, l2, FunctionBaseId{0}, FunctionBaseId{0});
+                for(size_t c = 0; c < base_size; ++c) {
+                    g.set_G(l, l2, FunctionBaseId{c}, FunctionBaseId{c}, v);
+                }
+            }
+            /* for k in [1,K[:
+             * Compute G_{l,l2,0,k} and copy to G_{l,l2,c,k+c}.
+             * Compute G_{l,l2,k,0} and copy to G_{l,l2,k+c,c}.
+             */
+            for(FunctionBaseId k = 1; k < base_size; ++k) {
+                const auto v_0k = compute_l_l2_k_k2(l, l2, FunctionBaseId{0}, k);
+                const auto v_k0 = compute_l_l2_k_k2(l, l2, k, FunctionBaseId{0});
+                for(size_t c = 0; k + c < base_size; ++c) {
+                    g.set_G(l, l2, FunctionBaseId{c}, FunctionBaseId{k + c}, v_0k);
+                    g.set_G(l, l2, FunctionBaseId{k + c}, FunctionBaseId{c}, v_k0);
+                }
+            }
+        }
+    }
+}
+
+inline double sum_sqrt_kernel_width(const std::vector<IntervalKernel> & kernels) {
+    double sum = 0.;
+    for(const auto & kernel : kernels) {
+        sum += std::sqrt(kernel.width);
+    }
+    return sum;
+}
+
+/******************************************************************************
+ * Histogram cases.
+ */
+
 inline CommonIntermediateValues compute_intermediate_values(
-    const DataByProcessRegion<SortedVec<Point>> & points, const HaarBase & base) {
-    const auto nb_regions = points.nb_regions();
+    const DataByProcessRegion<SortedVec<Point>> & points, const HistogramBase & base) {
+    // Constants
+    const size_t base_size = base.base_size;
+    const size_t nb_processes = points.nb_processes();
+    const size_t nb_regions = points.nb_regions();
+    // B
+    auto compute_b = [&base, base_size, nb_processes](span<const SortedVec<Point>> points) {
+        Matrix_M_MK1 b(nb_processes, base_size);
+        for(ProcessId m = 0; m < nb_processes; ++m) {
+            // b_0
+            b.set_0(m, double(points[m].size()));
+            // b_lk
+            for(ProcessId l = 0; l < nb_processes; ++l) {
+                for(FunctionBaseId k = 0; k < base_size; ++k) {
+                    const double b_mlk = sum_of_point_differences(points[m], points[l], to_shape(base.histogram(k)));
+                    b.set_lk(m, l, k, b_mlk);
+                }
+            }
+        }
+        return b;
+    };
+    // G
+    auto compute_g = [&base, base_size, nb_processes](span<const SortedVec<Point>> points) {
+        MatrixG g(nb_processes, base_size);
+        g.set_tmax(tmax(points));
+
+        const auto sqrt_delta = std::sqrt(base.delta);
+        for(ProcessId l = 0; l < nb_processes; ++l) {
+            const auto g_lk = double(points[l].size()) * sqrt_delta;
+            for(FunctionBaseId k = 0; k < base_size; ++k) {
+                g.set_g(l, k, g_lk);
+            }
+        }
+
+        auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
+            const auto shape = cross_correlation(to_shape(base.histogram(k)), to_shape(base.histogram(k2)));
+            return sum_of_point_differences(points[l], points[l2], shape);
+        };
+        set_G_values_histogram(g, nb_processes, base_size, G_ll2kk2);
+
+        return g;
+    };
+    // B_hat : exact computation
+    auto compute_b_hat = [&points, &base, base_size, nb_processes, nb_regions]() {
+        // The sup is not affected by translation, so sup(phi_0) = sup(phi_k)
+        // Only compute for phi_0 and replicate for all phi_k.
+        const auto phi_0 = to_shape(base.histogram(FunctionBaseId{0}));
+        Matrix_M_MK1 b_hat(nb_processes, base_size);
+        for(ProcessId l = 0; l < nb_processes; ++l) {
+            double b_hat_l = 0.;
+            for(RegionId r = 0; r < nb_regions; ++r) {
+                b_hat_l += sup_of_sum_of_differences_to_points(points.data(l, r), phi_0);
+            }
+
+            for(ProcessId m = 0; m < nb_processes; ++m) {
+                for(FunctionBaseId k = 0; k < base_size; ++k) {
+                    b_hat.set_lk(m, l, k, b_hat_l);
+                }
+            }
+        }
+        return b_hat;
+    };
+    // All values for all regions
     std::vector<Matrix_M_MK1> b_by_region;
     std::vector<MatrixG> g_by_region;
     b_by_region.reserve(nb_regions);
     g_by_region.reserve(nb_regions);
     for(RegionId r = 0; r < nb_regions; ++r) {
-        b_by_region.emplace_back(compute_b(points.data_for_region(r), base));
-        g_by_region.emplace_back(compute_g(points.data_for_region(r), base));
+        b_by_region.emplace_back(compute_b(points.data_for_region(r)));
+        g_by_region.emplace_back(compute_g(points.data_for_region(r)));
     }
+    return {std::move(b_by_region), std::move(g_by_region), compute_b_hat()};
+}
 
-    // For now ignore the sup part
-    Matrix_M_MK1 b_hat(points.nb_processes(), base.base_size());
-    b_hat.inner.setZero();
-    return {std::move(b_by_region), std::move(g_by_region), std::move(b_hat)};
+inline CommonIntermediateValues compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & points,
+    const HistogramBase & base,
+    const HomogeneousKernels<IntervalKernel> & kernels) {
+    // Constants
+    const size_t nb_processes = points.nb_processes();
+    const size_t nb_regions = points.nb_regions();
+    const size_t base_size = base.base_size;
+    // B
+    auto compute_b = [&base, &kernels, base_size, nb_processes](span<const SortedVec<Point>> points) {
+        Matrix_M_MK1 b(nb_processes, base_size);
+        for(ProcessId m = 0; m < nb_processes; ++m) {
+            // b0
+            b.set_0(m, double(points[m].size()) * std::sqrt(kernels.kernels[m].width));
+            // b_lk
+            for(ProcessId l = 0; l < nb_processes; ++l) {
+                for(FunctionBaseId k = 0; k < base_size; ++k) {
+                    const auto shape = convolution(
+                        to_shape(base.histogram(k)),
+                        convolution(to_shape(kernels.kernels[m]), to_shape(kernels.kernels[l])));
+                    const double b_mlk = sum_of_point_differences(points[m], points[l], shape);
+                    b.set_lk(m, l, k, b_mlk);
+                }
+            }
+        }
+        return b;
+    };
+    // G
+    auto compute_g = [&base, &kernels, base_size, nb_processes](span<const SortedVec<Point>> points) {
+        MatrixG g(nb_processes, base_size);
+        g.set_tmax(tmax(points));
+
+        const auto sqrt_delta = std::sqrt(double(base.delta));
+        for(ProcessId l = 0; l < nb_processes; ++l) {
+            /* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
+             * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l sqrt(delta) = |N_m| eta_l sqrt(delta).
+             */
+            const auto g_lk = double(points[l].size()) * std::sqrt(kernels.kernels[l].width) * sqrt_delta;
+            for(FunctionBaseId k = 0; k < base_size; ++k) {
+                g.set_g(l, k, g_lk);
+            }
+        }
+
+        const auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
+            const auto shape = cross_correlation(
+                convolution(to_shape(kernels.kernels[l]), to_shape(base.histogram(k))),
+                convolution(to_shape(kernels.kernels[l2]), to_shape(base.histogram(k2))));
+            return sum_of_point_differences(points[l], points[l2], shape);
+        };
+        set_G_values_histogram(g, nb_processes, base_size, G_ll2kk2);
+        return g;
+    };
+    // B_hat, approximated.
+    auto compute_b_hat = [&points, &base, &kernels, base_size, nb_processes, nb_regions]() {
+        Matrix_M_MK1 b_hat(nb_processes, base_size);
+        for(ProcessId l = 0; l < nb_processes; ++l) {
+            for(ProcessId m = 0; m < nb_processes; ++m) {
+                for(FunctionBaseId k = 0; k < base_size; ++k) {
+                    const auto approximated = indicator_approximation(convolution(
+                        to_shape(base.histogram(k)),
+                        convolution(to_shape(kernels.kernels[m]), to_shape(kernels.kernels[l]))));
+
+                    double sum_of_region_sups = 0;
+                    for(RegionId r = 0; r < nb_regions; ++r) {
+                        sum_of_region_sups += sup_of_sum_of_differences_to_points(points.data(l, r), approximated);
+                    }
+                    b_hat.set_lk(m, l, k, sum_of_region_sups);
+                }
+            }
+        }
+        return b_hat;
+    };
+    // Values for all regions
+    std::vector<Matrix_M_MK1> b_by_region;
+    std::vector<MatrixG> g_by_region;
+    b_by_region.reserve(nb_regions);
+    g_by_region.reserve(nb_regions);
+    for(RegionId r = 0; r < nb_regions; ++r) {
+        b_by_region.emplace_back(compute_b(points.data_for_region(r)));
+        g_by_region.emplace_back(compute_g(points.data_for_region(r)));
+    }
+    return {std::move(b_by_region), std::move(g_by_region), compute_b_hat()};
+}
+
+inline CommonIntermediateValues compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & points,
+    const HistogramBase & base,
+    const HeterogeneousKernels<IntervalKernel> & kernels) {
+    // Constants
+    const size_t nb_processes = points.nb_processes();
+    const size_t base_size = base.base_size;
+    const size_t nb_regions = points.nb_regions();
+    const std::vector<IntervalKernel> & maximum_width_kernels = kernels.maximum_width_kernels;
+    // B
+    auto compute_b = [&base, &maximum_width_kernels, base_size, nb_processes](
+                         span<const SortedVec<Point>> points, span<const std::vector<IntervalKernel>> kernels) {
+        Matrix_M_MK1 b(nb_processes, base_size);
+        for(ProcessId m = 0; m < nb_processes; ++m) {
+            // b0
+            b.set_0(m, sum_sqrt_kernel_width(kernels[m]));
+            // b_lk
+            for(ProcessId l = 0; l < nb_processes; ++l) {
+                for(FunctionBaseId k = 0; k < base_size; ++k) {
+                    const auto phi_k = to_shape(base.histogram(k));
+
+                    const auto maximum_width_shape = convolution(
+                        phi_k, convolution(to_shape(maximum_width_kernels[m]), to_shape(maximum_width_kernels[l])));
+                    const auto union_non_zero_domain = maximum_width_shape.non_zero_domain();
+
+                    const auto shape_generator = [&](size_t i_m, size_t i_l) {
+                        assert(i_m < kernels[m].size());
+                        assert(i_l < kernels[l].size());
+                        return convolution(phi_k, convolution(to_shape(kernels[m][i_m]), to_shape(kernels[l][i_l])));
+                    };
+                    const double v =
+                        shape::sum_of_point_differences(points[m], points[l], shape_generator, union_non_zero_domain);
+                    b.set_lk(m, l, k, v);
+                }
+            }
+        }
+        return b;
+    };
+    // G
+    auto compute_g = [&base, &maximum_width_kernels, base_size, nb_processes](
+                         span<const SortedVec<Point>> points, span<const std::vector<IntervalKernel>> kernels) {
+        MatrixG g(nb_processes, base_size);
+        g.set_tmax(tmax(points));
+
+        const double sqrt_delta = std::sqrt(base.delta);
+        for(ProcessId l = 0; l < nb_processes; ++l) {
+            /* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
+             * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l sqrt(delta) = |N_m| eta_l sqrt(delta).
+             */
+            const auto g_lk = sum_sqrt_kernel_width(kernels[l]) * sqrt_delta;
+            for(FunctionBaseId k = 0; k < base_size; ++k) {
+                g.set_g(l, k, g_lk);
+            }
+        }
+
+        const auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
+            assert(points[l].size() == kernels[l].size());
+            assert(points[l2].size() == kernels[l2].size());
+            const auto phi_k = to_shape(base.histogram(k));
+            const auto phi_k2 = to_shape(base.histogram(k2));
+
+            const auto maximum_width_shape = cross_correlation(
+                convolution(to_shape(maximum_width_kernels[l]), phi_k),
+                convolution(to_shape(maximum_width_kernels[l2]), phi_k2));
+            const auto union_non_zero_domain = maximum_width_shape.non_zero_domain();
+
+            const auto shape_generator = [&](size_t i_l, size_t i_l2) {
+                assert(i_l < kernels[l].size());
+                assert(i_l2 < kernels[l2].size());
+                return cross_correlation(
+                    convolution(to_shape(kernels[l][i_l]), phi_k), convolution(to_shape(kernels[l2][i_l2]), phi_k2));
+            };
+            return shape::sum_of_point_differences(points[l], points[l2], shape_generator, union_non_zero_domain);
+        };
+        set_G_values_histogram(g, nb_processes, base_size, G_ll2kk2); // Simplification is still valid with convolution
+
+        return g;
+    };
+    // B_hat : unable to approximate it, use 0.
+    auto compute_b_hat = [nb_processes, base_size]() {
+        Matrix_M_MK1 b_hat(nb_processes, base_size);
+        b_hat.inner.setZero();
+        return b_hat;
+    };
+    // All values for all regions
+    std::vector<Matrix_M_MK1> b_by_region;
+    std::vector<MatrixG> g_by_region;
+    b_by_region.reserve(nb_regions);
+    g_by_region.reserve(nb_regions);
+    for(RegionId r = 0; r < nb_regions; ++r) {
+        b_by_region.emplace_back(compute_b(points.data_for_region(r), kernels.kernels.data_for_region(r)));
+        g_by_region.emplace_back(compute_g(points.data_for_region(r), kernels.kernels.data_for_region(r)));
+    }
+    return {std::move(b_by_region), std::move(g_by_region), compute_b_hat()};
+}
+
+/******************************************************************************
+ * Haar base
+ */
+inline CommonIntermediateValues compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & points, const HaarBase & base) {
+    // Constants
+    const size_t nb_processes = points.nb_processes();
+    const size_t base_size = base.base_size();
+    const auto nb_regions = points.nb_regions();
+    // B
+    auto compute_b = [&base, base_size, nb_processes](span<const SortedVec<Point>> points) {
+        Matrix_M_MK1 b(nb_processes, base_size);
+        for(ProcessId m = 0; m < nb_processes; ++m) {
+            // b_0
+            b.set_0(m, double(points[m].size()));
+            // b_lk
+            for(ProcessId l = 0; l < nb_processes; ++l) {
+                for(FunctionBaseId k = 0; k < base_size; ++k) {
+                    const auto v = sum_of_point_differences(points[m], points[l], to_shape(base.wavelet(k)));
+                    b.set_lk(m, l, k, v);
+                }
+            }
+        }
+        return b;
+    };
+    // G
+    auto compute_g = [&base, base_size, nb_processes](span<const SortedVec<Point>> points) {
+        MatrixG g(nb_processes, base_size);
+        g.set_tmax(tmax(points));
+
+        for(ProcessId l = 0; l < nb_processes; ++l) {
+            for(FunctionBaseId k = 0; k < base_size; ++k) {
+                g.set_g(l, k, 0.); // integral_R phi_k = 0
+            }
+        }
+
+        auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
+            const auto shape = cross_correlation(to_shape(base.wavelet(k)), to_shape(base.wavelet(k2)));
+            return sum_of_point_differences(points[l], points[l2], shape);
+        };
+        set_G_values(g, nb_processes, base_size, G_ll2kk2);
+        return g;
+    };
+    // B_hat : Could be computed exactly by expanding strategy for indicator. TODO
+    auto compute_b_hat = [nb_processes, base_size]() {
+        Matrix_M_MK1 b_hat(nb_processes, base_size);
+        b_hat.inner.setZero();
+        return b_hat;
+    };
+    // All values for all regions
+    std::vector<Matrix_M_MK1> b_by_region;
+    std::vector<MatrixG> g_by_region;
+    b_by_region.reserve(nb_regions);
+    g_by_region.reserve(nb_regions);
+    for(RegionId r = 0; r < nb_regions; ++r) {
+        b_by_region.emplace_back(compute_b(points.data_for_region(r)));
+        g_by_region.emplace_back(compute_g(points.data_for_region(r)));
+    }
+    return {std::move(b_by_region), std::move(g_by_region), compute_b_hat()};
 }
 
 /******************************************************************************
