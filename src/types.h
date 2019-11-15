@@ -309,7 +309,7 @@ template <typename KT> struct HomogeneousKernels final : KernelConfig {
 
     HomogeneousKernels(std::vector<KT> && kernels_) : kernels(std::move(kernels_)) {}
 
-    std::string name() const final { return fmt::format("homogeneous kernels ({})", KT::name()); }
+    std::string name() const final { return fmt::format("homogeneous {} kernels", KT::name()); }
     void write_verbose_description(FILE * out) const final {
         auto widths = map_to_vector(kernels, [](const KT & kernel) -> double { return kernel.width; });
         fmt::print(out, "# kernels = homogeneous {}, widths = {{{}}}\n", KT::name(), fmt::join(widths, ", "));
@@ -326,7 +326,7 @@ template <typename KT> struct HeterogeneousKernels final : KernelConfig {
         assert(kernels.nb_processes() == maximum_width_kernels.size());
     }
 
-    std::string name() const final { return fmt::format("heterogeneous kernels ({})", KT::name()); }
+    std::string name() const final { return fmt::format("heterogeneous {} kernels", KT::name()); }
     void write_verbose_description(FILE * out) const final {
         // Do not print widths, as they are too numerous
         fmt::print(out, "# kernels = heterogeneous {}\n", KT::name());

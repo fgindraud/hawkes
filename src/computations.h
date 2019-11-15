@@ -9,6 +9,49 @@
 #include "shape.h"
 #include "types.h"
 
+/* Compute Tmax (used in G).
+ * Tmax is the maximum width covered by points of all processes for a specific region.
+ */
+inline PointSpace tmax(span<const SortedVec<Point>> processes) {
+    PointSpace min = std::numeric_limits<PointSpace>::max();
+    PointSpace max = std::numeric_limits<PointSpace>::min();
+
+    for(const auto & points : processes) {
+        if(points.size() > 0) {
+            min = std::min(min, points[0]);
+            max = std::max(max, points[points.size() - 1]);
+        }
+    }
+
+    if(min <= max) {
+        return max - min;
+    } else {
+        return 0.; // If there are no points at all, return 0
+    }
+}
+
+/* Conversion of objects to shapes.
+ */
+
+inline auto to_shape(IntervalKernel kernel) {
+    return shape::scaled(
+        normalization_factor(kernel),
+        shape::Indicator<Bound::Closed, Bound::Closed>{
+            {-kernel.width / 2., kernel.width / 2.},
+        });
+}
+inline auto to_shape(const HistogramBase::Histogram & histogram) {
+    return shape::scaled(
+        histogram.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{histogram.interval});
+}
+
+inline auto up_shape(const HaarBase::Wavelet & w) {
+    return shape::scaled(w.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{w.up_part});
+}
+inline auto down_shape(const HaarBase::Wavelet & w) {
+    return shape::scaled(w.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{w.down_part});
+}
+
 /******************************************************************************
  * Compute B, G, B_hat intermediate values.
  *
@@ -69,104 +112,6 @@ inline CommonIntermediateValues compute_intermediate_values(
 
     throw std::runtime_error(
         fmt::format("The combination of '{}' with '{}' is not supported", base.name(), kernel_config.name()));
-}
-
-/******************************************************************************
- * Generic building blocks useful for all cases.
- */
-
-/* Compute Tmax (used in G).
- * Tmax is the maximum width covered by points of all processes for a specific region.
- */
-inline PointSpace tmax(span<const SortedVec<Point>> processes) {
-    PointSpace min = std::numeric_limits<PointSpace>::max();
-    PointSpace max = std::numeric_limits<PointSpace>::min();
-
-    for(const auto & points : processes) {
-        if(points.size() > 0) {
-            min = std::min(min, points[0]);
-            max = std::max(max, points[points.size() - 1]);
-        }
-    }
-
-    if(min <= max) {
-        return max - min;
-    } else {
-        return 0.; // If there are no points at all, return 0
-    }
-}
-
-// FIXME move and upgrade
-/* Compute sum_{x_m in N_m, x_l in N_l} shape_generator(W_{x_m}, W_{x_l})(x_m - x_l).
- *
- * shape_generator(i_m, i_l) must return the shape for W_{x_m}, W_{x_l} if x_m=N_m[i_m] and x_l=N_l[i_l].
- *
- * union_non_zero_domain must contain the union of non zero domains of shape_generator(i_m,i_l).
- * In practice, this usually consists of considering the kernels of maximum widths in a convolution with phi_k.
- * This non_zero_domain is used to filter out x_m/x_l where shape_gen(i_m,i_l)(x_m-x-l) is zero.
- * This keeps the complexity down.
- *
- * The algorithm is an adaptation of the previous one, with shape generation for each (i_m/i_l).
- * Worst case complexity: O(|N|^2).
- * Average complexity: O(|N| * density(N) * width(non_zero_domain)) = O(|N|^2 * width(non_zero_domain) / Tmax).
- */
-template <typename ShapeGenerator> inline double sum_of_point_differences(
-    const SortedVec<Point> & m_points,
-    const SortedVec<Point> & l_points,
-    const ShapeGenerator & shape_generator,
-    shape::NzdIntervalType<decltype(std::declval<ShapeGenerator>()(size_t(), size_t()))> union_non_zero_domain) {
-    double sum = 0.;
-    size_t starting_i_m = 0;
-    for(size_t i_l = 0; i_l < l_points.size(); ++i_l) {
-        // x_l = N_l[i_l], with N_l[x] a strictly increasing function of x.
-        // Compute shape(x_m - x_l) for all x_m in (x_l + non_zero_domain) interval.
-        const auto x_l = l_points[i_l];
-        const auto interval_i_l = x_l + union_non_zero_domain;
-
-        // starting_i_m = min{i_m, N_m[i_m] - N_l[i_l] >= non_zero_domain.left}.
-        // We can restrict the search by starting from:
-        // last_starting_i_m = min{i_m, N_m[i_m] - N_l[i_l - 1] >= non_zero_domain.left or i_m == 0}.
-        // We have: N_m[starting_i_m] >= N_l[i_l] + nzd.left > N_l[i_l - 1] + nzd.left.
-        // Because N_m is increasing and properties of the min, starting_i_m >= last_starting_i_m.
-        while(starting_i_m < m_points.size() && !(interval_i_l.left <= m_points[starting_i_m])) {
-            starting_i_m += 1;
-        }
-        if(starting_i_m == m_points.size()) {
-            // starting_i_m is undefined because last(N_m) < N_l[i_l] + non_zero_domain.left.
-            // last(N_m) == max(x_m in N_m) because N_m[x] is strictly increasing.
-            // So for each j > i_l , max(x_m) < N[j] + non_zero_domain.left, and shape (x_m - N_l[j]) == 0.
-            // We can stop there as the sum is already complete.
-            break;
-        }
-        // Sum values of shape(x_m - x_l) as long as x_m is in interval_i_l.
-        // starting_i_m defined => for each i_m < starting_i_m, shape(N_m[i_m] - x_l) == 0.
-        // Thus we only scan from starting_i_m to the last i_m in interval.
-        // N_m[x] is strictly increasing so we only need to check the right bound of the interval.
-        for(size_t i_m = starting_i_m; i_m < m_points.size() && m_points[i_m] <= interval_i_l.right; i_m += 1) {
-            sum += shape_generator(i_m, i_l)(m_points[i_m] - x_l);
-        }
-    }
-    return sum;
-}
-
-// Conversion of objects to shapes (shape.h)
-inline auto to_shape(IntervalKernel kernel) {
-    return shape::scaled(
-        normalization_factor(kernel),
-        shape::Indicator<Bound::Closed, Bound::Closed>{
-            {-kernel.width / 2., kernel.width / 2.},
-        });
-}
-inline auto to_shape(const HistogramBase::Histogram & histogram) {
-    return shape::scaled(
-        histogram.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{histogram.interval});
-}
-
-inline auto up_shape(const HaarBase::Wavelet & w) {
-    return shape::scaled(w.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{w.up_part});
-}
-inline auto down_shape(const HaarBase::Wavelet & w) {
-    return shape::scaled(w.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{w.down_part});
 }
 
 /******************************************************************************
@@ -482,7 +427,7 @@ inline Matrix_M_MK1 compute_b(
             assert(i_l < l_kernels.size());
             return convolution(phi_shape, convolution(to_shape(m_kernels[i_m]), to_shape(l_kernels[i_l])));
         };
-        return sum_of_point_differences(m_points, l_points, shape_generator, union_non_zero_domain);
+        return shape::sum_of_point_differences(m_points, l_points, shape_generator, union_non_zero_domain);
     };
 
     for(ProcessId m = 0; m < nb_processes; ++m) {
@@ -559,7 +504,7 @@ inline MatrixG compute_g(
             return cross_correlation(
                 convolution(to_shape(l_kernels[i_l]), phi_shape), convolution(to_shape(l2_kernels[i_l2]), phi_shape_2));
         };
-        return sum_of_point_differences(l_points, l2_points, shape_generator, union_non_zero_domain);
+        return shape::sum_of_point_differences(l_points, l2_points, shape_generator, union_non_zero_domain);
     };
     /* G symmetric, only compute for (l2,k2) >= (l,k) (lexicographically).
      *

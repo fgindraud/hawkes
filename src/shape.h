@@ -765,7 +765,7 @@ template <typename Shape> inline double sum_of_point_differences(
         // last_starting_i_m = min{i_m, N_m[i_m] - N_l[i_l - 1] >= non_zero_domain.left or i_m == 0}.
         // We have: N_m[starting_i_m] >= N_l[i_l] + nzd.left > N_l[i_l - 1] + nzd.left.
         // Because N_m is increasing and properties of the min, starting_i_m >= last_starting_i_m.
-        while(starting_i_m < m_points.size() && !(interval_i_l.in_left_bound(m_points[starting_i_m]))) {
+        while(starting_i_m < m_points.size() && !interval_i_l.in_left_bound(m_points[starting_i_m])) {
             starting_i_m += 1;
         }
         if(starting_i_m == m_points.size()) {
@@ -844,6 +844,59 @@ inline double sup_of_sum_of_differences_to_points(const SortedVec<Point> & point
     } else {
         return 0.;
     }
+}
+
+/* Compute sum_{x_m in N_m, x_l in N_l} shape_generator(W_{x_m}, W_{x_l})(x_m - x_l).
+ *
+ * shape_generator(i_m, i_l) must return the shape for W_{x_m}, W_{x_l} if x_m=N_m[i_m] and x_l=N_l[i_l].
+ *
+ * union_non_zero_domain must contain the union of non zero domains of shape_generator(i_m,i_l).
+ * In practice, this usually consists of considering the kernels of maximum widths in a convolution with phi_k.
+ * This non_zero_domain is used to filter out x_m/x_l where shape_gen(i_m,i_l)(x_m-x-l) is zero.
+ * This keeps the complexity down.
+ *
+ * The algorithm is an adaptation of the previous one, with shape generation for each (i_m/i_l).
+ * Worst case complexity: O(|N|^2).
+ * Average complexity: O(|N| * density(N) * width(non_zero_domain)) = O(|N|^2 * width(non_zero_domain) / Tmax).
+ */
+template <typename ShapeGenerator> inline double sum_of_point_differences(
+    const SortedVec<Point> & m_points,
+    const SortedVec<Point> & l_points,
+    const ShapeGenerator & shape_generator,
+    shape::NzdIntervalType<decltype(std::declval<ShapeGenerator>()(size_t(), size_t()))> union_non_zero_domain) {
+
+    double sum = 0.;
+    size_t starting_i_m = 0;
+    for(size_t i_l = 0; i_l < l_points.size(); ++i_l) {
+        // x_l = N_l[i_l], with N_l[x] a strictly increasing function of x.
+        // Compute shape(x_m - x_l) for all x_m in (x_l + non_zero_domain) interval.
+        const auto x_l = l_points[i_l];
+        const auto interval_i_l = x_l + union_non_zero_domain;
+
+        // starting_i_m = min{i_m, N_m[i_m] - N_l[i_l] >= non_zero_domain.left}.
+        // We can restrict the search by starting from:
+        // last_starting_i_m = min{i_m, N_m[i_m] - N_l[i_l - 1] >= non_zero_domain.left or i_m == 0}.
+        // We have: N_m[starting_i_m] >= N_l[i_l] + nzd.left > N_l[i_l - 1] + nzd.left.
+        // Because N_m is increasing and properties of the min, starting_i_m >= last_starting_i_m.
+        while(starting_i_m < m_points.size() && !interval_i_l.in_left_bound(m_points[starting_i_m])) {
+            starting_i_m += 1;
+        }
+        if(starting_i_m == m_points.size()) {
+            // starting_i_m is undefined because last(N_m) < N_l[i_l] + non_zero_domain.left.
+            // last(N_m) == max(x_m in N_m) because N_m[x] is strictly increasing.
+            // So for each j > i_l , max(x_m) < N[j] + non_zero_domain.left, and shape (x_m - N_l[j]) == 0.
+            // We can stop there as the sum is already complete.
+            break;
+        }
+        // Sum values of shape(x_m - x_l) as long as x_m is in interval_i_l.
+        // starting_i_m defined => for each i_m < starting_i_m, shape(N_m[i_m] - x_l) == 0.
+        // Thus we only scan from starting_i_m to the last i_m in interval.
+        // N_m[x] is strictly increasing so we only need to check the right bound of the interval.
+        for(size_t i_m = starting_i_m; i_m < m_points.size() && interval_i_l.in_right_bound(m_points[i_m]); i_m += 1) {
+            sum += shape_generator(i_m, i_l)(m_points[i_m] - x_l);
+        }
+    }
+    return sum;
 }
 
 } // namespace shape

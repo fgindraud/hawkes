@@ -20,7 +20,6 @@ Example of use: `./hawkes -f process_a.bed -f process_b.bed -histogram 10 10000 
 - `-b filename` loads the process but reverses the dimension (`x -> -x` on the positions).
 - `-histogram K delta` specifies the function base. Required.
 - `-kernel config` what kernel configuration to use, defaults to none if not specified.
-- `-kernel-type type` what kernel type to use (kernel function/shape), defaults to a centered interval if not specified.
 
 The matrix of estimated weights is printed on the _standard output_, in a tab-separated text format.
 Redirect the standard output using `<cmd> > file` to store the output in a file.
