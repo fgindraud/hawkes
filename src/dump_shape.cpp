@@ -167,17 +167,6 @@ int main(int argc, const char * argv[]) {
             },
         },
         {
-            "positive_support(convolution(IntervalKernel{100}, HistogramBase{5, 1000}.histogram(0), "
-            "IntervalKernel{200}))",
-            []() {
-                const auto kernel = IntervalKernel{100};
-                const auto kernel2 = IntervalKernel{200};
-                const auto phi = HistogramBase{5, 1000}.histogram(0);
-                dump_shape(
-                    positive_support(convolution(convolution(to_shape(kernel), to_shape(phi)), to_shape(kernel2))));
-            },
-        },
-        {
             "convolution(positive_support(convolution(IntervalKernel{100}, HistogramBase{5, 1000}.histogram(0))), "
             "IntervalKernel{200})",
             []() {
@@ -198,6 +187,54 @@ int main(int argc, const char * argv[]) {
                 const auto kernel2 = IntervalKernel{200};
                 const auto phi = HistogramBase{5, 1000}.histogram(0);
                 const auto phi2 = HistogramBase{5, 1000}.histogram(3);
+                dump_shape(cross_correlation(
+                    positive_support(convolution(to_shape(kernel), to_shape(phi))),
+                    positive_support(convolution(to_shape(kernel2), to_shape(phi2)))));
+            },
+        },
+        {
+            "Haar{2, 1000}.wavelet(1, 0)",
+            []() {
+                dump_shape(to_shape(HaarBase{2, 1000}.wavelet(1, 0)));
+            },
+        },
+        {
+            "convolution(IntervalKernel{100}, Haar{2, 1000}.wavelet(1, 0))",
+            []() {
+                const auto kernel = IntervalKernel{100};
+                const auto phi = HaarBase{2, 1000}.wavelet(1, 0);
+                dump_shape(convolution(to_shape(kernel), to_shape(phi)));
+            },
+        },
+        {
+            "positive_support(convolution(IntervalKernel{100}, Haar{2, 1000}.wavelet(1, 0)))",
+            []() {
+                const auto kernel = IntervalKernel{100};
+                const auto phi = HaarBase{2, 1000}.wavelet(1, 0);
+                dump_shape(positive_support(convolution(to_shape(kernel), to_shape(phi))));
+            },
+        },
+        {
+            "convolution("
+            "positive_support(convolution(IntervalKernel{100}, Haar{2, 1000}.wavelet(1, 0))),"
+            "IntervalKernel{200})",
+            []() {
+                const auto kernel = IntervalKernel{100};
+                const auto kernel2 = IntervalKernel{200};
+                const auto phi = HaarBase{2, 1000}.wavelet(1, 0);
+                dump_shape(
+                    convolution(positive_support(convolution(to_shape(kernel), to_shape(phi))), to_shape(kernel2)));
+            },
+        },
+        {
+            "cross_correlation("
+            "positive_support(convolution(IntervalKernel{100}, Haar{2, 1000}.wavelet(1, 0))),"
+            "positive_support(convolution(IntervalKernel{200}, Haar{2, 1000}.wavelet(1, 1))))",
+            []() {
+                const auto kernel = IntervalKernel{100};
+                const auto kernel2 = IntervalKernel{200};
+                const auto phi = HaarBase{2, 1000}.wavelet(1, 0);
+                const auto phi2 = HaarBase{2, 1000}.wavelet(1, 1);
                 dump_shape(cross_correlation(
                     positive_support(convolution(to_shape(kernel), to_shape(phi))),
                     positive_support(convolution(to_shape(kernel2), to_shape(phi2)))));
