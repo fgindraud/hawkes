@@ -15,37 +15,34 @@ CXX_FLAGS_DEBUG = $(CXX_FLAGS_COMMON) -O2 -g
 all: hawkes
 
 # Eigen C++ library configuration
-# Define $(EIGEN) as a target representing a dependency to eigen code = include directory.
-ifdef EIGEN_INCLUDE_PATH
-CXX_FLAGS_COMMON += -I $(EIGEN_INCLUDE_PATH) # Using the system installed eigen, at the given path
-EIGEN = $(EIGEN_INCLUDE_PATH)
-else
-# Use pre-downloaded version: uncompress it if requested.
-EIGEN_TAR_DIR := eigen-eigen-323c052e1731
-$(EIGEN_TAR_DIR): $(EIGEN_TAR_DIR).tar.gz
+# Define EIGEN_INCLUDE_PATH as location of eigen include files AND as a target representing a dependency to eigen code.
+# EIGEN_INCLUDE_PATH can be set to the location of an already "installed" eigen copy (for example /usr/include/eigen3 for the system one, this might be different depending on the distribution).
+ifndef EIGEN_INCLUDE_PATH
+# If not set, a local copy of eigen is unpacked from a tar.gz and used.
+EIGEN_INCLUDE_PATH := eigen-eigen-323c052e1731
+$(EIGEN_INCLUDE_PATH): $(EIGEN_INCLUDE_PATH).tar.gz
 	tar xf $<
-CXX_FLAGS_COMMON += -I $(EIGEN_TAR_DIR)
-EIGEN = $(EIGEN_TAR_DIR)
 endif
+CXX_FLAGS_COMMON += -I $(EIGEN_INCLUDE_PATH)
 
 # Precompile fmtlib to reduce compilation time
 fmtlib.o: src/external/fmt/format.cc $(wildcard src/external/fmt/*.h) Makefile
 	$(CXX) -c $(CXX_FLAGS_RELEASE) -I src/external -o $@ $<
 
 # Debug and non-debug version of hawkes main program.
-hawkes: src/main.cpp fmtlib.o eigen $(wildcard src/*.h) Makefile
+hawkes: src/main.cpp fmtlib.o $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
 	$(CXX) $(CXX_FLAGS_RELEASE) -o $@ $< fmtlib.o
-hawkes_debug: src/main.cpp fmtlib.o $(EIGEN) $(wildcard src/*.h) Makefile
+hawkes_debug: src/main.cpp fmtlib.o $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
 	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
 
 # Unit test executable and 'test' target.
-unit_tests: src/unit_tests.cpp fmtlib.o $(EIGEN) $(wildcard src/*.h) Makefile
+unit_tests: src/unit_tests.cpp fmtlib.o $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
 	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
 test: unit_tests
 	./unit_tests
 
 # Small utility to plot various shapes, for debug purposes.
-dump_shape: src/dump_shape.cpp fmtlib.o $(EIGEN) $(wildcard src/*.h) Makefile
+dump_shape: src/dump_shape.cpp fmtlib.o $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
 	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
 
 clean:
