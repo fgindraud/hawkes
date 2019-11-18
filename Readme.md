@@ -76,3 +76,8 @@ License
 
 TODO
 
+TODO
+----
+
+- better error reporting / handling of bad values
+

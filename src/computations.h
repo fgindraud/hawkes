@@ -40,12 +40,17 @@ inline CommonIntermediateValues compute_intermediate_values(
     const HeterogeneousKernels<IntervalKernel> & kernels);
 inline CommonIntermediateValues compute_intermediate_values(
     const DataByProcessRegion<SortedVec<Point>> & points, const HaarBase & base);
+inline CommonIntermediateValues compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & points,
+    const HaarBase & base,
+    const HomogeneousKernels<IntervalKernel> & kernels);
 
 inline void print_supported_computation_cases() {
     fmt::print("histogram base with no kernel\n");
     fmt::print("histogram base with homogenous interval kernels\n");
     fmt::print("histogram base with heterogeneous interval kernels\n");
     fmt::print("haar wavelet base with no kernel\n");
+    fmt::print("haar wavelet base with homogeneous interval kernels\n");
 }
 
 // Overload on base classes : perform selection.
@@ -64,6 +69,8 @@ inline CommonIntermediateValues compute_intermediate_values(
     } else if(auto * haar = dynamic_cast<const HaarBase *>(&base)) {
         if(dynamic_cast<const NoKernel *>(&kernel_config)) {
             return compute_intermediate_values(points, *haar);
+        } else if(auto * kernels = dynamic_cast<const HomogeneousKernels<IntervalKernel> *>(&kernel_config)) {
+            return compute_intermediate_values(points, *haar, *kernels);
         }
     }
 
@@ -501,6 +508,74 @@ inline CommonIntermediateValues compute_intermediate_values(
         return b_hat;
     };
     // All values for all regions
+    std::vector<Matrix_M_MK1> b_by_region;
+    std::vector<MatrixG> g_by_region;
+    b_by_region.reserve(nb_regions);
+    g_by_region.reserve(nb_regions);
+    for(RegionId r = 0; r < nb_regions; ++r) {
+        b_by_region.emplace_back(compute_b(points.data_for_region(r)));
+        g_by_region.emplace_back(compute_g(points.data_for_region(r)));
+    }
+    return {std::move(b_by_region), std::move(g_by_region), compute_b_hat()};
+}
+
+inline CommonIntermediateValues compute_intermediate_values(
+    const DataByProcessRegion<SortedVec<Point>> & points,
+    const HaarBase & base,
+    const HomogeneousKernels<IntervalKernel> & kernels) {
+    // Constants
+    const size_t nb_processes = points.nb_processes();
+    const size_t nb_regions = points.nb_regions();
+    const size_t base_size = base.base_size();
+    // B
+    auto compute_b = [&base, &kernels, base_size, nb_processes](span<const SortedVec<Point>> points) {
+        Matrix_M_MK1 b(nb_processes, base_size);
+        for(ProcessId m = 0; m < nb_processes; ++m) {
+            // b0
+            b.set_0(m, double(points[m].size()) * std::sqrt(kernels.kernels[m].width));
+            // b_lk
+            for(ProcessId l = 0; l < nb_processes; ++l) {
+                for(FunctionBaseId k = 0; k < base_size; ++k) {
+                    const auto shape = convolution(
+                        to_shape(kernels.kernels[m]),
+                        positive_support(convolution(to_shape(kernels.kernels[l]), to_shape(base.wavelet(k)))));
+                    const double b_mlk = sum_of_point_differences(points[m], points[l], shape);
+                    b.set_lk(m, l, k, b_mlk);
+                }
+            }
+        }
+        return b;
+    };
+    // G
+    auto compute_g = [&base, &kernels, base_size, nb_processes](span<const SortedVec<Point>> points) {
+        MatrixG g(nb_processes, base_size);
+        g.set_tmax(tmax(points));
+
+        /* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
+         * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l * 0 = 0.
+         */
+        for(ProcessId l = 0; l < nb_processes; ++l) {
+            for(FunctionBaseId k = 0; k < base_size; ++k) {
+                g.set_g(l, k, 0.);
+            }
+        }
+
+        const auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
+            const auto shape = cross_correlation(
+                positive_support(convolution(to_shape(kernels.kernels[l]), to_shape(base.wavelet(k)))),
+                positive_support(convolution(to_shape(kernels.kernels[l2]), to_shape(base.wavelet(k2)))));
+            return sum_of_point_differences(points[l], points[l2], shape);
+        };
+        set_G_values(g, nb_processes, base_size, G_ll2kk2);
+        return g;
+    };
+    // B_hat : TODO approximate.
+    auto compute_b_hat = [base_size, nb_processes]() {
+        Matrix_M_MK1 b_hat(nb_processes, base_size);
+        b_hat.inner.setZero();
+        return b_hat;
+    };
+    // Values for all regions
     std::vector<Matrix_M_MK1> b_by_region;
     std::vector<MatrixG> g_by_region;
     b_by_region.reserve(nb_regions);
