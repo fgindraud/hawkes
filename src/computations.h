@@ -650,7 +650,7 @@ inline LassoParameters compute_lasso_parameters(const CommonIntermediateValues &
         auto v_hat_part = (v_hat_factor * v_hat_r2.m_lk_values().array()).sqrt();
         auto b_hat_part = b_hat_factor * values.b_hat.m_lk_values().array();
         const Eigen::IOFormat format(3, 0, "\t"); // 3 = precision in digits, this is enough
-        fmt::print(stderr, "##### d = v_hat_part + b_hat_part: value of v_hat_part / b_hat_part #####\n");
+        fmt::print(stderr, "##### v_hat_part / b_hat_part, for d = v_hat_part + b_hat_part #####\n");
         fmt::print(stderr, "{}\n", (v_hat_part / b_hat_part).format(format));
     }
 #endif

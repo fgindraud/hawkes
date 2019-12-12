@@ -203,6 +203,9 @@ int main(int argc, char * argv[]) {
                 "# G matrix (rows & cols = {{0}} U {{(l,k)}})\n{}\n",
                 lasso_parameters.sum_of_g.inner.format(eigen_format));
             fmt::print(
+                "# B_hat matrix (rows = {{0}} U {{(l,k)}}, cols = {{m}})\n{}\n",
+                intermediate_values.b_hat.inner.format(eigen_format));
+            fmt::print(
                 "# D matrix (rows = {{0}} U {{(l,k)}}, cols = {{m}})\n{}\n",
                 lasso_parameters.d.inner.format(eigen_format));
             fmt::print("# Estimated A\n"); // Add a separator between D and A (when printed later).
