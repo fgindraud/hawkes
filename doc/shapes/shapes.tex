@@ -35,6 +35,7 @@
 \newcommand\D{\mathrm{d}}
 \newcommand\Convolution{\ast}
 \newcommand\Correlation{\star}
+\newcommand\Int[2]{\int #1 \D#2}
 \newcommand\IntR[2]{\int_{-\infty}^{\infty}#1 \D#2}
 \newcommand\Equiv{\Leftrightarrow}
 \newcommand\Then{\Rightarrow}
@@ -355,7 +356,15 @@ This is done using distributivity of addition with respect to convolution (and c
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Application to the Hawkes computations}
-Refer to the BRP18 paper for details.
+Refer to the BRP18 paper and code for details.
+
+This section shows that various computed values are in the form :
+\[ \sum_{X_l \in N_l, X_{l'} \in N_{l'}} F(X_l-X_{l'}) \]
+
+We define the \emph{non zero domain} of a shape as an interval of $x$ containing all non zero values of $F$ : $F(x) \ne 0 \Rightarrow x \in nzd(F)$.
+This interval can be easily computed for the family of shapes and combinations introduced previously.
+The sum above can then be simplified by ignoring all $X_l - X_{l'} \notin nzd(F)$, as $F$ would be $0$.
+This gives us an algorithm that can compute the sum in $\mathcal{O}(\max(|N_l|, |N_{l'}|))$ (average, worst case is still $\mathcal{O}(|N_l| \times |N_{l'}|)$).
 
 \subsection{Base shapes used}
 Basic functions considered are all piecewise polynoms
@@ -373,6 +382,11 @@ Basic functions considered are all piecewise polynoms
 \[ W_l = \frac{1}{\sqrt{\eta_l}} \mathbbm{1}_{\left[ -\frac{\eta_l}{2}, \frac{\eta_l}{2} \right]} \]
 
 \subsection{Non-kernel case}
+
+\paragraph{B}
+\[ b_{k,l}^m = \sum_{X_l \in N_l, X_m \in N_m} \varphi_k (X_m - X_l) \]
+
+\paragraph{G}
 G can be expressed as a cross correlation of phi functions:
 \[ \begin{split}
     \mathsf{G}_{l,l',k,k'} & = \IntR{\left( \sum_{X_l \in N_l} \varphi_k(x-X_l) \right)\left( \sum_{X_{l'} \in N_{l'}} \varphi_{k'}(x-X_{l'}) \right)}{x} \\
@@ -380,6 +394,28 @@ G can be expressed as a cross correlation of phi functions:
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \IntR{ \varphi_k(x-(X_l-X_l')) \varphi_{k'}(x) }{x} \\
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} [\varphi_k \Correlation \varphi_{k'}] (X_l-X_l')
 \end{split} \]
+
+\paragraph{d}
+
+$\widehat{V}_{k,l}^m$ is computed using a variation on the $\sum_{X_l \in N_l, X_{l'} \in N_{l'}} F(X_l-X_{l'})$ algorithm described above.
+\[ \widehat{V}_{spont}^m = \Int{}{N_m} = |N_m| \]
+\[
+    \widehat{V}_{k,l}^m =
+    \Int{\left( \sum_{X_l \in N_l} \varphi_k(x-X_l) \right)^2}{N_m} =
+    \sum_{X_m \in N_m} \left( \sum_{X_l \in N_l} \varphi_k(X_m-X_l) \right)^2
+\]
+
+$\widehat{B}_{k,l}^m$ is computed exactly by enumerating the values of $\sum_{X_l \in N_l} \varphi_k(x - X_l)$ for an indicator.
+If $\varphi_k$ is not an indicator, we approximate it by an indicator function and use the indicator sup computation.
+\[ \widehat{B}_{spont}^m = 1 \]
+\[ \widehat{B}_{k,l}^m = \sup |\sum_{X_l \in N_l} \varphi_k(x - X_l)| \]
+
+These two values are combined to compute $d$:
+\[
+    d_{k,l}^m =
+    \sqrt{2 \gamma \widehat{V}_{k,l}^m \log(M + M^2 K) } +
+    \frac{\gamma}{3} \log(M + M^2 K) \widehat{B}_{k,l}^m
+\]
 
 \subsection{Kernel case}
 
