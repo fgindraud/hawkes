@@ -858,57 +858,63 @@ inline double sup_sum_shape_differences_to_points(const SortedVec<Point> & point
     }
 }
 
-/* Compute sum_{x_m in N_m, x_l in N_l} shape_generator(W_{x_m}, W_{x_l})(x_m - x_l).
+/* Computes:
+ * sum_{x_m in N_m, x_l in N_l} shape_generator(i_m, i_l)(x_m - x_l) ; for B, G, "non_squared" value.
+ * sum_{x_m in N_m} (sum_{x_l in N_l} shape_generator(i_m, i_l)(x_m - x_l))^2 ; for V_hat, "squared" value.
  *
- * shape_generator(i_m, i_l) must return the shape for W_{x_m}, W_{x_l} if x_m=N_m[i_m] and x_l=N_l[i_l].
+ * shape_generator(i_m, i_l) must return the shape for x_m=N_m[i_m] and x_l=N_l[i_l].
+ * This is used to implement heterogeneous kernels, with the shape determined by W_{i_m}, W_{i_l}.
  *
  * union_non_zero_domain must contain the union of non zero domains of shape_generator(i_m,i_l).
  * In practice, this usually consists of considering the kernels of maximum widths in a convolution with phi_k.
  * This non_zero_domain is used to filter out x_m/x_l where shape_gen(i_m,i_l)(x_m-x-l) is zero.
  * This keeps the complexity down.
  *
- * The algorithm is an adaptation of the previous one, with shape generation for each (i_m/i_l).
+ * The algorithm is an adaptation of the constant shape one, with shape generation for each (i_m/i_l).
  * Worst case complexity: O(|N|^2).
  * Average complexity: O(|N| * density(N) * width(non_zero_domain)) = O(|N|^2 * width(non_zero_domain) / Tmax).
  */
-template <typename ShapeGenerator> inline double sum_of_shape_point_differences(
+template <typename ShapeGenerator> inline SumShapePointDifferenceResult sum_shape_generator_point_differences(
     const SortedVec<Point> & m_points,
     const SortedVec<Point> & l_points,
     const ShapeGenerator & shape_generator,
     shape::NzdIntervalType<decltype(std::declval<ShapeGenerator>()(size_t(), size_t()))> union_non_zero_domain) {
 
-    double sum = 0.;
-    size_t starting_i_m = 0;
-    for(size_t i_l = 0; i_l < l_points.size(); ++i_l) {
-        // x_l = N_l[i_l], with N_l[x] a strictly increasing function of x.
-        // Compute shape(x_m - x_l) for all x_m in (x_l + non_zero_domain) interval.
-        const auto x_l = l_points[i_l];
-        const auto interval_i_l = x_l + union_non_zero_domain;
+    SumShapePointDifferenceResult result{0., 0.};
+    size_t starting_i_l = 0;
+    for(size_t i_m = 0; i_m < m_points.size(); i_m += 1) {
+        const Point x_m = m_points[i_m];
+        // x_m = N_m[i_m], with N_m[x] a strictly increasing function of x.
+        // Compute shape(x_m - x_l) for all x_m - x_l in non_zero_domain <=> x_l in (x_m - non_zero_domain).
+        const auto interval_i_m = x_m + (-union_non_zero_domain);
+        double x_m_sum = 0.;
 
-        // starting_i_m = min{i_m, N_m[i_m] - N_l[i_l] >= non_zero_domain.left}.
+        // starting_i_l = min{i_l, N_l[i_l] >= (N_m[i_m] - non_zero_domain).left}.
         // We can restrict the search by starting from:
-        // last_starting_i_m = min{i_m, N_m[i_m] - N_l[i_l - 1] >= non_zero_domain.left or i_m == 0}.
-        // We have: N_m[starting_i_m] >= N_l[i_l] + nzd.left > N_l[i_l - 1] + nzd.left.
-        // Because N_m is increasing and properties of the min, starting_i_m >= last_starting_i_m.
-        while(starting_i_m < m_points.size() && !interval_i_l.in_left_bound(m_points[starting_i_m])) {
-            starting_i_m += 1;
+        // last_starting_i_l = min{i_l, N_l[i_l - 1] >= (N_m[i_m] - non_zero_domain).left or i_l == 0}.
+        // We have: N_l[starting_i_l] >= (N_m[i_m] - nzd).left > (N_m[i_m - 1] - nzd).left.
+        // Because N_l is increasing and properties of the min, starting_i_l >= last_starting_i_l.
+        while(starting_i_l < l_points.size() && !interval_i_m.in_left_bound(l_points[starting_i_l])) {
+            starting_i_l += 1;
         }
-        if(starting_i_m == m_points.size()) {
-            // starting_i_m is undefined because last(N_m) < N_l[i_l] + non_zero_domain.left.
-            // last(N_m) == max(x_m in N_m) because N_m[x] is strictly increasing.
-            // So for each j > i_l , max(x_m) < N[j] + non_zero_domain.left, and shape (x_m - N_l[j]) == 0.
+        if(starting_i_l == l_points.size()) {
+            // starting_i_l is undefined because last(N_l) < (N_m[i_m] - non_zero_domain).left.
+            // last(N_l) == max(x_l in N_l) because N_l[x] is strictly increasing.
+            // So for each j > i_m , max(x_l) < (N_m[j] - non_zero_domain).left, and shape (N_m[j] - x_l) == 0.
             // We can stop there as the sum is already complete.
             break;
         }
-        // Sum values of shape(x_m - x_l) as long as x_m is in interval_i_l.
+        // Sum values of shape(x_m - x_l) as long as x_l is in interval_i_m.
         // starting_i_m defined => for each i_m < starting_i_m, shape(N_m[i_m] - x_l) == 0.
         // Thus we only scan from starting_i_m to the last i_m in interval.
         // N_m[x] is strictly increasing so we only need to check the right bound of the interval.
-        for(size_t i_m = starting_i_m; i_m < m_points.size() && interval_i_l.in_right_bound(m_points[i_m]); i_m += 1) {
-            sum += shape_generator(i_m, i_l)(m_points[i_m] - x_l);
+        for(size_t i_l = starting_i_l; i_l < l_points.size() && interval_i_m.in_right_bound(l_points[i_l]); i_l += 1) {
+            x_m_sum += shape_generator(i_m, i_l)(x_m - l_points[i_l]);
         }
+        result.non_squared += x_m_sum;
+        result.squared += x_m_sum * x_m_sum;
     }
-    return sum;
+    return result;
 }
 
 } // namespace shape
