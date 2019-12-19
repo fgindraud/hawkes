@@ -794,6 +794,60 @@ template <typename Inner> inline double sum_shape_point_differences(
     return shape.scale * sum_shape_point_differences(m_points, l_points, shape.inner);
 }
 
+/* Compute sum_{x_m in N_m} (sum_{x_l in N_l} shape(x_m - x_l))^2.
+ * Used to compute V_hat, component of the penalty weights d.
+ *
+ * Uses the same principle as sum_shape_point_difference, but squares the intermediate sums for each x_m.
+ * Worst case complexity: O(|N|^2).
+ * Average complexity: O(|N| * density(N) * width(shape)) = O(|N|^2 * width(shape) / Tmax).
+ */
+template <typename Shape> inline double sum_shape_point_differences_squared(
+    const SortedVec<Point> & m_points, const SortedVec<Point> & l_points, const Shape & shape) {
+    // shape(x) != 0 => x in shape.non_zero_domain().
+    // Thus Sum = sum_{x_m} (sum_{x_l, x_m - x_l in non_zero_domain} shape(x_m - x_l))^2.
+    const auto non_zero_domain = shape.non_zero_domain();
+
+    double sum = 0.;
+    size_t starting_i_l = 0;
+    for(const Point x_m : m_points) {
+        // x_m = N_m[i_m], with N_m[x] a strictly increasing function of x.
+        // Compute shape(x_m - x_l) for all x_m - x_l in non_zero_domain <=> x_l in (x_m - non_zero_domain).
+        const auto interval_i_m = x_m + (-non_zero_domain);
+        double x_m_sum = 0.;
+
+        // starting_i_l = min{i_l, N_l[i_l] >= (N_m[i_m] - non_zero_domain).left}.
+        // We can restrict the search by starting from:
+        // last_starting_i_l = min{i_l, N_l[i_l - 1] >= (N_m[i_m] - non_zero_domain).left or i_l == 0}.
+        // We have: N_l[starting_i_l] >= (N_m[i_m] - nzd).left > (N_m[i_m - 1] - nzd).left.
+        // Because N_l is increasing and properties of the min, starting_i_l >= last_starting_i_l.
+        while(starting_i_l < l_points.size() && !interval_i_m.in_left_bound(l_points[starting_i_l])) {
+            starting_i_l += 1;
+        }
+        if(starting_i_l == l_points.size()) {
+            // starting_i_l is undefined because last(N_l) < (N_m[i_m] - non_zero_domain).left.
+            // last(N_l) == max(x_l in N_l) because N_l[x] is strictly increasing.
+            // So for each j > i_m , max(x_l) < (N_m[j] - non_zero_domain).left, and shape (N_m[j] - x_l) == 0.
+            // We can stop there as the sum is already complete.
+            break;
+        }
+        // Sum values of shape(x_m - x_l) as long as x_l is in interval_i_m.
+        // starting_i_m defined => for each i_m < starting_i_m, shape(N_m[i_m] - x_l) == 0.
+        // Thus we only scan from starting_i_m to the last i_m in interval.
+        // N_m[x] is strictly increasing so we only need to check the right bound of the interval.
+        for(size_t i_l = starting_i_l; i_l < l_points.size() && interval_i_m.in_right_bound(l_points[i_l]); i_l += 1) {
+            x_m_sum += shape(x_m - l_points[i_l]);
+        }
+        sum += x_m_sum * x_m_sum;
+    }
+    return sum;
+}
+
+// Scaling can be moved out of computation.
+template <typename Inner> inline double sum_shape_point_differences_squared(
+    const SortedVec<Point> & m_points, const SortedVec<Point> & l_points, const shape::Scaled<Inner> & shape) {
+    return (shape.scale * shape.scale) * sum_shape_point_differences_squared(m_points, l_points, shape.inner);
+}
+
 /* Compute sup_{x} sum_{y in points} shape(x - y).
  * This is a building block for computation of B_hat, used in the computation of lasso penalties (d).
  */

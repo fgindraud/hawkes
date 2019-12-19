@@ -86,6 +86,19 @@ struct TriangleShape {
         }
     }
 };
+template <Bound lb, Bound rb> struct ScaledIndicatorLike {
+    Interval<lb, rb> interval;
+    double scale;
+    Interval<lb, rb> non_zero_domain() const { return interval; }
+    double operator()(Point x) const {
+        if(interval.contains(x)) {
+            return scale;
+        } else {
+            return 0.;
+        }
+    }
+};
+
 static double raw_evaluate_at(shape::Polynomial p, Point x) {
     // ignore nzd, used to test continuity between convolution components
     return shape::compute_polynom_value(x - p.origin, p.coefficients);
@@ -372,7 +385,7 @@ TEST_SUITE("shape") {
         CHECK(mountain_a.non_zero_domain() == Interval<Bound::Open, Bound::Closed>{0., 4.});
         CHECK(mountain_a(1.) == doctest::Approx(1.));
     }
-    TEST_CASE("sum_of_point_differences_generic") {
+    TEST_CASE("sum_shape_point_differences_generic") {
         // Tested functions
         const auto indicator_oo = IndicatorLike<Bound::Open, Bound::Open>{{-1, 1}};
         const auto indicator_oc = IndicatorLike<Bound::Open, Bound::Closed>{{-1, 1}};
@@ -459,9 +472,100 @@ TEST_SUITE("shape") {
         CHECK(sum_shape_point_differences(zero, zero, triangle) == 0);
         CHECK(sum_shape_point_differences(one, zero, triangle) == 1);
         CHECK(sum_shape_point_differences(all_near_zero, zero, triangle) == 10); // 0+1+2+3+4
+        CHECK(sum_shape_point_differences(zero, all_near_zero, triangle) == 10); // 0+1+2+3+4
         CHECK(sum_shape_point_differences(all_near_zero, one, triangle) == 6);   // 0+1+2+3
+        CHECK(sum_shape_point_differences(one, all_near_zero, triangle) == 10);  // 0+1+2+3+4
     }
-    TEST_CASE("sup_of_sum_of_differences_to_points_indicators") {
+    TEST_CASE("sum_shape_point_differences_squared_generic") {
+        // Tested functions
+        const auto indicator_oo = IndicatorLike<Bound::Open, Bound::Open>{{-1, 1}};
+        const auto indicator_oc = IndicatorLike<Bound::Open, Bound::Closed>{{-1, 1}};
+        const auto indicator_co = IndicatorLike<Bound::Closed, Bound::Open>{{-1, 1}};
+        const auto indicator_cc = IndicatorLike<Bound::Closed, Bound::Closed>{{-1, 1}};
+
+        // Tested point sets
+        const auto empty = SortedVec<Point>::from_sorted({});
+        const auto zero = SortedVec<Point>::from_sorted({0});
+        const auto one = SortedVec<Point>::from_sorted({1});
+        const auto all_near_zero = SortedVec<Point>::from_sorted({-4, -3, -2, -1, 0, 1, 2, 3, 4});
+
+        // Should be zero due to emptyset
+        CHECK(sum_shape_point_differences_squared(empty, empty, indicator_oo) == 0);
+        CHECK(sum_shape_point_differences_squared(empty, zero, indicator_oo) == 0);
+        CHECK(sum_shape_point_differences_squared(zero, empty, indicator_oo) == 0);
+
+        CHECK(sum_shape_point_differences_squared(empty, empty, indicator_oc) == 0);
+        CHECK(sum_shape_point_differences_squared(empty, zero, indicator_oc) == 0);
+        CHECK(sum_shape_point_differences_squared(zero, empty, indicator_oc) == 0);
+
+        CHECK(sum_shape_point_differences_squared(empty, empty, indicator_co) == 0);
+        CHECK(sum_shape_point_differences_squared(empty, zero, indicator_co) == 0);
+        CHECK(sum_shape_point_differences_squared(zero, empty, indicator_co) == 0);
+
+        CHECK(sum_shape_point_differences_squared(empty, empty, indicator_cc) == 0);
+        CHECK(sum_shape_point_differences_squared(empty, zero, indicator_cc) == 0);
+        CHECK(sum_shape_point_differences_squared(zero, empty, indicator_cc) == 0);
+
+        // Only one same point in both sets
+        CHECK(sum_shape_point_differences_squared(zero, zero, indicator_oo) == 1 * 1);
+        CHECK(sum_shape_point_differences_squared(zero, zero, indicator_oc) == 1 * 1);
+        CHECK(sum_shape_point_differences_squared(zero, zero, indicator_cc) == 1 * 1);
+        CHECK(sum_shape_point_differences_squared(zero, zero, indicator_cc) == 1 * 1);
+
+        // Two sets with one point, one diff = 1 for (one, zero), -1 for (zero, one)
+        CHECK(sum_shape_point_differences_squared(one, zero, indicator_oo) == 0);
+        CHECK(sum_shape_point_differences_squared(zero, one, indicator_oo) == 0);
+
+        CHECK(sum_shape_point_differences_squared(one, zero, indicator_oc) == 1 * 1);
+        CHECK(sum_shape_point_differences_squared(zero, one, indicator_oc) == 0);
+
+        CHECK(sum_shape_point_differences_squared(one, zero, indicator_co) == 0);
+        CHECK(sum_shape_point_differences_squared(zero, one, indicator_co) == 1 * 1);
+
+        CHECK(sum_shape_point_differences_squared(one, zero, indicator_cc) == 1 * 1);
+        CHECK(sum_shape_point_differences_squared(zero, one, indicator_cc) == 1 * 1);
+
+        // Single point with all points near zero : set of diffs = all_near_zero
+        CHECK(sum_shape_point_differences_squared(zero, all_near_zero, indicator_oo) == 1 * 1);
+        CHECK(sum_shape_point_differences_squared(all_near_zero, zero, indicator_oo) == 1 * 1);
+
+        CHECK(sum_shape_point_differences_squared(zero, all_near_zero, indicator_oc) == 1 * (2 * 2));
+        CHECK(sum_shape_point_differences_squared(all_near_zero, zero, indicator_oc) == 2 * 1);
+
+        CHECK(sum_shape_point_differences_squared(zero, all_near_zero, indicator_co) == 1 * (2 * 2));
+        CHECK(sum_shape_point_differences_squared(all_near_zero, zero, indicator_co) == 2 * 1);
+
+        CHECK(sum_shape_point_differences_squared(zero, all_near_zero, indicator_cc) == 1 * (3 * 3));
+        CHECK(sum_shape_point_differences_squared(all_near_zero, zero, indicator_cc) == 3 * 1);
+
+        // Multiple points with all points near zero
+        const auto some_points = SortedVec<Point>::from_sorted({-3, 0, 3});
+        CHECK(sum_shape_point_differences_squared(some_points, all_near_zero, indicator_oo) == 3 * 1);
+        CHECK(sum_shape_point_differences_squared(all_near_zero, some_points, indicator_oo) == 3 * 1);
+        CHECK(sum_shape_point_differences_squared(some_points, some_points, indicator_oo) == 3 * 1);
+
+        CHECK(sum_shape_point_differences_squared(some_points, all_near_zero, indicator_oc) == 3 * (2 * 2));
+        CHECK(sum_shape_point_differences_squared(all_near_zero, some_points, indicator_oc) == 6 * 1);
+        CHECK(sum_shape_point_differences_squared(some_points, some_points, indicator_oc) == 3 * 1);
+
+        CHECK(sum_shape_point_differences_squared(some_points, all_near_zero, indicator_co) == 3 * (2 * 2));
+        CHECK(sum_shape_point_differences_squared(all_near_zero, some_points, indicator_co) == 6 * 1);
+        CHECK(sum_shape_point_differences_squared(some_points, some_points, indicator_co) == 3 * 1);
+
+        CHECK(sum_shape_point_differences_squared(some_points, all_near_zero, indicator_cc) == 3 * (3 * 3));
+        CHECK(sum_shape_point_differences_squared(all_near_zero, some_points, indicator_cc) == 9 * 1);
+        CHECK(sum_shape_point_differences_squared(some_points, some_points, indicator_cc) == 3 * 1);
+
+        // Tests values for non indicator shape
+        const auto triangle = TriangleShape{4.};
+        CHECK(sum_shape_point_differences_squared(empty, zero, triangle) == 0);
+        CHECK(sum_shape_point_differences_squared(zero, empty, triangle) == 0);
+        CHECK(sum_shape_point_differences_squared(zero, zero, triangle) == 0);
+        CHECK(sum_shape_point_differences_squared(one, zero, triangle) == 1 * 1);
+        CHECK(sum_shape_point_differences_squared(all_near_zero, zero, triangle) == 30);  // 1*0+1*1^2+1*2^2+1*3^2+1*4^2
+        CHECK(sum_shape_point_differences_squared(zero, all_near_zero, triangle) == 100); // 1*(0+1+2+3+4)^2
+    }
+    TEST_CASE("sup_sum_shape_differences_to_points_indicators") {
         const auto vec_empty = SortedVec<Point>::from_sorted({});
         const auto vec_0_3_6 = SortedVec<Point>::from_sorted({0, 3, 6});
         const auto vec_0_2 = SortedVec<Point>::from_sorted({0, 2});
@@ -491,6 +595,22 @@ TEST_SUITE("shape") {
         CHECK(sup_sum_shape_differences_to_points(vec_0_1_2, indicator_oc) == 3);
         CHECK(sup_sum_shape_differences_to_points(vec_0_1_2, indicator_co) == 3);
         CHECK(sup_sum_shape_differences_to_points(vec_0_1_2, indicator_cc) == 3);
+    }
+    TEST_CASE("scale_optimisations") {
+        // Check that scale optimisations are valid by comparing with a non optimized scaling
+        const auto indicator = Indicator<Bound::Closed, Bound::Closed>{{0, 3}};
+        const auto scaled_opt = scaled(2., indicator);
+        const auto scaled_no_opt = ScaledIndicatorLike<Bound::Closed, Bound::Closed>{{0, 3}, 2.};
+
+        const auto all_near_zero = SortedVec<Point>::from_sorted({-4, -3, -2, -1, 0, 1, 2, 3, 4});
+        const auto zero = SortedVec<Point>::from_sorted({0});
+
+        CHECK(
+            sum_shape_point_differences(zero, all_near_zero, scaled_opt) ==
+            sum_shape_point_differences(zero, all_near_zero, scaled_no_opt));
+        CHECK(
+            sum_shape_point_differences_squared(zero, all_near_zero, scaled_opt) ==
+            sum_shape_point_differences_squared(zero, all_near_zero, scaled_no_opt));
     }
 }
 
