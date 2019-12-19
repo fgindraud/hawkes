@@ -215,7 +215,7 @@ inline CommonIntermediateValues compute_intermediate_values(
             // b_lk
             for(ProcessId l = 0; l < nb_processes; ++l) {
                 for(FunctionBaseId k = 0; k < base_size; ++k) {
-                    const double b_mlk = sum_of_point_differences(points[m], points[l], to_shape(base.histogram(k)));
+                    const double b_mlk = sum_shape_point_differences(points[m], points[l], to_shape(base.histogram(k)));
                     b.set_lk(m, l, k, b_mlk);
                 }
             }
@@ -237,7 +237,7 @@ inline CommonIntermediateValues compute_intermediate_values(
 
         auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
             const auto shape = cross_correlation(to_shape(base.histogram(k)), to_shape(base.histogram(k2)));
-            return sum_of_point_differences(points[l], points[l2], shape);
+            return sum_shape_point_differences(points[l], points[l2], shape);
         };
         set_G_values_histogram(g, nb_processes, base_size, G_ll2kk2);
 
@@ -252,7 +252,7 @@ inline CommonIntermediateValues compute_intermediate_values(
         for(ProcessId l = 0; l < nb_processes; ++l) {
             double b_hat_l = 0.;
             for(RegionId r = 0; r < nb_regions; ++r) {
-                b_hat_l += sup_of_sum_of_differences_to_points(points.data(l, r), phi_0);
+                b_hat_l += sup_sum_shape_differences_to_points(points.data(l, r), phi_0);
             }
 
             for(ProcessId m = 0; m < nb_processes; ++m) {
@@ -295,7 +295,7 @@ inline CommonIntermediateValues compute_intermediate_values(
                     const auto shape = convolution(
                         to_shape(kernels.kernels[m]),
                         positive_support(convolution(to_shape(kernels.kernels[l]), to_shape(base.histogram(k)))));
-                    const double b_mlk = sum_of_point_differences(points[m], points[l], shape);
+                    const double b_mlk = sum_shape_point_differences(points[m], points[l], shape);
                     b.set_lk(m, l, k, b_mlk);
                 }
             }
@@ -322,7 +322,7 @@ inline CommonIntermediateValues compute_intermediate_values(
             const auto shape = cross_correlation(
                 positive_support(convolution(to_shape(kernels.kernels[l]), to_shape(base.histogram(k)))),
                 positive_support(convolution(to_shape(kernels.kernels[l2]), to_shape(base.histogram(k2)))));
-            return sum_of_point_differences(points[l], points[l2], shape);
+            return sum_shape_point_differences(points[l], points[l2], shape);
         };
         set_G_values_histogram(g, nb_processes, base_size, G_ll2kk2);
         return g;
@@ -339,7 +339,7 @@ inline CommonIntermediateValues compute_intermediate_values(
 
                     double sum_of_region_sups = 0;
                     for(RegionId r = 0; r < nb_regions; ++r) {
-                        sum_of_region_sups += sup_of_sum_of_differences_to_points(points.data(l, r), approximated);
+                        sum_of_region_sups += sup_sum_shape_differences_to_points(points.data(l, r), approximated);
                     }
                     b_hat.set_lk(m, l, k, sum_of_region_sups);
                 }
@@ -391,8 +391,8 @@ inline CommonIntermediateValues compute_intermediate_values(
                         return convolution(
                             to_shape(kernels[m][i_m]), positive_support(convolution(to_shape(kernels[l][i_l]), phi_k)));
                     };
-                    const double v =
-                        shape::sum_of_point_differences(points[m], points[l], shape_generator, union_non_zero_domain);
+                    const double v = shape::sum_of_shape_point_differences(
+                        points[m], points[l], shape_generator, union_non_zero_domain);
                     b.set_lk(m, l, k, v);
                 }
             }
@@ -434,7 +434,7 @@ inline CommonIntermediateValues compute_intermediate_values(
                     positive_support(convolution(to_shape(kernels[l][i_l]), phi_k)),
                     positive_support(convolution(to_shape(kernels[l2][i_l2]), phi_k2)));
             };
-            return shape::sum_of_point_differences(points[l], points[l2], shape_generator, union_non_zero_domain);
+            return shape::sum_of_shape_point_differences(points[l], points[l2], shape_generator, union_non_zero_domain);
         };
         set_G_values_histogram(g, nb_processes, base_size, G_ll2kk2); // Simplification is still valid with convolution
 
@@ -476,7 +476,7 @@ inline CommonIntermediateValues compute_intermediate_values(
             // b_lk
             for(ProcessId l = 0; l < nb_processes; ++l) {
                 for(FunctionBaseId k = 0; k < base_size; ++k) {
-                    const auto v = sum_of_point_differences(points[m], points[l], to_shape(base.wavelet(k)));
+                    const auto v = sum_shape_point_differences(points[m], points[l], to_shape(base.wavelet(k)));
                     b.set_lk(m, l, k, v);
                 }
             }
@@ -496,7 +496,7 @@ inline CommonIntermediateValues compute_intermediate_values(
 
         auto G_ll2kk2 = [&](ProcessId l, ProcessId l2, FunctionBaseId k, FunctionBaseId k2) {
             const auto shape = cross_correlation(to_shape(base.wavelet(k)), to_shape(base.wavelet(k2)));
-            return sum_of_point_differences(points[l], points[l2], shape);
+            return sum_shape_point_differences(points[l], points[l2], shape);
         };
         set_G_values(g, nb_processes, base_size, G_ll2kk2);
         return g;
@@ -539,7 +539,7 @@ inline CommonIntermediateValues compute_intermediate_values(
                     const auto shape = convolution(
                         to_shape(kernels.kernels[m]),
                         positive_support(convolution(to_shape(kernels.kernels[l]), to_shape(base.wavelet(k)))));
-                    const double b_mlk = sum_of_point_differences(points[m], points[l], shape);
+                    const double b_mlk = sum_shape_point_differences(points[m], points[l], shape);
                     b.set_lk(m, l, k, b_mlk);
                 }
             }
@@ -564,7 +564,7 @@ inline CommonIntermediateValues compute_intermediate_values(
             const auto shape = cross_correlation(
                 positive_support(convolution(to_shape(kernels.kernels[l]), to_shape(base.wavelet(k)))),
                 positive_support(convolution(to_shape(kernels.kernels[l2]), to_shape(base.wavelet(k2)))));
-            return sum_of_point_differences(points[l], points[l2], shape);
+            return sum_shape_point_differences(points[l], points[l2], shape);
         };
         set_G_values(g, nb_processes, base_size, G_ll2kk2);
         return g;

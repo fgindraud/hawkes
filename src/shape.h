@@ -747,7 +747,7 @@ class ShiftedPoints {
  * Worst case complexity: O(|N|^2).
  * Average complexity: O(|N| * density(N) * width(shape)) = O(|N|^2 * width(shape) / Tmax).
  */
-template <typename Shape> inline double sum_of_point_differences(
+template <typename Shape> inline double sum_shape_point_differences(
     const SortedVec<Point> & m_points, const SortedVec<Point> & l_points, const Shape & shape) {
     // shape(x) != 0 => x in shape.non_zero_domain().
     // Thus sum_{x_m,x_l} shape(x_m - x_l) = sum_{(x_m, x_l), x_m - x_l in non_zero_domain} shape(x_m - x_l).
@@ -789,15 +789,15 @@ template <typename Shape> inline double sum_of_point_differences(
 // TODO version specific to Indicator, with linear speed
 
 // Scaling can be moved out of computation.
-template <typename Inner> inline double sum_of_point_differences(
+template <typename Inner> inline double sum_shape_point_differences(
     const SortedVec<Point> & m_points, const SortedVec<Point> & l_points, const shape::Scaled<Inner> & shape) {
-    return shape.scale * sum_of_point_differences(m_points, l_points, shape.inner);
+    return shape.scale * sum_shape_point_differences(m_points, l_points, shape.inner);
 }
 
 /* Compute sup_{x} sum_{y in points} shape(x - y).
  * This is a building block for computation of B_hat, used in the computation of lasso penalties (d).
  */
-template <Bound lb, Bound rb> inline double sup_of_sum_of_differences_to_points(
+template <Bound lb, Bound rb> inline double sup_sum_shape_differences_to_points(
     const SortedVec<Point> & points, const Indicator<lb, rb> & indicator) {
     /* For an indicator function, the sum is a piecewise constant function of x.
      * This function has at maximum 2*|N_l| points of change, so the number of different values is finite.
@@ -838,9 +838,9 @@ template <Bound lb, Bound rb> inline double sup_of_sum_of_differences_to_points(
 
 // Scaling can be moved out
 template <typename Inner>
-inline double sup_of_sum_of_differences_to_points(const SortedVec<Point> & points, const Scaled<Inner> & shape) {
+inline double sup_sum_shape_differences_to_points(const SortedVec<Point> & points, const Scaled<Inner> & shape) {
     if(shape.scale > 0.) {
-        return shape.scale * sup_of_sum_of_differences_to_points(points, shape.inner);
+        return shape.scale * sup_sum_shape_differences_to_points(points, shape.inner);
     } else {
         return 0.;
     }
@@ -859,7 +859,7 @@ inline double sup_of_sum_of_differences_to_points(const SortedVec<Point> & point
  * Worst case complexity: O(|N|^2).
  * Average complexity: O(|N| * density(N) * width(non_zero_domain)) = O(|N|^2 * width(non_zero_domain) / Tmax).
  */
-template <typename ShapeGenerator> inline double sum_of_point_differences(
+template <typename ShapeGenerator> inline double sum_of_shape_point_differences(
     const SortedVec<Point> & m_points,
     const SortedVec<Point> & l_points,
     const ShapeGenerator & shape_generator,
