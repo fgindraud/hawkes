@@ -395,8 +395,7 @@ G can be expressed as a cross correlation of phi functions:
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} [\varphi_k \Correlation \varphi_{k'}] (X_l-X_l')
 \end{split} \]
 
-\paragraph{d}
-
+\paragraph{Penalty components}
 $\widehat{V}_{k,l}^m$ is computed using a variation on the $\sum_{X_l \in N_l, X_{l'} \in N_{l'}} F(X_l-X_{l'})$ algorithm described above.
 \[ \widehat{V}_{spont}^m = \Int{}{N_m} = |N_m| \]
 \[
@@ -410,13 +409,6 @@ If $\varphi_k$ is not an indicator, we approximate it by an indicator function a
 \[ \widehat{B}_{spont}^m = 1 \]
 \[ \widehat{B}_{k,l}^m = \sup |\sum_{X_l \in N_l} \varphi_k(x - X_l)| \]
 
-These two values are combined to compute $d$:
-\[
-    d_{k,l}^m =
-    \sqrt{2 \gamma \widehat{V}_{k,l}^m \log(M + M^2 K) } +
-    \frac{\gamma}{3} \log(M + M^2 K) \widehat{B}_{k,l}^m
-\]
-
 \subsection{Kernel case}
 
 \paragraph{B}
@@ -429,6 +421,37 @@ These two values are combined to compute $d$:
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \IntR{ [W_l \Convolution \varphi_k](x-(X_l-X_l')) [W_{l'} \Convolution \varphi_{k'}](x) }{x} \\
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} [(W_l \Convolution \varphi_k) \Correlation (W_{l'} \Convolution \varphi_{k'})] (X_l-X_l')
 \end{split} \]
+
+\paragraph{Penalty components}
+TODO check expression for spontaneous cases !
+
+\[ \widehat{V}_{W,spont}^m = \Int{}{N_m} = |N_m| \]
+\[ \widehat{V}_{W,k,l}^m = \sum_{X_m \in N_m} \left( \sum_{X_l \in N_l} [W_l \Convolution W_m \Convolution \varphi_k](X_m-X_l) \right)^2 \]
+
+\[ \widehat{B}_{W,spont}^m = 1 \]
+\[ \widehat{B}_{W,k,l}^m = \sup |\sum_{X_l \in N_l} [W_l \Convolution W_m \Convolution \varphi_k](x - X_l)| \]
+
+\subsection{Lasso parameters}
+
+All previous values are defined for one single region.
+For multiple regions they must be combined to have only one B, G, d values.
+
+B and G are summed over all regions:
+\[ B = \sum_r B_r \]
+\[ G = \sum_r G_r \]
+
+$\widehat{V}$ is summed with a region-dependent factor.
+\[ \widehat{V} = \frac{1}{R^2} \sum_r \widehat{V}_r \]
+
+$\widehat{B}$ is summed over regions. FIXME in BRP18 the final $\widehat{B}$ is a single sup over the sum of all regions.
+\[ \widehat{B} = \sum_r \widehat{B}_r \]
+
+These two values are combined to compute $d$, coefficient wise :
+\[
+    d =
+    \sqrt{2 \gamma \widehat{V} \log(M + M^2 K) } +
+    \frac{\gamma}{3} \log(M + M^2 K) \widehat{B}
+\]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Old specifications and proofs}

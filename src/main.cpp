@@ -180,10 +180,7 @@ int main(int argc, char * argv[]) {
         fmt::print(
             stderr, "Post processing done: time = {}\n", duration_string(post_processing_end - post_processing_start));
 
-        // Compute base/kernel specific values: B, G, B_hat
-        // Ths visit() call generates an if/else if/.../else block for all combinations of base and kernel setup.
-        // For each case, an overload of compute_intermediate_values indicated by its argument types does the
-        // computation.
+        // Compute base/kernel specific values: B, G, V_hat, B_hat
         const auto compute_intermediates_start = instant();
         std::vector<IntermediateValues> intermediate_values =
             compute_intermediate_values(points, *base, *kernel_config);
