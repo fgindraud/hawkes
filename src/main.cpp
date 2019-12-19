@@ -184,13 +184,14 @@ int main(int argc, char * argv[]) {
         // Ths visit() call generates an if/else if/.../else block for all combinations of base and kernel setup.
         // For each case, an overload of compute_intermediate_values indicated by its argument types does the
         // computation.
-        const auto compute_b_g_start = instant();
-        CommonIntermediateValues intermediate_values = compute_intermediate_values(points, *base, *kernel_config);
-        const auto compute_b_g_end = instant();
+        const auto compute_intermediates_start = instant();
+        std::vector<IntermediateValues> intermediate_values =
+            compute_intermediate_values(points, *base, *kernel_config);
+        const auto compute_intermediates_end = instant();
         fmt::print(
             stderr,
             "Computing B and G matrice done: time = {}\n",
-            duration_string(compute_b_g_end - compute_b_g_start));
+            duration_string(compute_intermediates_end - compute_intermediates_start));
 
         // Perform lassoshooting and final re-estimation
         const auto lasso_start = instant();
@@ -203,8 +204,11 @@ int main(int argc, char * argv[]) {
                 "# G matrix (rows & cols = {{0}} U {{(l,k)}})\n{}\n",
                 lasso_parameters.sum_of_g.inner.format(eigen_format));
             fmt::print(
+                "# V_hat matrix (rows = {{0}} U {{(l,k)}}, cols = {{m}})\n{}\n",
+                lasso_parameters.sum_of_v_hat.inner.format(eigen_format));
+            fmt::print(
                 "# B_hat matrix (rows = {{0}} U {{(l,k)}}, cols = {{m}})\n{}\n",
-                intermediate_values.b_hat.inner.format(eigen_format));
+                lasso_parameters.sum_of_b_hat.inner.format(eigen_format));
             fmt::print(
                 "# D matrix (rows = {{0}} U {{(l,k)}}, cols = {{m}})\n{}\n",
                 lasso_parameters.d.inner.format(eigen_format));
