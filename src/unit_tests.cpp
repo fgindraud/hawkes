@@ -33,6 +33,21 @@ template <Bound lb, Bound rb> static doctest::String toString(Interval<lb, rb> i
     return s;
 }
 
+namespace shape {
+static doctest::String toString(SumShapePointDifferenceResult r) {
+    using doctest::toString;
+    doctest::String s = "{nsq=";
+    s += toString(r.non_squared);
+    s += ",sq=";
+    s += toString(r.squared);
+    s += "}";
+    return s;
+}
+static bool operator==(SumShapePointDifferenceResult lhs, SumShapePointDifferenceResult rhs) {
+    return lhs.non_squared == rhs.non_squared && lhs.squared == rhs.squared;
+}
+} // namespace shape
+
 /******************************************************************************
  * Types definitions
  */
@@ -385,7 +400,9 @@ TEST_SUITE("shape") {
         CHECK(mountain_a.non_zero_domain() == Interval<Bound::Open, Bound::Closed>{0., 4.});
         CHECK(mountain_a(1.) == doctest::Approx(1.));
     }
-    TEST_CASE("sum_shape_point_differences_generic") {
+    TEST_CASE("sum_shape_point_differences") {
+        using Result = SumShapePointDifferenceResult;
+
         // Tested functions
         const auto indicator_oo = IndicatorLike<Bound::Open, Bound::Open>{{-1, 1}};
         const auto indicator_oc = IndicatorLike<Bound::Open, Bound::Closed>{{-1, 1}};
@@ -399,171 +416,84 @@ TEST_SUITE("shape") {
         const auto all_near_zero = SortedVec<Point>::from_sorted({-4, -3, -2, -1, 0, 1, 2, 3, 4});
 
         // Should be zero due to emptyset
-        CHECK(sum_shape_point_differences(empty, empty, indicator_oo) == 0);
-        CHECK(sum_shape_point_differences(empty, zero, indicator_oo) == 0);
-        CHECK(sum_shape_point_differences(zero, empty, indicator_oo) == 0);
+        CHECK(sum_shape_point_differences(empty, empty, indicator_oo) == Result{0, 0});
+        CHECK(sum_shape_point_differences(empty, zero, indicator_oo) == Result{0, 0});
+        CHECK(sum_shape_point_differences(zero, empty, indicator_oo) == Result{0, 0});
 
-        CHECK(sum_shape_point_differences(empty, empty, indicator_oc) == 0);
-        CHECK(sum_shape_point_differences(empty, zero, indicator_oc) == 0);
-        CHECK(sum_shape_point_differences(zero, empty, indicator_oc) == 0);
+        CHECK(sum_shape_point_differences(empty, empty, indicator_oc) == Result{0, 0});
+        CHECK(sum_shape_point_differences(empty, zero, indicator_oc) == Result{0, 0});
+        CHECK(sum_shape_point_differences(zero, empty, indicator_oc) == Result{0, 0});
 
-        CHECK(sum_shape_point_differences(empty, empty, indicator_co) == 0);
-        CHECK(sum_shape_point_differences(empty, zero, indicator_co) == 0);
-        CHECK(sum_shape_point_differences(zero, empty, indicator_co) == 0);
+        CHECK(sum_shape_point_differences(empty, empty, indicator_co) == Result{0, 0});
+        CHECK(sum_shape_point_differences(empty, zero, indicator_co) == Result{0, 0});
+        CHECK(sum_shape_point_differences(zero, empty, indicator_co) == Result{0, 0});
 
-        CHECK(sum_shape_point_differences(empty, empty, indicator_cc) == 0);
-        CHECK(sum_shape_point_differences(empty, zero, indicator_cc) == 0);
-        CHECK(sum_shape_point_differences(zero, empty, indicator_cc) == 0);
+        CHECK(sum_shape_point_differences(empty, empty, indicator_cc) == Result{0, 0});
+        CHECK(sum_shape_point_differences(empty, zero, indicator_cc) == Result{0, 0});
+        CHECK(sum_shape_point_differences(zero, empty, indicator_cc) == Result{0, 0});
 
         // Only one same point in both sets
-        CHECK(sum_shape_point_differences(zero, zero, indicator_oo) == 1);
-        CHECK(sum_shape_point_differences(zero, zero, indicator_oc) == 1);
-        CHECK(sum_shape_point_differences(zero, zero, indicator_cc) == 1);
-        CHECK(sum_shape_point_differences(zero, zero, indicator_cc) == 1);
+        CHECK(sum_shape_point_differences(zero, zero, indicator_oo) == Result{1, 1 * 1});
+        CHECK(sum_shape_point_differences(zero, zero, indicator_oc) == Result{1, 1 * 1});
+        CHECK(sum_shape_point_differences(zero, zero, indicator_cc) == Result{1, 1 * 1});
+        CHECK(sum_shape_point_differences(zero, zero, indicator_cc) == Result{1, 1 * 1});
 
         // Two sets with one point, one diff = 1 for (one, zero), -1 for (zero, one)
-        CHECK(sum_shape_point_differences(one, zero, indicator_oo) == 0);
-        CHECK(sum_shape_point_differences(zero, one, indicator_oo) == 0);
+        CHECK(sum_shape_point_differences(one, zero, indicator_oo) == Result{0, 0});
+        CHECK(sum_shape_point_differences(zero, one, indicator_oo) == Result{0, 0});
 
-        CHECK(sum_shape_point_differences(one, zero, indicator_oc) == 1);
-        CHECK(sum_shape_point_differences(zero, one, indicator_oc) == 0);
+        CHECK(sum_shape_point_differences(one, zero, indicator_oc) == Result{1, 1 * 1});
+        CHECK(sum_shape_point_differences(zero, one, indicator_oc) == Result{0, 0});
 
-        CHECK(sum_shape_point_differences(one, zero, indicator_co) == 0);
-        CHECK(sum_shape_point_differences(zero, one, indicator_co) == 1);
+        CHECK(sum_shape_point_differences(one, zero, indicator_co) == Result{0, 0});
+        CHECK(sum_shape_point_differences(zero, one, indicator_co) == Result{1, 1 * 1});
 
-        CHECK(sum_shape_point_differences(one, zero, indicator_cc) == 1);
-        CHECK(sum_shape_point_differences(zero, one, indicator_cc) == 1);
+        CHECK(sum_shape_point_differences(one, zero, indicator_cc) == Result{1, 1 * 1});
+        CHECK(sum_shape_point_differences(zero, one, indicator_cc) == Result{1, 1 * 1});
 
         // Single point with all points near zero : set of diffs = all_near_zero
-        CHECK(sum_shape_point_differences(zero, all_near_zero, indicator_oo) == 1);
-        CHECK(sum_shape_point_differences(all_near_zero, zero, indicator_oo) == 1);
+        CHECK(sum_shape_point_differences(zero, all_near_zero, indicator_oo) == Result{1, 1 * 1});
+        CHECK(sum_shape_point_differences(all_near_zero, zero, indicator_oo) == Result{1, 1 * 1});
 
-        CHECK(sum_shape_point_differences(zero, all_near_zero, indicator_oc) == 2);
-        CHECK(sum_shape_point_differences(all_near_zero, zero, indicator_oc) == 2);
+        CHECK(sum_shape_point_differences(zero, all_near_zero, indicator_oc) == Result{2, 1 * (2 * 2)});
+        CHECK(sum_shape_point_differences(all_near_zero, zero, indicator_oc) == Result{2, 2 * 1});
 
-        CHECK(sum_shape_point_differences(zero, all_near_zero, indicator_co) == 2);
-        CHECK(sum_shape_point_differences(all_near_zero, zero, indicator_co) == 2);
+        CHECK(sum_shape_point_differences(zero, all_near_zero, indicator_co) == Result{2, 1 * (2 * 2)});
+        CHECK(sum_shape_point_differences(all_near_zero, zero, indicator_co) == Result{2, 2 * 1});
 
-        CHECK(sum_shape_point_differences(zero, all_near_zero, indicator_cc) == 3);
-        CHECK(sum_shape_point_differences(all_near_zero, zero, indicator_cc) == 3);
+        CHECK(sum_shape_point_differences(zero, all_near_zero, indicator_cc) == Result{3, 1 * (3 * 3)});
+        CHECK(sum_shape_point_differences(all_near_zero, zero, indicator_cc) == Result{3, 3 * 1});
 
         // Multiple points with all points near zero
         const auto some_points = SortedVec<Point>::from_sorted({-3, 0, 3});
-        CHECK(sum_shape_point_differences(some_points, all_near_zero, indicator_oo) == 3);
-        CHECK(sum_shape_point_differences(all_near_zero, some_points, indicator_oo) == 3);
-        CHECK(sum_shape_point_differences(some_points, some_points, indicator_oo) == 3);
+        CHECK(sum_shape_point_differences(some_points, all_near_zero, indicator_oo) == Result{3, 3 * 1});
+        CHECK(sum_shape_point_differences(all_near_zero, some_points, indicator_oo) == Result{3, 3 * 1});
+        CHECK(sum_shape_point_differences(some_points, some_points, indicator_oo) == Result{3, 3 * 1});
 
-        CHECK(sum_shape_point_differences(some_points, all_near_zero, indicator_oc) == 6);
-        CHECK(sum_shape_point_differences(all_near_zero, some_points, indicator_oc) == 6);
-        CHECK(sum_shape_point_differences(some_points, some_points, indicator_oc) == 3);
+        CHECK(sum_shape_point_differences(some_points, all_near_zero, indicator_oc) == Result{6, 3 * (2 * 2)});
+        CHECK(sum_shape_point_differences(all_near_zero, some_points, indicator_oc) == Result{6, 6 * 1});
+        CHECK(sum_shape_point_differences(some_points, some_points, indicator_oc) == Result{3, 3 * 1});
 
-        CHECK(sum_shape_point_differences(some_points, all_near_zero, indicator_co) == 6);
-        CHECK(sum_shape_point_differences(all_near_zero, some_points, indicator_co) == 6);
-        CHECK(sum_shape_point_differences(some_points, some_points, indicator_co) == 3);
+        CHECK(sum_shape_point_differences(some_points, all_near_zero, indicator_co) == Result{6, 3 * (2 * 2)});
+        CHECK(sum_shape_point_differences(all_near_zero, some_points, indicator_co) == Result{6, 6 * 1});
+        CHECK(sum_shape_point_differences(some_points, some_points, indicator_co) == Result{3, 3 * 1});
 
-        CHECK(sum_shape_point_differences(some_points, all_near_zero, indicator_cc) == 9);
-        CHECK(sum_shape_point_differences(all_near_zero, some_points, indicator_cc) == 9);
-        CHECK(sum_shape_point_differences(some_points, some_points, indicator_cc) == 3);
-
-        // Tests values for non indicator shape
-        const auto triangle = TriangleShape{4.};
-        CHECK(sum_shape_point_differences(empty, zero, triangle) == 0);
-        CHECK(sum_shape_point_differences(zero, empty, triangle) == 0);
-        CHECK(sum_shape_point_differences(zero, zero, triangle) == 0);
-        CHECK(sum_shape_point_differences(one, zero, triangle) == 1);
-        CHECK(sum_shape_point_differences(all_near_zero, zero, triangle) == 10); // 0+1+2+3+4
-        CHECK(sum_shape_point_differences(zero, all_near_zero, triangle) == 10); // 0+1+2+3+4
-        CHECK(sum_shape_point_differences(all_near_zero, one, triangle) == 6);   // 0+1+2+3
-        CHECK(sum_shape_point_differences(one, all_near_zero, triangle) == 10);  // 0+1+2+3+4
-    }
-    TEST_CASE("sum_shape_point_differences_squared_generic") {
-        // Tested functions
-        const auto indicator_oo = IndicatorLike<Bound::Open, Bound::Open>{{-1, 1}};
-        const auto indicator_oc = IndicatorLike<Bound::Open, Bound::Closed>{{-1, 1}};
-        const auto indicator_co = IndicatorLike<Bound::Closed, Bound::Open>{{-1, 1}};
-        const auto indicator_cc = IndicatorLike<Bound::Closed, Bound::Closed>{{-1, 1}};
-
-        // Tested point sets
-        const auto empty = SortedVec<Point>::from_sorted({});
-        const auto zero = SortedVec<Point>::from_sorted({0});
-        const auto one = SortedVec<Point>::from_sorted({1});
-        const auto all_near_zero = SortedVec<Point>::from_sorted({-4, -3, -2, -1, 0, 1, 2, 3, 4});
-
-        // Should be zero due to emptyset
-        CHECK(sum_shape_point_differences_squared(empty, empty, indicator_oo) == 0);
-        CHECK(sum_shape_point_differences_squared(empty, zero, indicator_oo) == 0);
-        CHECK(sum_shape_point_differences_squared(zero, empty, indicator_oo) == 0);
-
-        CHECK(sum_shape_point_differences_squared(empty, empty, indicator_oc) == 0);
-        CHECK(sum_shape_point_differences_squared(empty, zero, indicator_oc) == 0);
-        CHECK(sum_shape_point_differences_squared(zero, empty, indicator_oc) == 0);
-
-        CHECK(sum_shape_point_differences_squared(empty, empty, indicator_co) == 0);
-        CHECK(sum_shape_point_differences_squared(empty, zero, indicator_co) == 0);
-        CHECK(sum_shape_point_differences_squared(zero, empty, indicator_co) == 0);
-
-        CHECK(sum_shape_point_differences_squared(empty, empty, indicator_cc) == 0);
-        CHECK(sum_shape_point_differences_squared(empty, zero, indicator_cc) == 0);
-        CHECK(sum_shape_point_differences_squared(zero, empty, indicator_cc) == 0);
-
-        // Only one same point in both sets
-        CHECK(sum_shape_point_differences_squared(zero, zero, indicator_oo) == 1 * 1);
-        CHECK(sum_shape_point_differences_squared(zero, zero, indicator_oc) == 1 * 1);
-        CHECK(sum_shape_point_differences_squared(zero, zero, indicator_cc) == 1 * 1);
-        CHECK(sum_shape_point_differences_squared(zero, zero, indicator_cc) == 1 * 1);
-
-        // Two sets with one point, one diff = 1 for (one, zero), -1 for (zero, one)
-        CHECK(sum_shape_point_differences_squared(one, zero, indicator_oo) == 0);
-        CHECK(sum_shape_point_differences_squared(zero, one, indicator_oo) == 0);
-
-        CHECK(sum_shape_point_differences_squared(one, zero, indicator_oc) == 1 * 1);
-        CHECK(sum_shape_point_differences_squared(zero, one, indicator_oc) == 0);
-
-        CHECK(sum_shape_point_differences_squared(one, zero, indicator_co) == 0);
-        CHECK(sum_shape_point_differences_squared(zero, one, indicator_co) == 1 * 1);
-
-        CHECK(sum_shape_point_differences_squared(one, zero, indicator_cc) == 1 * 1);
-        CHECK(sum_shape_point_differences_squared(zero, one, indicator_cc) == 1 * 1);
-
-        // Single point with all points near zero : set of diffs = all_near_zero
-        CHECK(sum_shape_point_differences_squared(zero, all_near_zero, indicator_oo) == 1 * 1);
-        CHECK(sum_shape_point_differences_squared(all_near_zero, zero, indicator_oo) == 1 * 1);
-
-        CHECK(sum_shape_point_differences_squared(zero, all_near_zero, indicator_oc) == 1 * (2 * 2));
-        CHECK(sum_shape_point_differences_squared(all_near_zero, zero, indicator_oc) == 2 * 1);
-
-        CHECK(sum_shape_point_differences_squared(zero, all_near_zero, indicator_co) == 1 * (2 * 2));
-        CHECK(sum_shape_point_differences_squared(all_near_zero, zero, indicator_co) == 2 * 1);
-
-        CHECK(sum_shape_point_differences_squared(zero, all_near_zero, indicator_cc) == 1 * (3 * 3));
-        CHECK(sum_shape_point_differences_squared(all_near_zero, zero, indicator_cc) == 3 * 1);
-
-        // Multiple points with all points near zero
-        const auto some_points = SortedVec<Point>::from_sorted({-3, 0, 3});
-        CHECK(sum_shape_point_differences_squared(some_points, all_near_zero, indicator_oo) == 3 * 1);
-        CHECK(sum_shape_point_differences_squared(all_near_zero, some_points, indicator_oo) == 3 * 1);
-        CHECK(sum_shape_point_differences_squared(some_points, some_points, indicator_oo) == 3 * 1);
-
-        CHECK(sum_shape_point_differences_squared(some_points, all_near_zero, indicator_oc) == 3 * (2 * 2));
-        CHECK(sum_shape_point_differences_squared(all_near_zero, some_points, indicator_oc) == 6 * 1);
-        CHECK(sum_shape_point_differences_squared(some_points, some_points, indicator_oc) == 3 * 1);
-
-        CHECK(sum_shape_point_differences_squared(some_points, all_near_zero, indicator_co) == 3 * (2 * 2));
-        CHECK(sum_shape_point_differences_squared(all_near_zero, some_points, indicator_co) == 6 * 1);
-        CHECK(sum_shape_point_differences_squared(some_points, some_points, indicator_co) == 3 * 1);
-
-        CHECK(sum_shape_point_differences_squared(some_points, all_near_zero, indicator_cc) == 3 * (3 * 3));
-        CHECK(sum_shape_point_differences_squared(all_near_zero, some_points, indicator_cc) == 9 * 1);
-        CHECK(sum_shape_point_differences_squared(some_points, some_points, indicator_cc) == 3 * 1);
+        CHECK(sum_shape_point_differences(some_points, all_near_zero, indicator_cc) == Result{9, 3 * (3 * 3)});
+        CHECK(sum_shape_point_differences(all_near_zero, some_points, indicator_cc) == Result{9, 9 * 1});
+        CHECK(sum_shape_point_differences(some_points, some_points, indicator_cc) == Result{3, 3 * 1});
 
         // Tests values for non indicator shape
         const auto triangle = TriangleShape{4.};
-        CHECK(sum_shape_point_differences_squared(empty, zero, triangle) == 0);
-        CHECK(sum_shape_point_differences_squared(zero, empty, triangle) == 0);
-        CHECK(sum_shape_point_differences_squared(zero, zero, triangle) == 0);
-        CHECK(sum_shape_point_differences_squared(one, zero, triangle) == 1 * 1);
-        CHECK(sum_shape_point_differences_squared(all_near_zero, zero, triangle) == 30);  // 1*0+1*1^2+1*2^2+1*3^2+1*4^2
-        CHECK(sum_shape_point_differences_squared(zero, all_near_zero, triangle) == 100); // 1*(0+1+2+3+4)^2
+        CHECK(sum_shape_point_differences(empty, zero, triangle) == Result{0, 0});
+        CHECK(sum_shape_point_differences(zero, empty, triangle) == Result{0, 0});
+        CHECK(sum_shape_point_differences(zero, zero, triangle) == Result{0, 0});
+        CHECK(sum_shape_point_differences(one, zero, triangle) == Result{1, 1 * 1});
+        // { 0+1+2+3+4, 1*0+1*1^2+1*2^2+1*3^2+1*4^2 }
+        CHECK(sum_shape_point_differences(all_near_zero, zero, triangle) == Result{10, 30});
+        // { 0+1+2+3+4, 1*(0+1+2+3+4)^2 }
+        CHECK(sum_shape_point_differences(zero, all_near_zero, triangle) == Result{10, 100});
+        CHECK(sum_shape_point_differences(all_near_zero, one, triangle).non_squared == 6);  // 0+1+2+3
+        CHECK(sum_shape_point_differences(one, all_near_zero, triangle).non_squared == 10); // 0+1+2+3+4
     }
     TEST_CASE("sup_sum_shape_differences_to_points_indicators") {
         const auto vec_empty = SortedVec<Point>::from_sorted({});
@@ -609,8 +539,8 @@ TEST_SUITE("shape") {
             sum_shape_point_differences(zero, all_near_zero, scaled_opt) ==
             sum_shape_point_differences(zero, all_near_zero, scaled_no_opt));
         CHECK(
-            sum_shape_point_differences_squared(zero, all_near_zero, scaled_opt) ==
-            sum_shape_point_differences_squared(zero, all_near_zero, scaled_no_opt));
+            sum_shape_point_differences(zero, all_near_zero, scaled_opt) ==
+            sum_shape_point_differences(zero, all_near_zero, scaled_no_opt));
     }
 }
 
@@ -635,69 +565,6 @@ TEST_SUITE("computations") {
         const SortedVec<Point> one_point[] = {SortedVec<Point>::from_sorted({1})};
         CHECK(tmax(make_span(one_point)) == 0);
     }
-    /*TEST_CASE ("b_ml_histogram_counts_for_all_k_denormalized") {
-            const auto base = HistogramBase{3, 1}; // K=3, delta=1, so intervals=]0,1] ]1,2] ]2,3]
-            const auto empty = SortedVec<Point>::from_sorted ({});
-            const auto point = SortedVec<Point>::from_sorted ({0});
-            const auto points = SortedVec<Point>::from_sorted ({0, 1, 2});
-            // Edge cases: empty
-            CHECK (b_ml_histogram_counts_for_all_k_denormalized (empty, empty, base) == std::vector<int64_t>{0, 0, 0});
-            CHECK (b_ml_histogram_counts_for_all_k_denormalized (point, empty, base) == std::vector<int64_t>{0, 0, 0});
-            CHECK (b_ml_histogram_counts_for_all_k_denormalized (empty, point, base) == std::vector<int64_t>{0, 0, 0});
-            CHECK (b_ml_histogram_counts_for_all_k_denormalized (points, empty, base) == std::vector<int64_t>{0, 0, 0});
-            CHECK (b_ml_histogram_counts_for_all_k_denormalized (empty, points, base) == std::vector<int64_t>{0, 0, 0});
-            // Non empty
-            CHECK (b_ml_histogram_counts_for_all_k_denormalized (points, point, base) == std::vector<int64_t>{1, 1, 0});
-            CHECK (b_ml_histogram_counts_for_all_k_denormalized (points, points, base) == std::vector<int64_t>{2, 1,
-    0});
-    }
-    TEST_CASE ("g_ll2kk2_histogram_integral_denormalized") {
-            const auto interval_0_1 = HistogramBase::Interval{0, 1}; // ]0,1]
-            const auto interval_0_2 = HistogramBase::Interval{0, 2}; // ]0,2]
-            const auto interval_2_4 = HistogramBase::Interval{2, 4}; // ]2,4]
-            const auto empty = SortedVec<Point>::from_sorted ({});
-            const auto point = SortedVec<Point>::from_sorted ({0});
-            const auto points = SortedVec<Point>::from_sorted ({0, 1, 2});
-            // Empty
-            CHECK (g_ll2kk2_histogram_integral_denormalized (empty, interval_0_1, empty, interval_0_1) == 0);
-            CHECK (g_ll2kk2_histogram_integral_denormalized (point, interval_0_1, empty, interval_0_1) == 0);
-            CHECK (g_ll2kk2_histogram_integral_denormalized (empty, interval_0_1, point, interval_0_1) == 0);
-            // With phi=indicator(]0,1]), phi(x - x_l) * phi(x - x_m) = if x_m == x_l then 1 else 0
-            // Thus integral_x sum_{x_l,x_m} phi(x - x_m) phi(x - x_l) = sum_{x_m == x_l} 1
-            CHECK (g_ll2kk2_histogram_integral_denormalized (point, interval_0_1, point, interval_0_1) == 1);
-            CHECK (g_ll2kk2_histogram_integral_denormalized (point, interval_0_1, points, interval_0_1) == 1);
-            CHECK (g_ll2kk2_histogram_integral_denormalized (points, interval_0_1, point, interval_0_1) == 1);
-            CHECK (g_ll2kk2_histogram_integral_denormalized (points, interval_0_1, points, interval_0_1) == 3);
-            // Simple cases for interval ]0,2]
-            CHECK (g_ll2kk2_histogram_integral_denormalized (empty, interval_0_2, empty, interval_0_2) == 0);
-            CHECK (g_ll2kk2_histogram_integral_denormalized (point, interval_0_2, empty, interval_0_2) == 0);
-            CHECK (g_ll2kk2_histogram_integral_denormalized (point, interval_0_2, point, interval_0_2) == 2);
-            // Results based on geometrical figures for more complex cases:
-            //                                       ##     #
-            // ##__ * (##__ + _##_ + __##) = ##__ * #### = ##__
-            CHECK (g_ll2kk2_histogram_integral_denormalized (point, interval_0_2, points, interval_0_2) == 3);
-            //                ##
-            //                ##
-            //  ##     ##     ##
-            // #### * #### = ####
-            CHECK (g_ll2kk2_histogram_integral_denormalized (points, interval_0_2, points, interval_0_2) == 10);
-            //                         ##            ##     ##
-            // (#___ + _#__ + __#_) * #### = ###_ * #### = ###_
-            CHECK (g_ll2kk2_histogram_integral_denormalized (points, interval_0_1, points, interval_0_2) == 5);
-            // Check that value is invariant by common interval shifting
-            CHECK (g_ll2kk2_histogram_integral_denormalized (points, interval_0_2, points, interval_0_2) ==
-                   g_ll2kk2_histogram_integral_denormalized (points, interval_2_4, points, interval_2_4));
-    }
-            TEST_CASE ("b_values") {
-        const auto base = HistogramBase{2, 10}; // K=2, delta=10, intervals= ]0,10] ]10,20]
-        const auto norm_factor = normalization_factor (base);
-        const SortedVec<Point> points[] = {
-            SortedVec<Point>::from_sorted ({0}),
-            SortedVec<Point>::from_sorted ({0}),
-        };
-        fmt::print (stdout, "###############################\n{}\n", compute_b (make_span (points), base,
-    None{}).inner);
-      }*/
 }
 
 /******************************************************************************
