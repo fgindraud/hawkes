@@ -317,7 +317,7 @@ Using the integral version of $C(x)$ and the interval $I(x)$:
 \[ \begin{split}
     C_\text{center}(x)
     &= \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left( w_q^{i+j+1} - (-w_q)^{i+j+1} \right) \\
-    &= \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} w_p^{i+j+1} (1 + (-1)^{i+j}) x^{k-i}
+    &= \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} w_q^{i+j+1} (1 + (-1)^{i+j}) x^{k-i}
 \end{split} \]
 
 Coefficients can be computed by accumulations as for the left part.
@@ -338,7 +338,7 @@ Using binomial formula, and injecting it into $C_\text{right}(x)$:
 \[ x^{k-i} = ((x-w_p) + w_p)^{k-i} = \sum_{0 \le l \le k-i} \binom{k-i}{l} (x-w_p)^{k-i-l} w_p^l \]
 \[
     C_\text{right}(x) = \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q \\ 0 \le l \le k-i}}
-    a_k b_j \binom{k}{i} \binom{k-i}{l} \frac{(-1)^i}{i+j+1} w_p^l \left( w_q^{i+j+1} (x+w_p)^{k-i-l} - (x-w_p)^{k+j+1-l} \right)
+    a_k b_j \binom{k}{i} \binom{k-i}{l} \frac{(-1)^i}{i+j+1} w_p^l \left( w_q^{i+j+1} (x-w_p)^{k-i-l} - (x-w_p)^{k+j+1-l} \right)
 \]
 
 This is a polynom of $x-w_p$ of degree $N_p + N_q + 1$.
