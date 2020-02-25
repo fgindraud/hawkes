@@ -7,55 +7,19 @@
 \usepackage{amsmath}
 \usepackage{hyperref}
 
-\newcommand\Shifted[2]{\Delta_{#1}(#2)}
-\newcommand\Reversed[1]{\overline{#1}} %TODO find a nice way to replace the line with a leftrightarrow
-
-\newcommand\Indicator[1]{\mathbbm{1}_{#1}}
-
-\newcommand\SymSquare{\begin{tikzpicture}[baseline=0.5ex]%
-        \draw (0,0) -- (0,1em) -- (1em,1em) -- (1em,0) -- cycle;
-\end{tikzpicture}}
-\newcommand\OldIndicator[1]{\SymSquare(#1)}
-
-\newcommand\SymPositiveTriangle{\begin{tikzpicture}[baseline=0.5ex]%
-        \draw (0,0) -- (1em,0em) -- (1em,1em) -- cycle;
-\end{tikzpicture}}
-\newcommand\PositiveTriangle[1]{\SymPositiveTriangle(#1)}
-
-\newcommand\SymNegativeTriangle{\begin{tikzpicture}[baseline=0.5ex]%
-        \draw (0,0) -- (0,1em) -- (1em,0em) -- cycle;
-\end{tikzpicture}}
-\newcommand\NegativeTriangle[1]{\SymNegativeTriangle(#1)}
-
-\newcommand\SymTrapezoid{\begin{tikzpicture}[baseline=0.5ex]%
-        \draw (0,0) -- (3em,0) -- (2em,1em) -- (1em,1em) -- cycle;
-\end{tikzpicture}}
-\newcommand\Trapezoid[2]{\SymTrapezoid(#1,#2)}% Trapezoid(h,b)
-
 \newcommand\D{\mathrm{d}}
+\newcommand\R{\mathbbm{R}}
+
 \newcommand\Convolution{\ast}
 \newcommand\Correlation{\star}
-\newcommand\Int[2]{\int #1 \D#2}
-\newcommand\IntR[2]{\int_{-\infty}^{\infty}#1 \D#2}
-\newcommand\Equiv{\Leftrightarrow}
-\newcommand\Then{\Rightarrow}
-\renewcommand\And{\wedge}
 
-% \GridAxis{from_x}{to_x}{from_y}{to_y}
-\newcommand\GridAxis[4]{%
-    \draw[very thin,color=gray] (#1,#3) grid (#2,#4);
-    \draw[->] (#1,0) -- (#2,0) node[right] {$x$};
-    \draw[->] (0,#3) -- (0,#4);
-    \node[below right] at (0,0) {$0$};
-    \coordinate (Origin) at (0,0);
-    \coordinate (FuncStart) at (#1,0);
-    \coordinate (FuncEnd) at (#2,0);
-}
-\newcommand\SizedGridAxis[4]{%
-    \GridAxis{#1}{#2}{#3}{#4}
-    \node[below right] at (0,1) {$1$};
-    \node[below right] at (1,0) {$1$};
-}
+\newcommand\Reversed[1]{\overline{#1}}
+\newcommand\Indicator[1]{\mathbbm{1}_{#1}}
+
+\DeclareMathOperator{\nzd}{nzd}
+\DeclareMathOperator{\IntervalLeft}{left}
+\DeclareMathOperator{\IntervalRight}{right}
+\DeclareMathOperator{\IntervalCenter}{center}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \title{Convolution formulas using shapes}
@@ -81,25 +45,25 @@ Cons:
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Function operations}
+\section{Notations}
 
 \paragraph{Convolution}
 Convolution is noted using the $\Convolution$ operator, with the usual definition:
-\[ \left[ f \Convolution g \right](x) = \IntR{f(x - t) g(t)}{t} \]
+\[ \left[ f \Convolution g \right](x) = \int_\R f(x - t) g(t) \D t \]
 Convolution is commutative and associative.
 
-\paragraph{Time shifting}
+\paragraph{Time shift / translation}
 The time shift combinator of shift $h$ moves the shape $f$ forward along the time axis by $h$.
-For a shape $f$ \emph{centered} on $c$, $\Shifted{h}{f}$ is \emph{centered} on $c+h$.
-\[ \Shifted{h}{f}(x) = f(x - h) \]
+For a shape $f$ "centered" on $c$, $\tau_h f$ is centered on $c+h$.
+\[ \tau_h f(x) = f(x - h) \]
 Time shifts combine additively:
-\[ \Shifted{h}{\Shifted{h'}{f}}= \Shifted{h+h'}{f} \]
+\[ \tau_h (\tau_{h'} f) = \tau_{h+h'} f \]
 Convolution of shifted functions is the shift of convolutions:
 \[
-    \left[ \Shifted{h}{f} \Convolution g \right](x) =
-    \IntR{ f((x - t) - h) g(t) }{t} =
+    \left[ \tau_h f \Convolution g \right](x) =
+    \int f((x - t) - h) g(t) \D t =
     \left[ f \Convolution g \right](x-h) =
-    \Shifted{h}{f \Convolution g}(x)
+    [\tau_h (f \Convolution g)](x)
 \]
 
 \paragraph{Scaling}
@@ -107,7 +71,7 @@ The scaling combinator scales the shape $f$ by a factor $c$ on the vertical axis
 \[ \left[ c \times f \right] (x) = c \times f(x) \]
 Scaling combines multiplicatively with itself, and can be swapped with time shift:
 \[ c \times (c' \times f) =  (c \times c') \times f \]
-\[ c \times (\Shifted{h}{f}) = \Shifted{h}{c \times f} \]
+\[ c \times (\tau_h f) = \tau_h (c \times f) \]
 Convolution of scaled functions is a scaled convolution:
 \[ (c \times f) \Convolution g = c \times (f \Convolution g) \]
 
@@ -117,10 +81,10 @@ A \emph{reversed} function is the shape mirrored by the vertical axis:
 Simplifications:
 \[ \Reversed{\Reversed{f}} = f \]
 \[ \Reversed{c \times f} = c \times \Reversed{f} \]
-\[ \Reversed{\Shifted{h}{f}}(x) = \Shifted{h}{f}(-x) = f(-x-h) = \Reversed{f}(x+h) = \Shifted{-h}{\Reversed{f}}(x) \]
+\[ \Reversed{\tau_h f}(x) = [\tau_h f](-x) = f(-x-h) = \Reversed{f}(x+h) = [\tau_{-h} \Reversed{f}] (x) \]
 Convolution:
 \[
-    \Reversed{f \Convolution g}(x) = \IntR{f(-x-t) g(t)}{t} = \IntR{f(-x+T) g(-T)}{T} = \left[ \Reversed{f} \Convolution \Reversed{g} \right] (x)
+    \Reversed{f \Convolution g}(x) = \int f(-x-t) g(t) \D t = \int f(-x+T) g(-T) \D T = \left[ \Reversed{f} \Convolution \Reversed{g} \right] (x)
 \]
 
 \paragraph{Sum}
@@ -128,15 +92,15 @@ The sum combinator sums the value of multiple shapes.
 \[ [f+g](x) = f(x) + g(x) \]
 Distributes with most operations:
 \[ f \Convolution (g + h) = f \Convolution g + f \Convolution h \]
-\[ \Shifted{s}{f + g} = \Shifted{s}{f} + \Shifted{s}{g} \]
+\[ \tau_s (f + g) = \tau_s f + \tau_s g \]
 \[ \Reversed{f + g} = \Reversed{f} + \Reversed{g} \]
 
 \paragraph{Cross-correlation}
 Cross correlation is noted using the $\Correlation$ operator, with the usual definition:
-\[ \left[ f \Correlation g \right] (x) = \IntR{f(t-x) g(t)}{t} \]
+\[ \left[ f \Correlation g \right] (x) = \int_\R f(t-x) g(t) \D t \]
 
 It can be expressed using the convolution:
-\[ \left[ f \Correlation g \right] (x) = \IntR{\Reversed{f}(x-t) g(t)}{t} = \left[ \Reversed{f} \Convolution g \right] (x) \]
+\[ \left[ f \Correlation g \right] (x) = \int \Reversed{f}(x-t) g(t) \D t = \left[ \Reversed{f} \Convolution g \right] (x) \]
 
 Not commutative:
 \[
@@ -146,10 +110,16 @@ Not commutative:
 
 Relation with shifting is simple but not symmetric:
 \[
-    \Shifted{h}{f} \Correlation g = \Reversed{\Shifted{h}{f}} \Convolution g = \Shifted{-h}{\Reversed{f}} \Convolution g =
-    \Shifted{-h}{\Reversed{f} \Convolution g} = \Shifted{-h}{f \Correlation g}
+    \tau_h f \Correlation g = \Reversed{\tau_h f} \Convolution g = \tau_{-h} \Reversed{f} \Convolution g =
+    \tau_{-h} (\Reversed{f} \Convolution g) = \tau_{-h} (f \Correlation g)
 \]
-\[ f \Correlation \Shifted{h}{g} = \Reversed{f} \Convolution \Shifted{h}{g} = \Shifted{h}{\Reversed{f} \Convolution g} = \Shifted{h}{f \Correlation g} \]
+\[ f \Correlation \tau_h g = \Reversed{f} \Convolution \tau_h g = \tau_h (\Reversed{f} \Convolution g) = \tau_h (f \Correlation g) \]
+
+\paragraph{Interval operations}
+For interval $I = [a,b]$:
+\[ h \in \R \quad I + h = h + I = [a + h, b + h] \]
+\[ -I = [-b, -a] \]
+\[ \IntervalLeft(I) = a \qquad \IntervalCenter(I) = \frac{a+b}{2} \qquad \IntervalRight(I) = b \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Basic shapes}
@@ -159,9 +129,12 @@ Relation with shifting is simple but not symmetric:
 The \emph{indicator function} for an interval $I = [a,b]$ is a rectangle of height $1$, horizontally from $a$ to $b$.
 The interval can also have open bounds, changing the function value at the bounds, but not the overall shape.
 \begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-0.5}{5.5}{-0.5}{1.7}
+    \draw[very thin,color=gray] (-0.5, -0.5) grid (5.5, 1.7);
+	\draw[->] (-0.5,0) -- (5.5,0) node[right] {$x$};
+	\draw[->] (0,-0.5) -- (0, 1.7);
+	\node[below right] at (0, 0) {$0$};
     \begin{scope}[color=blue]
-        \draw (FuncStart) -- (1.5,0) coordinate(a) -- (1.5,1) -- (3.5,1) -- (3.5,0) coordinate(b) -- (FuncEnd);
+        \draw (-0.5,0) -- (1.5,0) coordinate(a) -- (1.5,1) -- (3.5,1) -- (3.5,0) coordinate(b) -- (5.5,0);
         \node[below] at (a) {$a$};
         \node[below] at (b) {$b$};
     \end{scope}
@@ -174,91 +147,98 @@ The interval can also have open bounds, changing the function value at the bound
 \]
 
 \[ \Reversed{\Indicator{[a,b]}}(x) = \Indicator{[a,b]}(-x) = \Indicator{[-b, -a]}(x) \]
-\[ \Shifted{h}{\Indicator{[a,b]}}(x) = \Indicator{[a,b]}(x - h) = \Indicator{[a + h, b + h]}(x) = \Indicator{[a,b] + h}(x) \]
+\[ \tau_h \Indicator{[a,b]}(x) = \Indicator{[a,b]}(x - h) = \Indicator{[a + h, b + h]}(x) = \Indicator{[a,b] + h}(x) \]
 
-\paragraph{Polynom chunk}
+\paragraph{Polynom fragment}
 
-A \emph{polynom chunk} is function whose value is a polynom on a interval $I$, and $0$ elsewhere.
+A \emph{polynom fragment} is function whose value is a polynom on a interval $I$, and $0$ elsewhere.
 The polynom itself is defined with an origin at the center of $I$ : this choice is designed to reduce floating point errors during computation, as the polynom will be evaluated "as close to its zero" as feasible.
 \begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-0.5}{5.5}{-0.5}{2.7}
-    \begin{scope}[color=blue]
-        \draw (FuncStart) -- (1.5,0) coordinate(a) parabola[bend at end] (2.5,2) parabola (3.5,1) -- (3.5,0) coordinate(b) -- (FuncEnd);
+    \draw[very thin,color=gray] (-0.5, -0.5) grid (5.5, 2.7);
+	\draw[->] (-0.5,0) -- (5.5,0) node[right] {$x$};
+	\draw[->] (0,-0.5) -- (0, 2.7);
+	\node[below right] at (0, 0) {$0$};    \begin{scope}[color=blue]
+        \draw (-0.5,0) -- (1.5,0) coordinate(a) parabola[bend at end] (2.5,2) parabola (3.5,1) -- (3.5,0) coordinate(b) -- (5.5,0);
         \node[below] at (a) {$a$};
         \node[below] at (b) {$b$};
     \end{scope}
 \end{tikzpicture}\end{center}
 \[
-    P_{I,a_k}(x) = \begin{cases}
-        \sum_{0 \le k \le N_P} a_k (x - \mathit{center}(I))^k & x \in I \\
+    P_{I,a}(x) = \begin{cases}
+        \sum_{0 \le k \le N_a} a_k (x - \IntervalCenter(I))^k & x \in I \\
         0 & \text{otherwise}
     \end{cases}
 \]
 
 Shifting does not change coefficients:
 \[ \begin{split}
-    \Shifted{h}{P_{I,a_k}}(x)
-    &= \sum_{0 \le k \le N_P} a_k ((x - h) - \mathit{center}(I))^k \qquad x - h \in I \\
-    &= \sum_{0 \le k \le N_P} a_k (x - (h + \mathit{center}(I)))^k \qquad x \in I + h \\
-    &= \sum_{0 \le k \le N_P} a_k (x - \mathit{center}(I + h))^k \qquad x \in I + h \\
-    &= P_{h+I, a_k}(x)
+    \tau_h P_{I,a}(x)
+    &= \sum_{0 \le k \le N_a} a_k ((x - h) - \IntervalCenter(I))^k \qquad x - h \in I \\
+    &= \sum_{0 \le k \le N_a} a_k (x - (h + \IntervalCenter(I)))^k \qquad x \in I + h \\
+    &= \sum_{0 \le k \le N_a} a_k (x - \IntervalCenter(I + h))^k \qquad x \in I + h \\
+    &= P_{I + h, a}(x)
 \end{split} \]
 
 Reversion inverses the interval and odd coefficients:
 \[ \begin{split}
-    \Reversed{P_{I,a_k}}(x)
-    &= \sum_{0 \le k \le N_P} a_k (-x - \mathit{center}(I))^k \qquad -x \in I \\
-    &= \sum_{0 \le k \le N_P} a_k (-(x - \mathit{center}(-I)))^k \qquad x \in -I \\
-    &= \sum_{0 \le k \le N_P} a_k (-1)^k (x - \mathit{center}(-I))^k \qquad x \in -I \\
-    &= P_{-I, a_k (-1)^k}(x)
+    \Reversed{P_{I,a}}(x)
+    &= \sum_{0 \le k \le N_a} a_k (-x - \IntervalCenter(I))^k \qquad -x \in I \\
+    &= \sum_{0 \le k \le N_a} a_k (-(x - \IntervalCenter(-I)))^k \qquad x \in -I \\
+    &= \sum_{0 \le k \le N_a} a_k (-1)^k (x - \IntervalCenter(-I))^k \qquad x \in -I \\
+    &= P_{-I, (a_k (-1)^k)_{0 \le k \le N_a}}(x)
 \end{split} \]
 
 An indicator is a subcase of polynomial:
-\[ \Indicator{I} = P_{I, a_k} \text{ with } (a_k) = \{a_0 = 1\} \]
+\[ \Indicator{I} = P_{I, a} \text{ with } (a_k) = \{a_0 = 1\} \]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Polynomial Convolution \& Cross-correlation}
 
-Convolution and cross correlation are defined on polynom chunks, which covers a lot of cases.
-In particular it covers indicator functions which are polynom chunks of degree $0$.
+Convolution and cross correlation are defined on polynom fragments, which covers a lot of cases.
+In particular it covers indicator functions which are polynom fragments of degree $0$.
 
 \subsection{Convolution}
 
-The target is to compute:
-\[ C = P_{I_p,a_k} \Convolution Q_{I_q,b_j} \]
-
-The polynoms can be expressed as a shift of a 0-centered polynom, and thus we only need to compute convolution for 0-centered polynoms:
-\[ P_{I_p,a_k} = \Shifted{s_p}{P_{[-w_p,w_p],a_k}} \]
-\[ C = \Shifted{s_p + s_q}{P_{[-w_p,w_p],a_k} \Convolution Q_{[-w_q,w_q],b_j}} \]
-
-In the following paragraphs the shifting $s_p + s_q$ is ignored for simplicity.
-We also suppose that $w_q \le w_p$ by using the commutativity of the convolution.
+The target is to compute
+\[
+    C = P_{I_a,a} \Convolution P_{I_b,b}
+\]
+for $(a_k)_{0 \le k \le N_a}$ and $(b_j)_{0 \le j \le N_b}$.
+The polynoms can be expressed as a translation of 0-centered polynoms, and thus we only need to compute convolution for 0-centered polynoms:
+\[
+    P_{I_a,a} = \tau_{s_a} P_{[-w_a,w_a],a}
+\]
+\[
+    C = \tau_{s_a + s_b} (P_{[-w_a,w_a],a} \Convolution P_{[-w_b,w_b],b})
+\]
+In the following paragraphs the shifting $s_a + s_b$ is ignored for simplicity ; it is applied to all 3 polynom fragments result of the convolution.
+We also suppose that $w_b \le w_a$ by using the commutativity of the convolution.
 \[ \begin{split}
     C(x)
-    &= \left[ P_{[-w_p,w_p],a_k} \Convolution Q_{[-w_q,w_q],b_j} \right](x) \\
-    &= \IntR{ P_{[-w_p,w_p],a_k}(x-t) Q_{[-w_q,w_q],b_j}(t)}{t} \\
-    &= \int\limits_{\substack{x - t \in [-w_p,w_p] \\ t \in [-w_q,w_q]}} \left( \sum_{0 \le k \le N_p} a_k (x-t)^k \right) \left( \sum_{0 \le j \le N_q} b_j t^j \right) \D t \\
-    &= \int\limits_{t \in [x-w_p,x+w_p] \cap [-w_q,w_q]} \left( \sum_{0 \le i \le k \le N_p} a_k \binom{k}{i} x^{k-i} (-t)^i \right) \left( \sum_{0 \le j \le N_q} b_j t^j \right) \D t \\
-    &= \int\limits_{t \in I(x)} \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} (-1)^i x^{k-i} t^{i+j} \D t \\
-    &= \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} (-1)^i x^{k-i} \int\limits_{I(x)} t^{i+j} \D t \\
-    &= \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left[ t^{i+j+1} \right]^{I(x)} 
+    &= \left[ P_{[-w_a,w_a],a} \Convolution P_{[-w_b,w_b],b} \right](x) \\
+    &= \int P_{[-w_a,w_a],a}(x-t) P_{[-w_b,w_b],b}(t) \D t \\
+    &= \int\limits_{\substack{x - t \in [-w_a,w_a] \\ t \in [-w_b,w_b]}} \left( \sum_{0 \le k \le N_a} a_k (x-t)^k \right) \left( \sum_{0 \le j \le N_b} b_j t^j \right) \D t \\
+    &= \int\limits_{t \in [x-w_a,x+w_a] \cap [-w_b,w_b]} \left( \sum_{0 \le i \le k \le N_a} a_k \binom{k}{i} x^{k-i} (-t)^i \right) \left( \sum_{0 \le j \le N_b} b_j t^j \right) \D t \\
+    &= \int\limits_{t \in I(x)} \sum_{\substack{0 \le i \le k \le N_a \\ 0 \le j \le N_b}} a_k b_j \binom{k}{i} (-1)^i x^{k-i} t^{i+j} \D t \\
+    &= \sum_{\substack{0 \le i \le k \le N_a \\ 0 \le j \le N_b}} a_k b_j \binom{k}{i} (-1)^i x^{k-i} \int\limits_{I(x)} t^{i+j} \D t \\
+    &= \sum_{\substack{0 \le i \le k \le N_a \\ 0 \le j \le N_b}} a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left[ t^{i+j+1} \right]^{I(x)} 
 \end{split} \]
 
-Thus the value of $C(x)$ is given by integrating a polynomial expression over an interval depending on $x$ : $I(x) = [x-w_p,x+w_p] \cap [-w_q,w_q]$.
-By using $w_q \le w_p$, we can compute the value of $I(x)$ which is defined piecewise in 5 cases:
+Thus the value of $C(x)$ is given by integrating a polynomial expression over an interval depending on $x$ : $I(x) = [x-w_a,x+w_a] \cap [-w_b,w_b]$.
+By using $w_b \le w_a$, we can compute the value of $I(x)$ which is defined piecewise in 5 cases:
 \begin{center}\begin{tikzpicture}
     \coordinate (Origin) at (0,0);
     \draw (0,0.1) -- (0,-0.1) node[below] {$0$};
     \draw[->] (-6.5,0) -- (6,0) node[right] {$x$};
     \begin{scope}[color=blue]
         \draw (-1,1.6) coordinate(lwq) -- +(2,0) coordinate(rwq);
-        \draw[dashed] (lwq) -- (lwq |- Origin) node[below] {$-w_q$};
-        \draw[dashed] (rwq) -- (rwq |- Origin) node[below] {$w_q$};
+        \draw[dashed] (lwq) -- (lwq |- Origin) node[below] {$-w_b$};
+        \draw[dashed] (rwq) -- (rwq |- Origin) node[below] {$w_b$};
     \end{scope}
     \begin{scope}[color=red]
         \draw (-5.5,0.6) coordinate(x1l) node[left] {$1$} -- +(3,0) coordinate(x1r);
-        \draw[dashed] (x1l) -- (x1l |- Origin) node[below] {$x_1-w_p$};
-        \draw[dashed] (x1r) -- (x1r |- Origin) node[below] {$x_1+w_p$};
+        \draw[dashed] (x1l) -- (x1l |- Origin) node[below] {$x_1-w_a$};
+        \draw[dashed] (x1r) -- (x1r |- Origin) node[below] {$x_1+w_a$};
         \draw (-3.5,0.8) node[left] {$2$} -- +(3,0);
         \draw (-1.5,1) node[left] {$3$} -- +(3,0);
         \draw (0.3,1.2) -- +(3,0) node[right] {$4$};
@@ -266,11 +246,11 @@ By using $w_q \le w_p$, we can compute the value of $I(x)$ which is defined piec
     \end{scope}
 \end{tikzpicture}\end{center}
 \[ I(x) = \begin{cases}
-    \emptyset & x < -w_p-w_q \\
-    [-w_q, x+w_p] & x \in [-w_p-w_q, -w_p+w_q] \qquad \text{"left"} \\
-    [-w_q, w_q] & x \in [-w_p+w_q, w_p-w_q] \qquad \text{"center"} \\
-    [x-w_p, w_q] & x \in [w_p-w_q, w_p+w_q] \qquad \text{"right"} \\
-    \emptyset & x > w_p + w_q
+    \emptyset & x < -w_a-w_b \\
+    [-w_b, x+w_a] & x \in [-w_a-w_b, -w_a+w_b] \qquad \text{"left"} \\
+    [-w_b, w_b] & x \in [-w_a+w_b, w_a-w_b] \qquad \text{"center"} \\
+    [x-w_a, w_b] & x \in [w_a-w_b, w_a+w_b] \qquad \text{"right"} \\
+    \emptyset & x > w_a + w_b
 \end{cases} \]
 
 From the definition of $C(x)$ and the values of $I(x)$, we can determine that $C$ is defined piecewise with 3 components defined on consecutive intervals.
@@ -278,70 +258,73 @@ Moreover, as the bounds of $I(x)$ are polynomial in $x$, the 3 components are po
 These 3 components are called \emph{left}, \emph{center} and \emph{right} parts.
 
 By choosing component bounds of the form $]a,b]$, components are non-overlapping, and we have $C(x) = C_\text{left}(x) + C_\text{center}(x) + C_\text{right}(x)$.
-As an additional constraint, all components are written as valid \emph{polynom chunks} : this lets us reuse the formulas to compute convolutions of convolutions like $P \Convolution Q \Convolution R$.
-Due to the properties of integral, $C(x)$ is continuous, and the various components must match at the border points:
-\[ C_\text{left}(-w_p-w_q) = 0 \]
-\[ C_\text{left}(-w_p+w_q) = C_\text{center}(-w_p+w_q) \]
-\[ C_\text{center}(w_p-w_q) = C_\text{right}(w_p-w_q) \]
-\[ C_\text{right}(w_p+w_q) = 0 \]
+As an additional constraint, all components are written as valid \emph{polynom fragments} : this lets us reuse the formulas to compute convolutions of convolutions like $P_1 \Convolution P_2 \Convolution P_3$.
+Due to the properties of integral, $C(x)$ is continuous, and the various components must match at the border points.
+This gives us some easily testable properties to check the implementations of formulas:
+\[ C_\text{left}(-w_a-w_b) = 0 \]
+\[ C_\text{left}(-w_a+w_b) = C_\text{center}(-w_a+w_b) \]
+\[ C_\text{center}(w_a-w_b) = C_\text{right}(w_a-w_b) \]
+\[ C_\text{right}(w_a+w_b) = 0 \]
 
 \paragraph{Left part}
 The left part must be of the form:
-\[ C_\text{left}(x) = R_{]-w_p-w_q, -w_p+w_q], c_k}(x) = \sum_k c_k (x + w_p)^k \]
-
+\[
+	C_\text{left}(x) = P_{]-w_a-w_b, -w_a+w_b], c}(x) = \sum_k c_k (x + w_a)^k
+\]
 Using the integral version of $C(x)$ and the interval $I(x)$:
 \[
-    C_\text{left}(x) = \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}}
-    a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left( (x+w_p)^{i+j+1} - (-w_q)^{i+j+1} \right)
+    C_\text{left}(x) = \sum_{\substack{0 \le i \le k \le N_a \\ 0 \le j \le N_b}}
+    a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left( (x+w_a)^{i+j+1} - (-w_b)^{i+j+1} \right)
 \]
-
 Using binomial decomposition:
-\[ x^{k-i} = ((x+w_p) - w_p)^{k-i} = \sum_{0 \le l \le k-i} \binom{k-i}{l} (x+w_p)^{k-i-l} (-w_p)^l \]
-
+\[
+	x^{k-i} = ((x+w_a) - w_a)^{k-i} = \sum_{0 \le l \le k-i} \binom{k-i}{l} (x+w_a)^{k-i-l} (-w_a)^l
+\]
 Injecting that into $C_\text{left}(x)$:
 \[
-    C_\text{left}(x) = \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q \\ 0 \le l \le k-i}}
-    a_k b_j \binom{k}{i} \binom{k-i}{l} \frac{(-1)^{i+l}}{i+j+1} w_p^l \left( (x+w_p)^{k+j+1-l} - (-w_q)^{i+j+1} (x+w_p)^{k-i-l} \right)
+    C_\text{left}(x) = \sum_{\substack{0 \le i \le k \le N_a \\ 0 \le j \le N_b \\ 0 \le l \le k-i}}
+    a_k b_j \binom{k}{i} \binom{k-i}{l} \frac{(-1)^{i+l}}{i+j+1} w_a^l \left( (x+w_a)^{k+j+1-l} - (-w_b)^{i+j+1} (x+w_a)^{k-i-l} \right)
 \]
 
-This expression is a polynom in $x+w_p$, which was the target.
+This expression is a polynom in $x+w_a$, which was the target.
 Due to its complexity, there is probably no nice closed expression for each coefficient.
-However each coefficient value can be computed easily, by accumulating the factors in from of $(x+w_p)^{k+j+1-l}$ and $(x+w_p)^{k-i-l}$ for all values of $i,j,k,l$.
-The degree of $C_\text{left}(x)$ is $N_p + N_q + 1$ (max of $k+j+1-l$ on the iteration space).
+However each coefficient value can be computed easily, by accumulating the factors in from of $(x+w_a)^{k+j+1-l}$ and $(x+w_a)^{k-i-l}$ for all values of $i,j,k,l$.
+The degree of $C_\text{left}(x)$ is $N_a + N_b + 1$ (max of $k+j+1-l$ on the iteration space).
 
 \paragraph{Center part}
 The center part must be of the form:
-\[ C_\text{center}(x) = R_{]-(w_p-w_q), w_p-w_q], c_k}(x) = \sum_k c_k x^k \]
-
+\[
+	C_\text{center}(x) = P_{]-(w_a-w_b), w_a-w_b], c}(x) = \sum_k c_k x^k
+\]
 Using the integral version of $C(x)$ and the interval $I(x)$:
 \[ \begin{split}
     C_\text{center}(x)
-    &= \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left( w_q^{i+j+1} - (-w_q)^{i+j+1} \right) \\
-    &= \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}} a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} w_q^{i+j+1} (1 + (-1)^{i+j}) x^{k-i}
+    &= \sum_{\substack{0 \le i \le k \le N_a \\ 0 \le j \le N_b}} a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left( w_b^{i+j+1} - (-w_b)^{i+j+1} \right) \\
+    &= \sum_{\substack{0 \le i \le k \le N_a \\ 0 \le j \le N_b}} a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} w_b^{i+j+1} (1 + (-1)^{i+j}) x^{k-i}
 \end{split} \]
-
 Coefficients can be computed by accumulations as for the left part.
-The degree of $C_\text{center}(x)$ is $N_p$ (max of $k-i$ on the iteration space).
-As an optimisation, the computation is not done if $w_p = w_q$ as the component is $0$.
+The degree of $C_\text{center}(x)$ is $N_a$ (max of $k-i$ on the iteration space).
+As an optimisation, the computation is not done if $w_a = w_b$ as the component is $0$.
 
 \paragraph{Right part}
 The right part must be of the form:
-\[ C_\text{right}(x) = R_{]w_p-w_q, w_p+w_q], c_k}(x) = \sum_k c_k (x - w_p)^k \]
-
+\[
+	C_\text{right}(x) = P_{]w_a-w_b, w_a+w_b], c}(x) = \sum_k c_k (x - w_a)^k
+\]
 Using $C(x)$ and $I(x)$ expression:
 \[
-    C_\text{left}(x) = \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q}}
-    a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left( w_q^{i+j+1} - (x-w_p)^{i+j+1} \right)
+    C_\text{left}(x) = \sum_{\substack{0 \le i \le k \le N_a \\ 0 \le j \le N_b}}
+    a_k b_j \binom{k}{i} \frac{(-1)^i}{i+j+1} x^{k-i} \left( w_b^{i+j+1} - (x-w_a)^{i+j+1} \right)
 \]
-
 Using binomial formula, and injecting it into $C_\text{right}(x)$:
-\[ x^{k-i} = ((x-w_p) + w_p)^{k-i} = \sum_{0 \le l \le k-i} \binom{k-i}{l} (x-w_p)^{k-i-l} w_p^l \]
 \[
-    C_\text{right}(x) = \sum_{\substack{0 \le i \le k \le N_p \\ 0 \le j \le N_q \\ 0 \le l \le k-i}}
-    a_k b_j \binom{k}{i} \binom{k-i}{l} \frac{(-1)^i}{i+j+1} w_p^l \left( w_q^{i+j+1} (x-w_p)^{k-i-l} - (x-w_p)^{k+j+1-l} \right)
+	x^{k-i} = ((x-w_a) + w_a)^{k-i} = \sum_{0 \le l \le k-i} \binom{k-i}{l} (x-w_a)^{k-i-l} w_a^l
 \]
-
-This is a polynom of $x-w_p$ of degree $N_p + N_q + 1$.
+\[
+    C_\text{right}(x) = \sum_{\substack{0 \le i \le k \le N_a \\ 0 \le j \le N_b \\ 0 \le l \le k-i}}
+    a_k b_j \binom{k}{i} \binom{k-i}{l} \frac{(-1)^i}{i+j+1} w_a^l \left( w_b^{i+j+1} (x-w_a)^{k-i-l} - (x-w_a)^{k+j+1-l} \right)
+\]
+This is a polynom of $x-w_a$ of degree $N_a + N_b + 1$.
 As for the other parts, the coefficients can be computed by accumulation.
 
 \subsection{Cross correlation}
@@ -361,25 +344,24 @@ Refer to the BRP18 paper and code for details.
 This section shows that various computed values are in the form :
 \[ \sum_{X_l \in N_l, X_{l'} \in N_{l'}} F(X_l-X_{l'}) \]
 
-We define the \emph{non zero domain} of a shape as an interval of $x$ containing all non zero values of $F$ : $F(x) \ne 0 \Rightarrow x \in nzd(F)$.
+We define the \emph{non zero domain} of a shape as an interval of $x$ containing all non zero values of $F$ : $F(x) \ne 0 \Rightarrow x \in \nzd(F)$.
 This interval can be easily computed for the family of shapes and combinations introduced previously.
-The sum above can then be simplified by ignoring all $X_l - X_{l'} \notin nzd(F)$, as $F$ would be $0$.
-This gives us an algorithm that can compute the sum in $\mathcal{O}(\max(|N_l|, |N_{l'}|))$ (average, worst case is still $\mathcal{O}(|N_l| \times |N_{l'}|)$).
+The sum above can then be simplified by ignoring all $X_l - X_{l'} \notin \nzd(F)$, as $F$ would be $0$.
 
 \subsection{Base shapes used}
 Basic functions considered are all piecewise polynoms
 
 \paragraph{Histogram base}
-\[ \varphi_k = \frac{1}{\sqrt{\delta}} \mathbbm{1}_{\left] k\delta, (k+1)\delta \right]} \qquad 0 \le k < K \]
+\[ \varphi_k = \frac{1}{\sqrt{\delta}} \Indicator{\left] k\delta, (k+1)\delta \right]} \qquad 0 \le k < K \]
 
 \paragraph{Haar wavelets}
 \[ \varphi_{s,p} = \frac{\sqrt{2}^s}{\sqrt{\delta}} \left(
-    \mathbbm{1}_{ \left] \frac{2p \delta}{2^{s+1}}, \frac{(2p+1) \delta}{2^{s+1}} \right] } -
-    \mathbbm{1}_{ \left] \frac{(2p +1) \delta}{2^{s+1}}, \frac{(2p + 2) \delta}{2^{s+1}} \right] }
+    \Indicator{ \left] \frac{2p \delta}{2^{s+1}}, \frac{(2p+1) \delta}{2^{s+1}} \right] } -
+    \Indicator{ \left] \frac{(2p +1) \delta}{2^{s+1}}, \frac{(2p + 2) \delta}{2^{s+1}} \right] }
 \right) \qquad \substack{0 \le s < \text{Nscale} \\ 0 \le p < 2^s} \]
 
 \paragraph{Interval kernel}
-\[ W_l = \frac{1}{\sqrt{\eta_l}} \mathbbm{1}_{\left[ -\frac{\eta_l}{2}, \frac{\eta_l}{2} \right]} \]
+\[ W_l = \frac{1}{\sqrt{\eta_l}} \Indicator{\left[ -\frac{\eta_l}{2}, \frac{\eta_l}{2} \right]} \]
 
 \subsection{Non-kernel case}
 
@@ -389,18 +371,19 @@ Basic functions considered are all piecewise polynoms
 \paragraph{G}
 G can be expressed as a cross correlation of phi functions:
 \[ \begin{split}
-    \mathsf{G}_{l,l',k,k'} & = \IntR{\left( \sum_{X_l \in N_l} \varphi_k(x-X_l) \right)\left( \sum_{X_{l'} \in N_{l'}} \varphi_{k'}(x-X_{l'}) \right)}{x} \\
-    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \IntR{ \varphi_k(x-X_l) \varphi_{k'}(x-X_{l'}) }{x} \\
-    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \IntR{ \varphi_k(x-(X_l-X_l')) \varphi_{k'}(x) }{x} \\
+    \mathsf{G}_{l,l',k,k'}
+    & = \int \left( \sum_{X_l \in N_l} \varphi_k(x-X_l) \right) \left( \sum_{X_{l'} \in N_{l'}} \varphi_{k'}(x-X_{l'}) \right) \D x \\
+    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \int \varphi_k(x-X_l) \varphi_{k'}(x-X_{l'}) \D x \\
+    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \int \varphi_k(x-(X_l-X_l')) \varphi_{k'}(x) \D x \\
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} [\varphi_k \Correlation \varphi_{k'}] (X_l-X_l')
 \end{split} \]
 
 \paragraph{Penalty components}
 $\widehat{V}_{k,l}^m$ is computed using a variation on the $\sum_{X_l \in N_l, X_{l'} \in N_{l'}} F(X_l-X_{l'})$ algorithm described above.
-\[ \widehat{V}_{spont}^m = \Int{}{N_m} = |N_m| \]
+\[ \widehat{V}_{spont}^m = \int \D N_m = |N_m| \]
 \[
     \widehat{V}_{k,l}^m =
-    \Int{\left( \sum_{X_l \in N_l} \varphi_k(x-X_l) \right)^2}{N_m} =
+    \int \left( \sum_{X_l \in N_l} \varphi_k(x-X_l) \right)^2 \D N_m =
     \sum_{X_m \in N_m} \left( \sum_{X_l \in N_l} \varphi_k(X_m-X_l) \right)^2
 \]
 
@@ -416,16 +399,17 @@ If $\varphi_k$ is not an indicator, we approximate it by an indicator function a
 
 \paragraph{G}
 \[ \begin{split}
-    \mathsf{G}_{W,l,l',k,k'} & = \IntR{\left( \sum_{X_l \in N_l} [W_l \Convolution \varphi_k](x-X_l) \right)\left( \sum_{X_{l'} \in N_{l'}} [W_{l'} \Convolution \varphi_{k'}](x-X_{l'}) \right)}{x} \\
-    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \IntR{ [W_l \Convolution \varphi_k](x-X_l) [W_{l'} \Convolution \varphi_{k'}](x-X_{l'}) }{x} \\
-    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \IntR{ [W_l \Convolution \varphi_k](x-(X_l-X_l')) [W_{l'} \Convolution \varphi_{k'}](x) }{x} \\
+    \mathsf{G}_{W,l,l',k,k'}
+    & = \int \left( \sum_{X_l \in N_l} [W_l \Convolution \varphi_k](x-X_l) \right) \left( \sum_{X_{l'} \in N_{l'}} [W_{l'} \Convolution \varphi_{k'}](x-X_{l'}) \right) \D x \\
+    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \int [W_l \Convolution \varphi_k](x-X_l) [W_{l'} \Convolution \varphi_{k'}](x-X_{l'}) \D x \\
+    & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \int [W_l \Convolution \varphi_k](x-(X_l-X_l')) [W_{l'} \Convolution \varphi_{k'}](x) \D x \\
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} [(W_l \Convolution \varphi_k) \Correlation (W_{l'} \Convolution \varphi_{k'})] (X_l-X_l')
 \end{split} \]
 
 \paragraph{Penalty components}
 TODO check expression for spontaneous cases !
 
-\[ \widehat{V}_{W,spont}^m = \Int{}{N_m} = |N_m| \]
+\[ \widehat{V}_{W,spont}^m = \int \D N_m = |N_m| \]
 \[ \widehat{V}_{W,k,l}^m = \sum_{X_m \in N_m} \left( \sum_{X_l \in N_l} [W_l \Convolution W_m \Convolution \varphi_k](X_m-X_l) \right)^2 \]
 
 \[ \widehat{B}_{W,spont}^m = 1 \]
@@ -468,925 +452,8 @@ From these base cases it was possible to identify key properties:
 \end{itemize}
 
 These properties were then used to build the generalized polynomial shape strategy.
-The old system documention is left here for historic purposes, and to serve as test cases for the polynomial system.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Basic shapes}
-
-\paragraph{Indicator function}
-The \emph{indicator function} of width $l$ is a rectangle of width $l$, height $1$, horizontally centered on $0$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{3.5}{-0.5}{1.7}
-    \begin{scope}[color=blue]
-        \draw (FuncStart) -- (-1.5,0) coordinate(a) -- (-1.5,1) -- (1.5,1) -- (1.5,0) coordinate(b) -- (FuncEnd);
-        \node[below] at (a) {$-\frac{l}{2}$};
-        \node[below] at (b) {$\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[
-    \OldIndicator{l}(x) =
-    \mathbbm{1}_{\left[ -\frac{l}{2}, \frac{l}{2} \right]}(x) =
-    \begin{cases}
-        1 & x \in \left[ -\frac{l}{2}, \frac{l}{2} \right] \\
-        0 & \text{otherwise}
-    \end{cases}
-\]
-The function is symmetric:
-\[ \Reversed{\OldIndicator{l}}(x) = \OldIndicator{l}(-x) = \OldIndicator{l}(x) \]
-
-\paragraph{Positive triangle}
-The \emph{positive triangle} of side $c$ is a triangle formed by coordinates $\{ (0,0), (c, 0), (c,c) \}$:
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-1.5}{3.5}{-0.5}{2.5}
-    \begin{scope}[color=blue]
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) -- (1.8,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
-        \node[below] at (b) {$c$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[
-    \PositiveTriangle{c}(x) = \begin{cases}
-        x & x \in \left[ 0, c \right] \\
-        0 & \text{otherwise}
-    \end{cases}
-\]
-
-\paragraph{Negative triangle}
-The \emph{negative triangle} of side $c$ is a triangle formed by coordinates $\{ (0,0), (-c, 0), (-c,c) \}$:
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{1.5}{-0.5}{2.5}
-    \begin{scope}[color=blue]
-        \draw (FuncStart) -- (-1.8,0) coordinate(a) -- (-1.8,1.8) coordinate(b) -- (0,0) -- (FuncEnd);
-        \draw[dashed] (b) -- (b -| Origin) node[right] {$c$};
-        \node[below] at (a) {$c$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[
-    \NegativeTriangle{c}(x) = \begin{cases}
-        -x & x \in \left[ -c, 0 \right] \\
-        0 & \text{otherwise}
-    \end{cases}
-\]
-A reversed negative triangle is a positive triangle:
-\[ \Reversed{\NegativeTriangle{c}}(x) =  \NegativeTriangle{c}(-x) = \PositiveTriangle{c}(x) \]
-
-\paragraph{Trapezoid}
-A \emph{trapezoid} of height $h$ and central block width $b$ is formed by a central rectangle of size $(b,h)$ centered on $0$, and flanked by triangles of side size $h$:
-
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{3.5}{-0.5}{2.5}
-    \begin{scope}[color=blue]
-        \draw (FuncStart) -- (-2.3,0) coordinate(a) -- (-0.8,1.5) coordinate(b) -- (0.8,1.5) coordinate(c) -- (2.3,0) coordinate(d) -- (FuncEnd);
-        \node[above right] at (b -| Origin) {$h$};
-        \draw (a) -- ++(0,-0.1) node[below] {$-(h+\frac{b}{2})$};
-        \draw[dashed] (b) -- (b |- Origin) -- +(0,-0.1) node[below] {$-\frac{b}{2}$};
-        \draw[dashed] (c) -- (c |- Origin) -- +(0,-0.1) node[below] {$\frac{b}{2}$};
-        \draw (d) -- ++(0,-0.1) node[below] {$h+\frac{b}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[
-    \Trapezoid{h}{b}(x) = \begin{cases}
-        x + (h + \frac{b}{2}) & x \in \left[ - (h + \frac{b}{2}), -\frac{b}{2} \right] \\
-        h & x \in \left[ -\frac{b}{2}, \frac{b}{2} \right] \\
-        (h + \frac{b}{2}) - x & x \in \left[ \frac{b}{2}, h + \frac{b}{2} \right] \\
-        0 & \text{otherwise}
-    \end{cases}
-\]
-A trapezoid is symetric:
-\[ \Reversed{\Trapezoid{h}{b}}(x) = \Trapezoid{h}{b}(-x) = \Trapezoid{h}{b}(x) \]
-A trapezoid can be decomposed into an indicator function and two triangles:
-\[ \Trapezoid{h}{b} = \Shifted{-(h+\frac{b}{2})}{\PositiveTriangle{h}} + h \times \OldIndicator{b} + \Shifted{h+\frac{b}{2}}{\NegativeTriangle{h}} \]
-A trapezoid is the resulting shape of a convolution of two rectangles (see~\ref{proof_convolution_indicator_indicator}):
-\[ \OldIndicator{a} \Convolution \OldIndicator{b} = \Trapezoid{\min(a,b)}{|a - b|} \]
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Convolution of indicator with indicator}\label{proof_convolution_indicator_indicator}
-
-We want to compute the formula for:
-\[ \begin{split}
-    C_{a,b}(x) = \left[ \OldIndicator{a} \Convolution \OldIndicator{b} \right] (x) & = \IntR{\OldIndicator{a}(x-t) \OldIndicator{b}(t)}{t} \\
-    & = \IntR{\OldIndicator{a}(t-x) \OldIndicator{b}(t)}{t} \\
-    & = \IntR{\Shifted{x}{\OldIndicator{a}}(t) \OldIndicator{b}(t)}{t}
-\end{split} \]
-$C_{a,b}(x)$ is symmetric:
-\[
-    \Reversed{\OldIndicator{a} \Convolution \OldIndicator{b}} =
-    \Reversed{\OldIndicator{a}} \Convolution \Reversed{\OldIndicator{b}} =
-    \OldIndicator{a} \Convolution \OldIndicator{b}
-\]
-By using the commutativity of the convolution, $C_{a,b}(x) = C_{\min(a,b),\max(a,b)}(x)$.
-Thus we can compute $C_{a,b}(x)$ for only $x \ge 0$ and $a \le b$, and extend to the whole domain using symmetries.
-$C_{a,b}(x)$ is the width of the intersection between two rectangles: one of width $b$ centered on $0$, the other of width $a$ centered on $x$.
-In the following pictures $\OldIndicator{a}$ is in red and $\OldIndicator{b}$ is in blue.
-
-\paragraph{No overlap}
-$x - \frac{a}{2} \ge \frac{b}{2} \Equiv x \ge \frac{a+b}{2}$.
-$C_{a,b}(x) = 0$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{4.5}{-0.5}{1.7}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (-1.5,0) coordinate(a) -- (-1.5,1) -- (1.5,1) -- (1.5,0) coordinate(b) --(FuncEnd);
-        \node[below] at (a) {$-\frac{b}{2}$};
-        \node[below] at (b) {$\frac{b}{2}$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (2.5,0) coordinate(a) -- (2.5,1) -- (3.5,1) -- (3.5,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{a}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{a}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-
-\paragraph{Partial overlap}
-$x - \frac{a}{2} \le \frac{b}{2} \le x + \frac{a}{2} \Equiv x \in \left[ \frac{b-a}{2}, \frac{a+b}{2} \right]$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{4.5}{-0.5}{1.7}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (-1.5,0) coordinate(a) -- (-1.5,1) -- (1.5,1) -- (1.5,0) coordinate(b) -- (FuncEnd);
-        \node[below] at (a) {$-\frac{b}{2}$};
-        \node[below] at (b) {$\frac{b}{2}$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (1,0) coordinate(a) -- (1,1) -- (2,1) -- (2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{a}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{a}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[
-    C_{a,b}(x) =
-    \int_{x-\frac{a}{2}}^{\frac{b}{2}} 1 \mathrm{d}t =
-    \frac{b}{2} - (x - \frac{a}{2}) =
-    \frac{a+b}{2} - x
-\]
-
-\paragraph{Complete inclusion}
-$0 \le x \And x + \frac{a}{2} \le \frac{b}{2} \Equiv x \in \left[ 0, \frac{b-a}{2} \right] $
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{4.5}{-0.5}{1.7}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (-1.5,0) coordinate(a) -- (-1.5,1) -- (1.5,1) -- (1.5,0) coordinate(b) -- (FuncEnd);
-        \node[below] at (a) {$-\frac{b}{2}$};
-        \node[below] at (b) {$\frac{b}{2}$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (0.3,0) coordinate(a) -- (0.3,1) -- (1.3,1) -- (1.3,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{a}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{a}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ C_{a,b}(x) = \int_{x-\frac{a}{2}}^{x+\frac{a}{2}} 1 \mathrm{d}t = a \]
-
-If we summarize, for $x \ge 0$ and $a \le b$:
-\[ C_{a,b}(x) = \begin{cases}
-    a & x \in \left[ 0, \frac{b-a}{2} \right] \\
-    \frac{a+b}{2} - x & x \in \left[ \frac{b-a}{2}, \frac{a+b}{2} \right] \\
-    0 & x \ge \frac{a+b}{2}
-\end{cases} \]
-
-For any $x$, $a$ and $b$, using the following identities:
-\[ \min(a,b) + \max(a,b) = a + b \]
-\[ \max(a,b) - \min(a,b) = |a - b| \]
-\[ C_{a,b}(x) = C_{\min(a,b),\max(a,b)}(|x|) = \begin{cases}
-    \min(a,b) & |x| \in \left[0, \frac{|a-b|}{2} \right] \\
-    \frac{a+b}{2} - |x| & |x| \in \left[ \frac{|a-b|}{2}, \frac{a+b}{2} \right] \\
-    0 & |x| \ge \frac{a+b}{2}
-\end{cases} \]
-
-By using $h = \min(a,b)$ and $l = |a-b|$, $a+b=2h+l$ and:
-\[ C_{a,b}(x) = \begin{cases}
-    h & |x| \in \left[0, \frac{l}{2} \right] \\
-    h+\frac{l}{2} - |x| & |x| \in \left[ \frac{l}{2}, h+\frac{l}{2} \right] \\
-    0 & |x| \ge h+\frac{l}{2}
-\end{cases} = \Trapezoid{h}{l}(|x|) = \Trapezoid{h}{l}(x) \]
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Convolution of indicator with positive triangle}
-\[ \begin{split}
-    C_{l,c}(x) = \left[ \OldIndicator{l} \Convolution \PositiveTriangle{c} \right] (x) & = \IntR{\OldIndicator{l}(x-t) \PositiveTriangle{c}(t)}{t} \\
-    & = \IntR{\OldIndicator{l}(t-x) \PositiveTriangle{c}(t)}{t} \\
-    & = \IntR{\Shifted{x}{\OldIndicator{l}}(t) \PositiveTriangle{c}(t)}{t}
-\end{split} \]
-Thus the convolution value is the area of the product between a rectangle centered on $x$ and a positive triangle with origin $0$.
-In the following pictures $\OldIndicator{l}$ is in red and $\PositiveTriangle{c}$ is in blue.
-
-\subsubsection{Rectangle is smaller than triangle}
-$l \le c$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{6.5}{-0.5}{3.5}
-    \begin{scope}[color=blue]
-        \draw (FuncStart) -- (-1.5,0) coordinate(a) parabola (1.5,1.3) coordinate(b) -- (2.5,2.2) coordinate(c) to[out=-20,in=135] (5.5,0) coordinate(d) -- (FuncEnd);
-        \draw (a) -- +(0,-0.1) node[below] {$-\frac{l}{2}$};
-        \draw[dashed] (b) -- (b |- Origin) -- +(0,-0.1) node[below] {$\frac{l}{2}$};
-        \draw[dashed] (b) -- (b -| Origin) node[left] {$\frac{l^2}{2}$};
-        \draw[dashed] (c) -- (c |- Origin) -- +(0,-0.1) node[below] {$c-\frac{l}{2}$};
-        \draw[dashed] (c) -- (c -| Origin) node[left] {$cl-\frac{l^2}{2}$};
-        \draw (d) -- +(0,-0.1) node[below] {$c+\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ C_{l,c}(x) = \begin{cases}
-    0 & x \le -\frac{l}{2} \\
-    \frac{1}{2} (x+\frac{l}{2})^2 & x \in \left[ -\frac{l}{2}, \frac{l}{2} \right] \\
-    xl & x \in \left[ \frac{l}{2}, c-\frac{l}{2} \right] \\
-    \frac{1}{2} (c^2 - (x-\frac{l}{2})^2) & x \in \left[ c-\frac{l}{2}, c+\frac{l}{2} \right] \\
-    0 & x \ge c+\frac{l}{2}
-\end{cases} \]
-
-Slopes :
-\[ \left. \frac{\D(\frac{1}{2} (x+\frac{l}{2})^2)}{\D x} \right|_{x=-\frac{l}{2}} = 0 \]
-\[ \left. \frac{\D(\frac{1}{2} (x+\frac{l}{2})^2)}{\D x} \right|_{x=\frac{l}{2}} = l = \left. \frac{\D(xl)}{\D x} \right|_{x=\frac{l}{2}} \]
-\[ \left. \frac{\D(\frac{1}{2} (c^2 - (x-\frac{l}{2})^2))}{\D x} \right|_{x=c-\frac{l}{2}} = l - c \le 0 \]
-
-\paragraph{No overlap, left}
-$x+\frac{l}{2} \le 0 \Equiv x \le -\frac{l}{2}$.
-$C_{l,c}(x) = 0$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$c$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (-1.5,0) coordinate(a) -- +(0,1) -- +(1,1) -- +(1,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-
-\paragraph{Partial left overlap}
-$x+\frac{l}{2} \ge 0 \And x-\frac{l}{2} \le 0 \Equiv x \in \left[ -\frac{l}{2}, \frac{l}{2} \right]$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$c$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (-0.5,0) coordinate(a) -- +(0,1) -- +(1,1) -- +(1,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[
-    C_{l,c}(x) =
-    \int_0^{x+\frac{l}{2}} 1 \times t \times \D t =
-    \left[  \frac{t^2}{2} \right]_0^{x+\frac{l}{2}} =
-    \frac{1}{2} (x+\frac{l}{2})^2
-\]
-
-\paragraph{Complete inclusion}
-$x-\frac{l}{2} \ge 0 \And x+\frac{l}{2} \le c \Equiv x \in \left[ \frac{l}{2}, c-\frac{l}{2} \right]$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$c$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
-        \draw[dashed] (0.5,0.5) -- (0,0.5) node[left] {$x-\frac{l}{2}$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (0.5,0) coordinate(a) -- +(0,1) -- +(1,1) -- +(1,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[
-    C_{l,c}(x) =
-    \int_0^l 1 \times (t+x-\frac{l}{2}) \D t =
-    \left[  \frac{t^2}{2}+t(x-\frac{l}{2}) \right]_0^l =
-    xl
-\]
-
-\paragraph{Partial right overlap}
-$x-\frac{l}{2} \le c \And x+\frac{l}{2} \ge c \Equiv x \in \left[ c-\frac{l}{2}, c+\frac{l}{2} \right]$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$c$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (1.4,0) coordinate(a) -- +(0,1) -- +(1,1) -- +(1,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[
-    C_{l,c}(x) =
-    \int_{x-\frac{l}{2}}^c 1 \times t \times \D t =
-    \left[  \frac{t^2}{2} \right]_{x-\frac{l}{2}}^c =
-    \frac{1}{2} (c^2 - (x-\frac{l}{2})^2)
-\]
-
-\paragraph{No overlap, right}
-$x-\frac{l}{2} \ge c \Equiv x \ge c+\frac{l}{2}$.
-$C_{l,c}(x) = 0$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{3.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$c$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (2.1,0) coordinate(a) -- +(0,1) -- +(1,1) -- +(1,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-
-\subsubsection{Rectangle is bigger than triangle}
-$l \ge c$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{6.5}{-0.5}{3.5}
-    \begin{scope}[color=blue]
-        \draw (FuncStart) -- (-1.5,0) coordinate(a) parabola (1.5,2.2) coordinate(b) -- (2.5,2.2) coordinate(c) parabola (5.5,0) coordinate(d) -- (FuncEnd);
-        \draw (a) -- +(0,-0.1) node[below] {$-\frac{l}{2}$};
-        \draw[dashed] (b) -- (b |- Origin) -- +(0,-0.1) node[below] {$c-\frac{l}{2}$};
-        \draw[dashed] (b) -- (b -| Origin) node[left] {$\frac{c^2}{2}$};
-        \draw[dashed] (c) -- (c |- Origin) -- +(0,-0.1) node[below] {$\frac{l}{2}$};
-        \draw (d) -- +(0,-0.1) node[below] {$c+\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ C_{l,c}(x) = \begin{cases}
-    0 & x \le -\frac{l}{2} \\
-    \frac{1}{2} (x+\frac{l}{2})^2 & x \in \left[ -\frac{l}{2}, c-\frac{l}{2} \right] \\
-    \frac{c^2}{2} & x \in \left[ c-\frac{l}{2}, \frac{l}{2} \right] \\
-    \frac{1}{2} (c^2 - (x-\frac{l}{2})^2) & x \in \left[ \frac{l}{2}, c+\frac{l}{2} \right] \\
-    0 & x \ge c+\frac{l}{2}
-\end{cases} \]
-
-Slopes:
-\[ \left. \frac{\D(\frac{1}{2} (c^2 - (x-\frac{l}{2})^2))}{\D x} \right|_{x=\frac{l}{2}} = 0 \]
-
-\paragraph{No overlap, left}
-$x+\frac{l}{2} \le 0 \Equiv x \le -\frac{l}{2}$.
-$C_{l,c}(x) = 0$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.5,1.5) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$c$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (-2.5,0) coordinate(a) -- +(0,1) -- +(2,1) -- +(2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-
-\paragraph{Partial left overlap}
-$x+\frac{l}{2} \ge 0 \And x+\frac{l}{2} \le c \Equiv x \in \left[ -\frac{l}{2}, c-\frac{l}{2} \right]$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.5,1.5) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$c$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (-1.5,0) coordinate(a) -- +(0,1) -- +(2,1) -- +(2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[
-    C_{l,c}(x) =
-    \int_0^{x+\frac{l}{2}} 1 \times t \times \D t =
-    \left[  \frac{t^2}{2} \right]_0^{x+\frac{l}{2}} =
-    \frac{1}{2} (x+\frac{l}{2})^2
-\]
-
-\paragraph{Complete inclusion}
-$x-\frac{l}{2} \le 0 \And x+\frac{l}{2} \ge c \Equiv x \in \left[ c-\frac{l}{2}, \frac{l}{2} \right]$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.5,1.5) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$c$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (-0.2,0) coordinate(a) -- +(0,1) -- +(2,1) -- +(2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[
-    C_{l,c}(x) =
-    \int_0^c 1 \times t \times \D t =
-    \left[  \frac{t^2}{2} \right]_0^c =
-    \frac{c^2}{2}
-\]
-
-\paragraph{Partial right overlap}
-$0 \le x-\frac{l}{2} \le c \Equiv x \in \left[ \frac{l}{2}, c+\frac{l}{2} \right]$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.5,1.5) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$c$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (0.5,0) coordinate(a) -- +(0,1) -- +(2,1) -- +(2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[
-    C_{l,c}(x) =
-    \int_{x-\frac{l}{2}}^c 1 \times t \times \D t =
-    \left[  \frac{t^2}{2} \right]_{x-\frac{l}{2}}^c =
-    \frac{1}{2} (c^2 - (x-\frac{l}{2})^2)
-\]
-
-\paragraph{No overlap, right}
-$x-\frac{l}{2} \ge c \Equiv x \ge c+\frac{l}{2}$.
-$C_{l,c}(x) = 0$.
-\begin{center}\begin{tikzpicture}
-    \SizedGridAxis{-3.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.5,1.5) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$c$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$c$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (1.8,0) coordinate(a) -- +(0,1) -- +(2,1) -- +(2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x-\frac{l}{2}$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x+\frac{l}{2}$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-
-\subsubsection{Factorized expression}
-By posing $(a,b) = (\min(\frac{l}{2}, c-\frac{l}{2}), \max(\frac{l}{2}, c-\frac{l}{2}))$, we can use a condensed form for the convolution:
-\[ C_{l,c}(x) = \begin{cases}
-    0 & x \le -\frac{l}{2} \\
-    \frac{1}{2} (x+\frac{l}{2})^2 & x \in \left[ -\frac{l}{2}, a \right] \\
-    xl & x \in \left[ a, b \right] \And l \le c \\
-    \frac{c^2}{2} & x \in \left[ a, b \right] \And l \ge c \\
-    \frac{1}{2} (c^2 - (x-\frac{l}{2})^2) & x \in \left[ b, c+\frac{l}{2} \right] \\
-    0 & x \ge c+\frac{l}{2}
-\end{cases} \]
-
-Convolution with a negative triangle is obtained using time inversion:
-\[
-    \OldIndicator{l} \Convolution \NegativeTriangle{c} =
-    \Reversed{\OldIndicator{l}} \Convolution \Reversed{\PositiveTriangle{c}} =
-    \Reversed{\OldIndicator{l} \Convolution \PositiveTriangle{c}}
-\]
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Convolution of positive triangle with positive triangle}
-\[ \begin{split}
-    C_{a,b}(x) = \left[ \PositiveTriangle{a} \Convolution \PositiveTriangle{b} \right] (x) & = \IntR{\PositiveTriangle{a}(x-t) \PositiveTriangle{b}(t)}{t} \\
-    & = \IntR{\NegativeTriangle{a}(t-x) \PositiveTriangle{b}(t)}{t} \\
-    & = \IntR{\Shifted{x}{\NegativeTriangle{a}}(t) \PositiveTriangle{b}(t)}{t}
-\end{split} \]
-By using the commutativity of the convolution, $C_{a,b}(x) = C_{\min(a,b),\max(a,b)}(x)$.
-Thus we can compute $C_{a,b}(x)$ for only $a \le b$, and extend to the whole domain using symmetry.
-The convolution value is the area of the product between a negative triangle of origin $x$ and a positive triangle with origin $0$.
-In the following pictures $\NegativeTriangle{a}$ is in red and $\PositiveTriangle{b}$ is in blue.
-
-\subsubsection{Only case}
-$a \le b$:
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-1.5}{6.5}{-0.5}{3.5}
-    \begin{scope}[color=blue]
-        \draw (FuncStart) -- (Origin) parabola (1.9,1.2) coordinate(a) -- (2.6,2.2) coordinate(b) parabola bend (3.2,2.6) (4.5,0) coordinate(d) -- (FuncEnd);
-        \draw[dashed] (a) -- (a |- Origin) -- +(0,-0.1) node[below] {$a$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$\frac{a^3}{6}$};
-        \draw[dashed] (b) -- (b |- Origin) node[below] {$b$};
-        \draw[dashed] (b) -- (b -| Origin) node[left] {$a^2 \frac{3b-2a}{6}$};
-        \draw[dashed] (3.2,2.6) -- (3.2,-0.4) node[below] {$\sqrt{a^2+b^2}$};
-        \node[below] at (d) {$a+b$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ C_{a,b}(x) = \begin{cases}
-    0 & x \le 0 \\
-    \frac{x^3}{6} & x \in [0, a] \\
-    a^2 \frac{3x-2a}{6} & x \in [a, b] \\
-    \frac{1}{6} (a+b-x) (x^2 + x(a+b) -2a^2-2b^2+2ab) & x \in [b, a+b] \\
-    0 & x \ge a+b
-\end{cases} \]
-
-Slope of $4$-th component:
-\[ \frac{\D C_{a,b}^4(x)}{\D x} = \frac{\D(\frac{1}{6} (a+b-x) (x^2 + x(a+b) -2a^2-2b^2+2ab))}{\D x} = \frac{1}{2} (a^2+b^2-x^2) \]
-
-Slopes:
-\[ \left. \frac{\D(\frac{x^3}{6})}{\D x} \right|_{x=0} = 0 \]
-\[
-    \frac{a^2}{2} =
-    \left. \frac{\D(\frac{x^3}{6})}{\D x} \right|_{x\in [a,b]} =
-    \left. \frac{\D(a^2 \frac{3x-2a}{6})}{\D x} \right|_{x=a} =
-    \left. \frac{\D C_{a,b}^4(x)}{\D x} \right|_{x=b}
-\]
-\[ \left. \frac{\D C_{a,b}^4(x)}{\D x} \right|_{x=\sqrt{a^2+b^2}} = 0 \]
-
-\paragraph{No overlap, left}
-$x \le 0$.
-$C_{a,b}(x) = 0$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (-1.5,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
-        \draw[dashed] (a) -- (a-| Origin) node[right] {$a$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-
-\paragraph{Partial left overlap}
-$x \ge 0 \And x-a \le 0 \Equiv x \in [0, a]$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (-0.5,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
-        \draw[dashed] (a) -- (a-| Origin) node[right] {$a$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
-        \draw (-0.1,0.7) -- +(0.2,0) node[right] {$x$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[
-    C_{a,b}(x) =
-    \int_0^x (x-t) \times t \times \D t =
-    \left[  \frac{xt^2}{2} - \frac{t^3}{3} \right]_0^x =
-    \frac{x^3}{6}
-\]
-
-\paragraph{Complete inclusion}
-$x-a \ge 0 \And x \le b \Equiv x \in [a, b]$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-        \draw[dashed] (0.4,0.4) -- (0,0.4) node[left] {$x-a$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (0.4,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
-        \draw[dashed] (a) -- (a-| Origin) node[left] {$a$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ \begin{split}
-    C_{a,b}(x) & = \int_0^a (a-t) \times (t+x-a) \times \D t = \int_0^a (-t^2 +t(2a-x) +a(x-a)) \D t \\
-    & =  \left[  -\frac{t^3}{3} + \frac{t^2}{2}(2a-x) +ta(x-a) \right]_0^a = a^2 \left( -\frac{a}{3}+\frac{2a-x}{2}+x-a \right) \\
-    & = a^2 \frac{3x-2a}{6}
-\end{split} \]
-
-\paragraph{Partial right overlap}
-$x-a \le b \And x \ge b \Equiv x \in [b, a+b]$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-        \draw[dashed] (1.5,1.2) |- (0,1.5) node[left] {$x-a$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (1.5,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
-        \draw[dashed] (a) -- (a-| Origin) node[left] {$a$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ \begin{split}
-    C_{a,b}(x) & = \int_0^{a+b-x} (a-t) \times (t+x-a) \times \D t \\
-    & = \int_0^{a+b-x} (-t^2 +t(2a-x) +a(x-a)) \D t \\
-    & =  \left[  -\frac{t^3}{3} + \frac{t^2}{2}(2a-x) +ta(x-a) \right]_0^{a+b-x} \\
-    & =(a+b-x) \left( -\frac{(a+b-x)^2}{3}+\frac{1}{2}(2a-x)(a+b-x)+a(x-a) \right) \\
-    & = \frac{1}{6} (a+b-x) (x^2 + x(a+b) -2a^2-2b^2+2ab)
-\end{split} \]
-
-\paragraph{No overlap, right}
-$x-a \ge b \Equiv x \ge a+b$.
-$C_{a,b}(x) = 0$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (2.2,0) -- +(0,1.2) coordinate(a) -- +(1.2,0) coordinate(b) -- (FuncEnd);
-        \draw[dashed] (a |- Origin) -- +(0,-0.5) node[below] {$x-a$};
-        \draw[dashed] (a) -- (a-| Origin) node[left] {$a$};
-        \draw[dashed] (b) -- +(0,-0.5) node[below] {$x$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-
-\subsubsection{Factorized expression}
-By posing $A=\min(a,b)$ and $B=\max(a,b)$ we have the condensed formula:
-\[ C_{a,b}(x) = \begin{cases}
-    0 & x \le 0 \\
-    \frac{x^3}{6} & x \in [0, A] \\
-    A^2 \frac{3x-2A}{6} & x \in [A, B] \\
-    \frac{1}{6} (a+b-x) (x^2 + x(a+b) -2a^2-2b^2+2ab) & x \in [B, a+b] \\
-    0 & x \ge a+b
-\end{cases} \]
-
-Convolution of negative triangles is obtained using time inversion:
-\[
-    \NegativeTriangle{a} \Convolution \NegativeTriangle{b} =
-    \Reversed{\PositiveTriangle{a}} \Convolution \Reversed{\PositiveTriangle{b}} =
-    \Reversed{\PositiveTriangle{a} \Convolution \PositiveTriangle{b}}
-\]
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Convolution of negative triangle with positive triangle}
-\[ \begin{split}
-    C_{a,b}(x) = \left[ \NegativeTriangle{a} \Convolution \PositiveTriangle{b} \right] (x) & = \IntR{\NegativeTriangle{a}(x-t) \PositiveTriangle{b}(t)}{t} \\
-    & = \IntR{\PositiveTriangle{a}(t-x) \PositiveTriangle{b}(t)}{t} \\
-    & = \IntR{\Shifted{x}{\PositiveTriangle{a}}(t) \PositiveTriangle{b}(t)}{t}
-\end{split} \]
-The convolution value is the area of the product between a positive triangle of origin $x$ and a positive triangle with origin $0$.
-In the following pictures $\PositiveTriangle{a}$ is in red and $\PositiveTriangle{b}$ is in blue.
-
-\subsubsection{Negative triangle smaller than positive triangle}
-$a \le b$:
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{4.5}{-0.5}{3.5}
-    \begin{scope}[color=blue]
-        \draw (FuncStart) -- (-1.5,0) coordinate(a) parabola (0,1) coordinate(b) -- (1.1,2.7) coordinate(c) parabola[bend at end] (2.6,0) coordinate(d) -- (FuncEnd);
-        \draw (a |- Origin) -- +(0,-0.1) node[below] {$-a$};
-        \draw (b) -- +(-0.1,0) node[left] {$\frac{a^3}{3}$};
-        \draw[dashed] (c) -- (c |- Origin) node[below] {$b-a$};
-        \draw[dashed] (c) -- (c -| Origin) node[left] {$a^2 \frac{3b-a}{6}$};
-        \node[below] at (d) {$b$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ C_{a,b}(x) = \begin{cases}
-    0 & x \le -a \\
-    (x+a)^2 \frac{2a-x}{6} & x \in [-a, 0] \\
-    a^2 \frac{3x+2a}{6} & x \in [0, b-a] \\
-    (b-x)^2 \frac{x+2b}{6} & x \in [b-a, b] \\
-    0 & x \ge b
-\end{cases} \]
-
-Slope of $4$-th component:
-\[  \frac{\D C_{a,b}^4(x)}{\D x} = \frac{\D((b-x)^2 \frac{x+2b}{6})}{\D x} = \frac{1}{2}(x^2-b^2) \]
-
-Slopes:
-\[ \left. \frac{\D((x+a)^2 \frac{2a-x}{6})}{\D x} \right|_{x=-a} = 0 \]
-\[ \left. \frac{\D((x+a)^2 \frac{2a-x}{6})}{\D x} \right|_{x=0} = \frac{a^2}{2} = \left. \frac{\D(a^2 \frac{3x+2a}{6})}{\D x} \right|_{x=0} \]
-\[ \left. \frac{\D C_{a,b}^4(x)}{\D x} \right|_{x=b-a} \le 0 \]
-\[ \left. \frac{\D C_{a,b}^4(x)}{\D x} \right|_{x=b} = 0 \]
-
-\paragraph{No overlap, left}
-$x+a \le 0 \Equiv x \le -a$.
-$C_{a,b}(x) = 0$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (-1.5,0) coordinate(a) -- +(1.2,1.2) coordinate(b) -- +(1.2,0) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
-        \draw[dashed] (b) -- (b -| Origin) node[right] {$a$};
-        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-
-\paragraph{Partial left overlap}
-$x+a \ge 0 \And x \le 0 \Equiv x \in [-a,0]$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (-0.5,0) coordinate(a) -- +(1.2,1.2) coordinate(b) -- +(1.2,0) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
-        \draw[dashed] (b) -- (b -| Origin) node[left] {$a$};
-        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
-        \draw (0.1,0.5) -- +(-0.2,0) node[left] {$-x$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ \begin{split}
-    C_{a,b}(x) & = \int_0^{x+a} (-x+t) \times t \times \D t = \int_0^{x+a} (t^2 -xt) \D t \\
-    & =  \left[ \frac{t^3}{3} - \frac{xt^2}{2} \right]_0^{x+a} = (x+a)^2 (\frac{x+a}{3} - \frac{x}{2}) = (x+a)^2 \frac{2a-x}{6}
-\end{split} \]
-
-\paragraph{Complete inclusion}
-$0 \le x \And x+a \le b \Equiv x \in [0,b-a]$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-        \draw[dashed] (0.3,0) |- (0,0.3) node[left] {$x$};
-        \draw[dashed] (1.5,1.2) |- (0,1.5) node[left] {$x+a$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (0.3,0) coordinate(a) -- +(1.2,1.2) coordinate(b) -- +(1.2,0) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
-        \draw[dashed] (b) -- (b -| Origin) node[left] {$a$};
-        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ \begin{split}
-    C_{a,b}(x) & = \int_0^a (x+t) \times t \times \D t = \int_0^a (t^2 + xt) \D t \\
-    & =  \left[ \frac{t^3}{3} + \frac{xt^2}{2} \right]_0^a = a^2 (\frac{a}{3} + \frac{x}{2}) = a^2 \frac{3x+2a}{6}
-\end{split} \]
-
-\paragraph{Partial right overlap}
-$x \le b \And x+a \ge b \Equiv x \in [b-a,b]$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-        \draw[dashed] (0.8,0) |- (0,0.8) node[left] {$x$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (0.8,0) coordinate(a) -- +(1.2,1.2) coordinate(b) -- +(1.2,0) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
-        \draw[dashed] (b) -- (b -| Origin) node[left] {$a$};
-        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ \begin{split}
-    C_{a,b}(x) & = \int_0^{b-x} (x+t) \times t \times \D t = \int_0^{b-x} (t^2 + xt) \D t \\
-    & =  \left[ \frac{t^3}{3} + \frac{xt^2}{2} \right]_0^{b-x} = (b-x)^2 (\frac{b-x}{3} + \frac{x}{2}) = (b-x)^2 \frac{x+2b}{6}
-\end{split} \]
-
-\paragraph{No overlap, left}
-$x \le b$.
-$C_{a,b}(x) = 0$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-2.5}{4.5}{-0.5}{2.3}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.8,1.8) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (2.1,0) coordinate(a) -- +(1.2,1.2) coordinate(b) -- +(1.2,0) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
-        \draw[dashed] (b) -- (b -| Origin) node[left] {$a$};
-        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-
-\subsubsection{Negative triangle bigger than positive triangle}
-$a \ge b$:
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-4.5}{4.5}{-0.5}{3.5}
-    \begin{scope}[color=blue]
-        \draw (FuncStart) -- (-3,0) coordinate(a) parabola (-1,2.7) coordinate(b) -- (0,1.3) coordinate(c) parabola[bend at end] (2,0) coordinate(d) -- (FuncEnd);
-        \draw (a |- Origin) -- +(0,-0.1) node[below] {$-a$};
-        \draw[dashed] (b) -- (b |- Origin) node[below] {$b-a$};
-        \draw[dashed] (b) -- (b -| Origin)  node[right] {$b^2 \frac{3a-b}{6}$};
-        \draw[dashed] (c) -- +(0.5,0) node[right] {$\frac{b^3}{3}$};
-        \node[below] at (d) {$b$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ C_{a,b}(x) = \begin{cases}
-    0 & x \le -a \\
-    (x+a)^2 \frac{2a-x}{6} & x \in [-a, b-a] \\
-    b^2 \frac{2b-3x}{6} & x \in [b-a, 0] \\
-    (b-x)^2 \frac{x+2b}{6} & x \in [0, b] \\
-    0 & x \ge b
-\end{cases} \]
-
-Slopes:
-\[ \frac{\D(b^2 \frac{2b-3x}{6})}{\D x} = -\frac{b^2}{2} \le 0 \]
-\[ \left. \frac{\D(b^2 \frac{2b-3x}{6})}{\D x} \right|_{x=0} = -\frac{b^2}{2} = \left. \frac{\D C_{a,b}^4(x)}{\D x} \right|_{x=0} \]
-
-\paragraph{No overlap, left}
-$x+a \le 0 \Equiv x \le -a$.
-$C_{a,b}(x) = 0$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-3.2}{4.5}{-0.5}{2.5}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.2,1.2) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (-2.5,0) coordinate(a) -- +(1.9,1.9) coordinate(b) -- +(1.9,0) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
-        \draw[dashed] (b) -- (b -| Origin) node[right] {$a$};
-        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-
-\paragraph{Partial left overlap}
-$0 \le x+a \le b \Equiv x \in [-a, b-a]$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-3.2}{4.5}{-0.5}{2.5}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.2,1.2) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (-0.9,0) coordinate(a) -- +(1.9,1.9) coordinate(b) -- +(1.9,0) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
-        \draw[dashed] (b) -- (b -| Origin) node[left] {$a$};
-        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
-        \draw (0.1,0.9) -- +(-0.2,0) node[left] {$-x$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ C_{a,b}(x) = \int_0^{x+a} t \times (-x+t) \times \D t = (x+a)^2 \frac{2a-x}{6} \]
-
-\paragraph{Complete inclusion}
-$x \le 0 \And x+a \ge b \Equiv x \in [b-a, 0]$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-3.2}{4.5}{-0.5}{2.5}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.2,1.2) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (-0.3,0) coordinate(a) -- +(1.9,1.9) coordinate(b) -- +(1.9,0) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
-        \draw[dashed] (b) -- (b -| Origin) node[left] {$a$};
-        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
-        \draw (0.1,0.3) -- +(-0.2,0) node[left] {$-x$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ \begin{split}
-    C_{a,b}(x) & = \int_0^b t \times (-x+t) \times \D t = \int_0^b (t^2 - xt) \D t \\
-    & =  \left[ \frac{t^3}{3} - \frac{xt^2}{2} \right]_0^b = b^2 (\frac{b}{3} - \frac{x}{2}) = b^2 \frac{2b-3x}{6}
-\end{split} \]
-
-\paragraph{Partial right overlap}
-$0 \le x \le b \Equiv x \in [0, b]$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-3.2}{4.5}{-0.5}{2.5}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.2,1.2) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-        \draw[dashed] (0.5,0) |- (0,0.5) node[left] {$x$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (0.5,0) coordinate(a) -- +(1.9,1.9) coordinate(b) -- +(1.9,0) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
-        \draw[dashed] (b) -- (b -| Origin) node[left] {$a$};
-        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-\[ C_{a,b}(x) = \int_0^{b-x} t \times (x+t) \times \D t = (b-x)^2 \frac{x+2b}{6} \]
-
-\paragraph{No overlap, right}
-$x \ge b$.
-$C_{a,b}(x) = 0$.
-\begin{center}\begin{tikzpicture}
-    \GridAxis{-3.2}{4.5}{-0.5}{2.5}
-    \begin{scope}[color=blue] % B
-        \draw (FuncStart) -- (0,0) -- (1.2,1.2) coordinate(a) |- (FuncEnd);
-        \node[below] at (a |- Origin) {$b$};
-        \draw[dashed] (a) -- (a -| Origin) node[left] {$b$};
-    \end{scope}
-    \begin{scope}[color=red] % A
-        \draw (FuncStart) -- (1.4,0) coordinate(a) -- +(1.9,1.9) coordinate(b) -- +(1.9,0) -- (FuncEnd);
-        \draw[dashed] (a) -- +(0,-0.5) node[below] {$x$};
-        \draw[dashed] (b) -- (b -| Origin) node[left] {$a$};
-        \draw[dashed] (b |- Origin) -- +(0,-0.5) node[below] {$x+a$};
-    \end{scope}
-\end{tikzpicture}\end{center}
-
-\subsubsection{Factorized expression}
-By posing $(A,B) = (\min(0, b-a), \max(0, b-a))$, we can use a condensed form for the convolution:
-\[ C_{a,b}(x) = \begin{cases}
-    0 & x \le -a \\
-    (x+a)^2 \frac{2a-x}{6} & x \in [-a, A] \\
-    a^2 \frac{3x+2a}{6} & x \in [A, B] \And a \le b \\
-    b^2 \frac{2b-3x}{6} & x \in [A, B] \And a \ge b \\
-    (b-x)^2 \frac{x+2b}{6} & x \in [B, b] \\
-    0 & x \ge b
-\end{cases} \]
-
-Convolution with of positive triangle with negative triangles is obtained using commutativity.
-\[ \PositiveTriangle{a} \Convolution \NegativeTriangle{b} = \NegativeTriangle {b} \Convolution \PositiveTriangle{a} \]
+The old proofs were used to generate the test cases for the polynomial system.
+They have been removed from this document but are still available in the git history.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \end{document}
