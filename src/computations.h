@@ -90,7 +90,7 @@ inline auto to_shape(IntervalKernel kernel) {
     return shape::scaled(
         normalization_factor(kernel),
         shape::Indicator<Bound::Closed, Bound::Closed>{
-            {-kernel.width / 2., kernel.width / 2.},
+            {0., kernel.width},
         });
 }
 inline auto to_shape(const HistogramBase::Histogram & histogram) {
