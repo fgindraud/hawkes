@@ -267,7 +267,7 @@ struct IntervalKernel {
     static std::string name() { return "interval[0,w]"; }
 };
 inline double normalization_factor(IntervalKernel kernel) {
-    return 1. / std::sqrt(kernel.width);
+    return 1. / double(kernel.width);
 }
 
 // Zero width kernels are not supported by computation, replace their width with a 'default' value.
