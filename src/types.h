@@ -258,7 +258,7 @@ struct HaarBase final : Base {
  * Kernels.
  */
 
-// Interval kernel : 1_[0, width](x) (L2-normalized)
+// Interval kernel : 1_[0, width](x) (L1-normalized)
 struct IntervalKernel {
     PointSpace width; // ]0, inf[ due to the normalization factor
 

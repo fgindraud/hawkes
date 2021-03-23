@@ -351,22 +351,23 @@ The sum above can then be simplified by ignoring all $X_l - X_{l'} \notin \nzd(F
 \subsection{Base shapes used}
 Basic functions considered are all piecewise polynoms
 
-\paragraph{Histogram base}
+\paragraph{Histogram base} L2-normalized
 \[ \varphi_k = \frac{1}{\sqrt{\delta}} \Indicator{\left] k\delta, (k+1)\delta \right]} \qquad 0 \le k < K \]
 
-\paragraph{Haar wavelets}
+\paragraph{Haar wavelets} L2-normalized
 \[ \varphi_{s,p} = \frac{\sqrt{2}^s}{\sqrt{\delta}} \left(
     \Indicator{ \left] \frac{2p \delta}{2^{s+1}}, \frac{(2p+1) \delta}{2^{s+1}} \right] } -
     \Indicator{ \left] \frac{(2p +1) \delta}{2^{s+1}}, \frac{(2p + 2) \delta}{2^{s+1}} \right] }
 \right) \qquad \substack{0 \le s < \text{Nscale} \\ 0 \le p < 2^s} \]
 
-\paragraph{Interval kernel}
-\[ W_l = \frac{1}{\sqrt{\eta_l}} \Indicator{\left[ -\frac{\eta_l}{2}, \frac{\eta_l}{2} \right]} \]
+\paragraph{Interval kernel} L1-normalized
+\[ W_l = \frac{1}{\eta_l} \Indicator{\left[ 0, \eta_l \right]} \]
 
 \subsection{Non-kernel case}
 
 \paragraph{B}
 \[ b_{k,l}^m = \sum_{X_l \in N_l, X_m \in N_m} \varphi_k (X_m - X_l) \]
+Border: \[ b_0^m = |N_m| \]
 
 \paragraph{G}
 G can be expressed as a cross correlation of phi functions:
@@ -377,6 +378,14 @@ G can be expressed as a cross correlation of phi functions:
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \int \varphi_k(x-(X_l-X_l')) \varphi_{k'}(x) \D x \\
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} [\varphi_k \Correlation \varphi_{k'}] (X_l-X_l')
 \end{split} \]
+
+Borders:
+\[ \mathbf{g}_0 = T_{max} \]
+\[ \mathbf{g}_{lk}
+    = \int \left( \sum_{X_l \in N_l} \varphi_k(x - X_l) \right) \D x
+    = \sum_{X_l \in N_l} \int \varphi_k(x - X_l) \D x
+    = |N_l| \int \varphi_k
+\]
 
 \paragraph{Penalty components}
 $\widehat{V}_{k,l}^m$ is computed using a variation on the $\sum_{X_l \in N_l, X_{l'} \in N_{l'}} F(X_l-X_{l'})$ algorithm described above.
@@ -396,6 +405,13 @@ If $\varphi_k$ is not an indicator, we approximate it by an indicator function a
 
 \paragraph{B}
 \[ b_{W,k,l}^m = \sum_{X_l \in N_l, X_m \in N_m} [W_l \Convolution W_m \Convolution \varphi_k] (X_m - X_l) \]
+Border:
+\[
+    b_{W,0}^m 
+    = \int \left( \sum_{X_m \in N_m} W_m(x - X_l) \right) \D x
+    = \sum_{X_m \in N_m} \int W_m(x - X_m) \D x
+    = |N_m| \int W_m
+\]
 
 \paragraph{G}
 \[ \begin{split}
@@ -404,6 +420,14 @@ If $\varphi_k$ is not an indicator, we approximate it by an indicator function a
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \int [W_l \Convolution \varphi_k](x-X_l) [W_{l'} \Convolution \varphi_{k'}](x-X_{l'}) \D x \\
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \int [W_l \Convolution \varphi_k](x-(X_l-X_l')) [W_{l'} \Convolution \varphi_{k'}](x) \D x \\
     & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} [(W_l \Convolution \varphi_k) \Correlation (W_{l'} \Convolution \varphi_{k'})] (X_l-X_l')
+\end{split} \]
+Borders:
+\[ \mathbf{g}_{W,0} = T_{max} \]
+\[ \begin{split} \mathbf{g}_{W,lk}
+    & = \int \left( \sum_{X_l \in N_l} [W_l \Convolution \varphi_k](x - X_l) \right) \D x \\
+    & = \sum_{X_l \in N_l} \int [W_l \Convolution \varphi_k](x - X_l) \D x \\
+    & = |N_l| \int [W_l \Convolution \varphi_k] \\
+    & = |N_l| \int \varphi_k \int W_l \quad \text{with Fubini's theorem}
 \end{split} \]
 
 \paragraph{Penalty components}

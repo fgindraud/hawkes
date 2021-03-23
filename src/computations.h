@@ -310,9 +310,7 @@ inline std::vector<IntermediateValues> compute_intermediate_values(
         g.set_tmax(tmax(points));
         const auto sqrt_delta = std::sqrt(double(base.delta));
         for(ProcessId l = 0; l < nb_processes; ++l) {
-            /* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
-             * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l sqrt(delta) = |N_m| eta_l sqrt(delta).
-             */
+            // g_lk = |N_l| \int phi_k \int W_l
             const auto g_lk = double(points[l].size()) * sqrt_delta;
             for(FunctionBaseId k = 0; k < base_size; ++k) {
                 g.set_g(l, k, g_lk);
@@ -361,7 +359,7 @@ inline std::vector<IntermediateValues> compute_intermediate_values(
         Matrix_M_MK1 b_hat(nb_processes, base_size);
         for(ProcessId m = 0; m < nb_processes; ++m) {
             // spontaneous
-            b.set_0(m, sum_sqrt_kernel_width(kernels[m]));
+            b.set_0(m, double(points[m].size()));
             v_hat.set_0(m, double(points[m].size()));
             b_hat.set_0(m, 1.);
             // lk
@@ -392,10 +390,8 @@ inline std::vector<IntermediateValues> compute_intermediate_values(
         g.set_tmax(tmax(points));
         const double sqrt_delta = std::sqrt(base.delta);
         for(ProcessId l = 0; l < nb_processes; ++l) {
-            /* g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
-             * g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l sqrt(delta) = |N_m| eta_l sqrt(delta).
-             */
-            const auto g_lk = sum_sqrt_kernel_width(kernels[l]) * sqrt_delta;
+            // g_lk = \int phi_k sum_{N_l} \int W_l
+            const auto g_lk = double(points[l].size()) * sqrt_delta;
             for(FunctionBaseId k = 0; k < base_size; ++k) {
                 g.set_g(l, k, g_lk);
             }
@@ -537,8 +533,7 @@ inline std::vector<IntermediateValues> compute_intermediate_values(
         MatrixG g(nb_processes, base_size);
         g.set_tmax(tmax(points));
         for(ProcessId l = 0; l < nb_processes; ++l) {
-            // g_lk = sum_{x_m} integral convolution(w_l,phi_k) (x - x_m) dx.
-            // g_lk = sum_{x_m} (integral w_l) (integral phi_k) = sum_{x_m} eta_l * 0 = 0.
+            // g_lk = |N_l| \int phi_k \int W_l
             for(FunctionBaseId k = 0; k < base_size; ++k) {
                 g.set_g(l, k, 0.);
             }
