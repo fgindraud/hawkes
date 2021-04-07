@@ -45,12 +45,17 @@ test: unit_tests
 dump_shape: src/dump_shape.cpp fmtlib.o $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
 	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
 
+# Utility used to compute part of a goodness statistics.
+goodness: src/goodness.cpp fmtlib.o $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
+	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
+
 clean:
 	$(RM) fmtlib.o
 	$(RM) hawkes
 	$(RM) hawkes_debug
 	$(RM) unit_tests
 	$(RM) dump_shape
+	$(RM) goodness
 
 format:
-	clang-format -style=file -i -verbose src/main.cpp src/unit_tests.cpp src/dump_shape.cpp $(wildcard src/*.h)
+	clang-format -style=file -i -verbose src/main.cpp src/unit_tests.cpp src/dump_shape.cpp src/goodness.cpp $(wildcard src/*.h)
