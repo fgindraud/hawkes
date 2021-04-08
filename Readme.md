@@ -62,7 +62,7 @@ A C++ compiler supporting C++14 is required:
 - for any other compiler, check that it supports the `-std=c++14` flag
 
 Simple compilation:
-- `make` will compile the program with the default C++ compiler of your distribution, using a copy of Eigen 3.3.6 (matrix library).
+- `make` will compile the program with the default C++ compiler of your distribution, using a copy of Eigen 3.3.9 (matrix library).
 - `make CXX=<name_or_path_to_compiler_binary>` will use the specified compiler if the default is not valid.
 - `make EIGEN_INCLUDE_PATH=/path/to/eigen/include` will use the indicated Eigen files instead of downloading a copy. Use if Eigen is already installed.
 

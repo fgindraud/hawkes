@@ -19,7 +19,7 @@ all: hawkes
 # EIGEN_INCLUDE_PATH can be set to the location of an already "installed" eigen copy (for example /usr/include/eigen3 for the system one, this might be different depending on the distribution).
 ifndef EIGEN_INCLUDE_PATH
 # If not set, a local copy of eigen is unpacked from a tar.gz and used.
-EIGEN_INCLUDE_PATH := eigen-eigen-323c052e1731
+EIGEN_INCLUDE_PATH := eigen-3.3.9
 $(EIGEN_INCLUDE_PATH): $(EIGEN_INCLUDE_PATH).tar.gz
 	tar xf $<
 endif
