@@ -22,6 +22,7 @@ ifndef EIGEN_INCLUDE_PATH
 EIGEN_INCLUDE_PATH := eigen-3.3.9
 $(EIGEN_INCLUDE_PATH): $(EIGEN_INCLUDE_PATH).tar.gz
 	tar xf $<
+	touch -c $@
 endif
 CXX_FLAGS_COMMON += -I $(EIGEN_INCLUDE_PATH)
 
