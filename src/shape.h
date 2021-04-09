@@ -816,7 +816,7 @@ template <Bound lb, Bound rb> inline double sup_sum_shape_differences_to_points(
      * Thus the sup over x is a max over all these possible values.
      *
      * Assuming a closed interval (but similar for other bound types):
-     * x in interval for y <=> left <= x - y <= right <=> left + y <= x <= right + x.
+     * x in interval for y <=> left <= x - y <= right <=> left + y <= x <= right + y.
      * Thus we iterate on the sets of points {left + y} and {right + y} where the sum changes of value (+1 and -1).
      */
     ShiftedPoints left_bounds(points, indicator.interval.left);
