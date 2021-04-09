@@ -8,6 +8,7 @@
 
 #include "command_line.h"
 #include "computations.h"
+#include "goodness.h"
 #include "input.h"
 #include "shape.h"
 #include "utils.h"
@@ -800,6 +801,47 @@ TEST_SUITE("utils") {
         CHECK(floor_log2(7) == 2);
         CHECK(floor_log2(8) == 3);
         CHECK(floor_log2(9) == 3);
+    }
+}
+
+/******************************************************************************
+ * Goodness primitives.
+ */
+TEST_SUITE("goodness") {
+    TEST_CASE("integral") {
+        const auto interval = Interval<Bound::Open, Bound::Closed>{0., 10.};
+        {
+            const auto empty = SortedVec<Point>::from_sorted({});
+            auto integral = IntegralSumPhiK(empty, interval);
+            CHECK(integral.value_at_t(0.) == doctest::Approx(0.));
+            CHECK(integral.value_at_t(20.) == doctest::Approx(0.));
+        }
+        {
+            const auto single = SortedVec<Point>::from_sorted({0.});
+            auto integral = IntegralSumPhiK(single, interval);
+            CHECK(integral.value_at_t(0.) == doctest::Approx(0.));
+            CHECK(integral.value_at_t(5.) == doctest::Approx(5.));
+            CHECK(integral.value_at_t(10.) == doctest::Approx(10.));
+            CHECK(integral.value_at_t(15.) == doctest::Approx(10.));
+        }
+        {
+            const auto overlapping = SortedVec<Point>::from_sorted({0., 5.});
+            auto integral = IntegralSumPhiK(overlapping, interval);
+            CHECK(integral.value_at_t(0.) == doctest::Approx(0.));
+            CHECK(integral.value_at_t(5.) == doctest::Approx(5.));
+            CHECK(integral.value_at_t(8.) == doctest::Approx(11.));
+            CHECK(integral.value_at_t(10.) == doctest::Approx(15.));
+            CHECK(integral.value_at_t(15.) == doctest::Approx(20.));
+            CHECK(integral.value_at_t(16.) == doctest::Approx(20.));
+        }
+        {
+            const auto sequential = SortedVec<Point>::from_sorted({0., 10., 20.});
+            auto integral = IntegralSumPhiK(sequential, interval);
+            CHECK(integral.value_at_t(0.) == doctest::Approx(0.));
+            CHECK(integral.value_at_t(15.) == doctest::Approx(15.));
+            CHECK(integral.value_at_t(20.) == doctest::Approx(20.));
+            CHECK(integral.value_at_t(35.) == doctest::Approx(30.));
+        }
     }
 }
 
