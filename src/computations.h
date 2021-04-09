@@ -189,14 +189,6 @@ void set_G_values_histogram(MatrixG & g, size_t nb_processes, size_t base_size, 
     }
 }
 
-inline double sum_sqrt_kernel_width(const std::vector<IntervalKernel> & kernels) {
-    double sum = 0.;
-    for(const auto & kernel : kernels) {
-        sum += std::sqrt(kernel.width);
-    }
-    return sum;
-}
-
 /******************************************************************************
  * Histogram cases.
  */
