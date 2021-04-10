@@ -1,3 +1,4 @@
+// Goodness computation tool, not needed for hawkes inferrence.
 #include <cassert>
 #include <memory>
 

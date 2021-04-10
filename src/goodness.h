@@ -1,5 +1,5 @@
 #pragma once
-// Utils for goodness computation
+// Shape primitives specific to goodness computation
 
 #include "shape.h"
 #include "utils.h"

@@ -1,4 +1,4 @@
-#include "computations.h"
+// Generate visual plots for various shapes ; visual check of convolution.
 #include "shape.h"
 
 #include <cstdio>

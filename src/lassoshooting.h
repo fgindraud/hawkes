@@ -1,4 +1,5 @@
 #pragma once
+// Lasso algorithm extracted from lassoshooting R package
 
 #include <Eigen/Core>
 #include <cassert>

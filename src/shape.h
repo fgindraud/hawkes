@@ -1,4 +1,5 @@
 #pragma once
+// Shape library.
 
 #include <algorithm> // add
 #include <limits>
@@ -287,6 +288,29 @@ Add<std::vector<Polynom<lb, rb>>> optimized_add(std::vector<Polynom<lb, rb>> && 
         components.erase(new_end, components.end());
     }
     return {std::move(components)};
+}
+
+/******************************************************************************
+ * Conversion of objects to shapes.
+ */
+
+inline auto to_shape(IntervalKernel kernel) {
+    return shape::scaled(
+        normalization_factor(kernel),
+        shape::Indicator<Bound::Closed, Bound::Closed>{
+            {0., kernel.width},
+        });
+}
+inline auto to_shape(const HistogramBase::Histogram & histogram) {
+    return shape::scaled(
+        histogram.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{histogram.interval});
+}
+
+inline shape::Add<std::vector<shape::Polynom<Bound::Open, Bound::Closed>>> to_shape(const HaarBase::Wavelet & wavelet) {
+    return {{
+        {wavelet.up_part, {wavelet.normalization_factor}},    // Up indicator
+        {wavelet.down_part, {-wavelet.normalization_factor}}, // Down indicator
+    }};
 }
 
 /******************************************************************************

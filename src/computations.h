@@ -1,4 +1,5 @@
 #pragma once
+// Computation code for main inferrence
 
 #include <Eigen/Cholesky>
 #include <cmath>
@@ -8,6 +9,8 @@
 #include "lassoshooting.h"
 #include "shape.h"
 #include "types.h"
+
+using shape::to_shape;
 
 /******************************************************************************
  * Compute B, G, V_hat, B_hat intermediate values.
@@ -82,28 +85,6 @@ inline std::vector<IntermediateValues> compute_intermediate_values(
 /******************************************************************************
  * Helpers.
  */
-
-/* Conversion of objects to shapes.
- */
-
-inline auto to_shape(IntervalKernel kernel) {
-    return shape::scaled(
-        normalization_factor(kernel),
-        shape::Indicator<Bound::Closed, Bound::Closed>{
-            {0., kernel.width},
-        });
-}
-inline auto to_shape(const HistogramBase::Histogram & histogram) {
-    return shape::scaled(
-        histogram.normalization_factor, shape::Indicator<Bound::Open, Bound::Closed>{histogram.interval});
-}
-
-inline shape::Add<std::vector<shape::Polynom<Bound::Open, Bound::Closed>>> to_shape(const HaarBase::Wavelet & wavelet) {
-    return {{
-        {wavelet.up_part, {wavelet.normalization_factor}},    // Up indicator
-        {wavelet.down_part, {-wavelet.normalization_factor}}, // Down indicator
-    }};
-}
 
 /* Compute Tmax (used in G).
  * Tmax is the maximum width covered by points of all processes for a specific region.

@@ -1,4 +1,5 @@
 #pragma once
+// Application specific definitions
 
 #include <Eigen/Core>
 #include <algorithm>

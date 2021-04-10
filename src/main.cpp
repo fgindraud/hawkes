@@ -1,3 +1,4 @@
+// Main hawkes inferrence tool
 #include <memory>
 #include <string>
 #include <utility>
