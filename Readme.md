@@ -85,10 +85,11 @@ Hawkes uses 3 header-only libraries which are included in the current code:
 License
 -------
 
-TODO
+MIT
 
-TODO
+Todo
 ----
 
 - better error reporting / handling of bad values
-
+- replace CLI parser with external dep ?
+- investigate lassoshooting convergence failures
