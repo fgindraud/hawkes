@@ -7,7 +7,6 @@
 #include <functional>
 #include <initializer_list>
 #include <map>
-#include <regex>
 #include <string>
 #include <vector>
 
@@ -154,8 +153,8 @@ class CommandLineParser::Exception : public std::exception {
 /******************************************************************************
  * Impl.
  */
-inline CommandLineParser::Option &
-CommandLineParser::new_named_uninitialized_option(std::initializer_list<string_view> names) {
+inline CommandLineParser::Option & CommandLineParser::new_named_uninitialized_option(
+    std::initializer_list<string_view> names) {
     if(names.size() == 0) {
         throw Exception("Declaring option with no name");
     }
@@ -286,10 +285,6 @@ inline void CommandLineParser::usage(std::FILE * output, string_view program_nam
     }
 }
 
-inline string_view make_string_view(std::cmatch::const_reference match_result) {
-    return make_string_view(match_result.first, match_result.second);
-}
-
 inline void CommandLineParser::parse(const CommandLineView & command_line) {
     std::size_t current = 0;
     const std::size_t nb = command_line.nb_arguments();
@@ -299,55 +294,50 @@ inline void CommandLineParser::parse(const CommandLineView & command_line) {
 
     bool option_parsing_enabled = !option_index_by_name_.empty();
 
-    // Option is: one or two dashes, then option name, then '=<value>' or nothing
-    std::regex option_name_regex{"^(--|-)([^=]+)(=|$)"};
-    assert(option_name_regex.mark_count() == 3);
-    std::cmatch matched_positions;
-
     while(current < nb) {
         auto arg = command_line.argument(current);
 
         if(option_parsing_enabled && starts_with('-', arg)) {
+            // Option is: one or two dashes, then option name, then '=<value>' or nothing
             if(arg == "--") {
                 // Special case, consider everything after that as positional arguments
                 option_parsing_enabled = false;
             } else {
-                // Argument is an option
-                if(!std::regex_search(arg.begin(), arg.end(), matched_positions, option_name_regex)) {
-                    throw Exception(fmt::format("Bad format: option '{}'", arg));
+                // Find equal position, if any
+                auto equal_it = std::find(arg.begin(), arg.end(), '=');
+                bool has_equal = equal_it != arg.end();
+                // option name
+                auto option_name_dashes = make_string_view(arg.begin(), equal_it);
+                auto option_name = make_string_view(option_name_dashes.begin() + 1, option_name_dashes.end());
+                if(starts_with('-', option_name)) {
+                    option_name.remove_prefix(1);
                 }
-                assert(matched_positions.ready());
-                assert(matched_positions.size() == 4);
-                auto dashes = make_string_view(matched_positions[1]);
-                auto opt_name = make_string_view(matched_positions[2]);
-                auto equal_sign_or_empty = make_string_view(matched_positions[3]);
-                auto opt_name_with_dashes = make_string_view(dashes.begin(), opt_name.end());
 
-                auto it = option_index_by_name_.find(opt_name);
+                auto it = option_index_by_name_.find(option_name);
                 if(it == option_index_by_name_.end()) {
-                    throw Exception(fmt::format("Unknown option '{}'", opt_name_with_dashes));
+                    throw Exception(fmt::format("Unknown option '{}'", option_name_dashes));
                 }
                 Option & opt = options_[static_cast<std::size_t>(it->second)];
 
                 if(opt.type == Option::Type::Flag) {
                     // Simple flag option
-                    if(!empty(equal_sign_or_empty)) {
-                        throw Exception(fmt::format("Flag '{}' takes no value", opt_name_with_dashes));
+                    if(has_equal) {
+                        throw Exception(fmt::format("Flag '{}' takes no value", option_name_dashes));
                     }
                     assert(opt.flag_action);
                     opt.flag_action();
                 } else {
                     // Value option, extract value
                     string_view value;
-                    if(!empty(equal_sign_or_empty)) {
+                    if(has_equal) {
                         // Value is the rest of the argument
-                        value = make_string_view(equal_sign_or_empty.end(), arg.end());
+                        value = make_string_view(equal_it + 1, arg.end());
                     } else {
                         // Value is the next argument
                         ++current;
                         if(current == nb) {
                             throw Exception(
-                                fmt::format("Option '{}' requires a value: {}", opt_name_with_dashes, opt.value_name));
+                                fmt::format("Option '{}' requires a value: {}", option_name_dashes, opt.value_name));
                         }
                         value = command_line.argument(current);
                     }
@@ -359,7 +349,7 @@ inline void CommandLineParser::parse(const CommandLineView & command_line) {
                         ++current;
                         if(current == nb) {
                             throw Exception(fmt::format(
-                                "Option '{}' requires a second value: {}", opt_name_with_dashes, opt.value2_name));
+                                "Option '{}' requires a second value: {}", option_name_dashes, opt.value2_name));
                         }
                         const string_view value2 = command_line.argument(current);
                         assert(opt.value2_action);
