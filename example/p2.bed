@@ -1,0 +1,11 @@
+# region mark_start mark_end
+chr1	0	7
+chr1	45	60
+chr1	80	100
+chr1	142	150
+chr2	8	10
+chr2	61	61
+chr2	104	124
+chr2	145	150
+chr2	187	187
+chr2	223	230
