@@ -30,7 +30,7 @@
  * void fmt::print (FILE* output, "format string", ...); // for stdout, stderr, ...
  * std::string fmt::format("format_string", ...); // to generate a std::string.
  */
-//#define FMT_HEADER_ONLY 1 // In header only mode
+#define FMT_HEADER_ONLY 1 // In header only mode
 #include "external/fmt/format.h"
 #include "external/fmt/ostream.h"
 

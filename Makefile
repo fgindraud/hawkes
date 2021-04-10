@@ -26,32 +26,27 @@ $(EIGEN_INCLUDE_PATH): $(EIGEN_INCLUDE_PATH).tar.gz
 endif
 CXX_FLAGS_COMMON += -I $(EIGEN_INCLUDE_PATH)
 
-# Precompile fmtlib to reduce compilation time
-fmtlib.o: src/external/fmt/format.cc $(wildcard src/external/fmt/*.h) Makefile
-	$(CXX) -c $(CXX_FLAGS_RELEASE) -I src/external -o $@ $<
-
 # Debug and non-debug version of hawkes main program.
-hawkes: src/main.cpp fmtlib.o $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
-	$(CXX) $(CXX_FLAGS_RELEASE) -o $@ $< fmtlib.o
-hawkes_debug: src/main.cpp fmtlib.o $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
-	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
+hawkes: src/main.cpp $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
+	$(CXX) $(CXX_FLAGS_RELEASE) -o $@ $<
+hawkes_debug: src/main.cpp $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
+	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $<
 
 # Unit test executable and 'test' target.
-unit_tests: src/unit_tests.cpp fmtlib.o $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
-	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
+unit_tests: src/unit_tests.cpp $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
+	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $<
 test: unit_tests
 	./unit_tests
 
 # Small utility to plot various shapes, for debug purposes.
-dump_shape: src/dump_shape.cpp fmtlib.o $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
-	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
+dump_shape: src/dump_shape.cpp $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
+	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $<
 
 # Utility used to compute part of a goodness statistics.
-goodness: src/goodness.cpp fmtlib.o $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
-	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $< fmtlib.o
+goodness: src/goodness.cpp $(EIGEN_INCLUDE_PATH) $(wildcard src/*.h) Makefile
+	$(CXX) $(CXX_FLAGS_DEBUG) -o $@ $<
 
 clean:
-	$(RM) fmtlib.o
 	$(RM) hawkes
 	$(RM) hawkes_debug
 	$(RM) unit_tests
