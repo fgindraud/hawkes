@@ -268,17 +268,6 @@ template <typename T> class Vector2d {
     Vector2d(std::size_t nb_rows, std::size_t nb_cols)
         : inner_(nb_rows * nb_cols), nb_rows_(nb_rows), nb_cols_(nb_cols) {}
 
-    // Sized vector initialized by calling f(row,col) in each cell
-    template <typename F> Vector2d(std::size_t nb_rows, std::size_t nb_cols, F f)
-        : nb_rows_(nb_rows), nb_cols_(nb_cols) {
-        inner_.reserve(nb_rows_ * nb_cols_);
-        for(std::size_t r = 0; r < nb_rows_; r += 1) {
-            for(std::size_t c = 0; c < nb_cols_; c += 1) {
-                inner_.push_back(f(r, c));
-            }
-        }
-    }
-
     // Get sizes
     std::size_t nb_rows() const noexcept { return nb_rows_; }
     std::size_t nb_cols() const noexcept { return nb_cols_; }

@@ -63,7 +63,10 @@ class IntegralSumPhiK {
     }
 };
 
-/* Compute the set of lambda_hat_m for all x_m in N_m. */
+/* Compute the set of lambda_hat_m for all x_m in N_m.
+ *
+ * lambda_hat_m(t) = sum_lk estimated_a_{m,l,k} int_0^t sum_{x_l in N_l} phi_k(x - x_l) dx.
+ */
 inline std::vector<double> compute_lambda_hat_m_for_all_Nm(
     span<const SortedVec<PointSpace>> points,
     std::size_t m,
@@ -76,23 +79,31 @@ inline std::vector<double> compute_lambda_hat_m_for_all_Nm(
     assert(base.base_size == base_size);
     assert(m < nb_processes);
     const auto normalization_factor = base.normalization_factor;
-    // Prepare state
+    // Create list of {a(m,lk), integral(l,k)}, ignoring cases where a(m,l,k)==0
+    struct WeightedIntegral {
+        double weight;
+        IntegralSumPhiK integral;
+    };
+    auto weighted_integrals = std::vector<WeightedIntegral>();
+    for(ProcessId l = 0; l < nb_processes; l += 1) {
+        for(FunctionBaseId k = 0; k < base_size; k += 1) {
+            const double a = estimated_a.get_lk(m, l, k);
+            if(a != 0.) {
+                // Integrate up to 0. then reset accumulated value ; ready to start integration from 0.
+                auto integral = IntegralSumPhiK(points[l], base.histogram(k).interval);
+                integral.value_at_t(0.);
+                integral.set_value(0.);
+                weighted_integrals.push_back(WeightedIntegral{a, std::move(integral)});
+            }
+        }
+    }
+    // Compute lambda_hat(x_m in N_m) incrementally. This relies on points[m] being sorted in increasing order.
     auto lambda_hat_for_x_m = std::vector<double>();
     lambda_hat_for_x_m.reserve(points[m].size());
-    auto integral_lk = Vector2d<IntegralSumPhiK>(nb_processes, base_size, [&](ProcessId l, FunctionBaseId k) {
-        // Integrate up to 0. then reset accumulated value ; ready to start integrate from 0.
-        auto integral = IntegralSumPhiK(points[l], base.histogram(k).interval);
-        integral.value_at_t(0.);
-        integral.set_value(0.);
-        return integral;
-    });
-    // Compute incrementally
     for(const Point x_m : points[m]) {
         double sum_a_integrals_indicator = 0.;
-        for(ProcessId l = 0; l < nb_processes; l += 1) {
-            for(FunctionBaseId k = 0; k < base_size; k += 1) {
-                sum_a_integrals_indicator += estimated_a.get_lk(m, l, k) * integral_lk[l][k].value_at_t(x_m);
-            }
+        for(auto & weighted_integral : weighted_integrals) {
+            sum_a_integrals_indicator += weighted_integral.weight * weighted_integral.integral.value_at_t(x_m);
         }
         lambda_hat_for_x_m.push_back(sum_a_integrals_indicator * normalization_factor);
     }
