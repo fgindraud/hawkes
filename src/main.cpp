@@ -170,13 +170,13 @@ int main(int argc, char * argv[]) {
         }
 
         // Read input files
-        const auto data_points = read_process_files(process_files);
+        const ProcessFilesContent process_files_content = read_process_files(process_files);
 
         // Post processing: determine kernel setup, generate sorted points lists
         const auto post_processing_start = instant();
-        const auto points = extract_point_lists(data_points);
-        const auto kernel_config =
-            build_kernel_config(kernel_config_option, data_points, override_homogeneous_kernel_widths);
+        const DataByProcessRegion<SortedVec<Point>> points = extract_point_lists(process_files_content.points);
+        const std::unique_ptr<KernelConfig> kernel_config =
+            build_kernel_config(kernel_config_option, process_files_content.points, override_homogeneous_kernel_widths);
         const auto post_processing_end = instant();
         fmt::print(
             stderr, "Post processing done: time = {}\n", duration_string(post_processing_end - post_processing_start));

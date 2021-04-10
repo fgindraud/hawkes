@@ -19,7 +19,7 @@ Matrix_M_MK1 read_estimated_a_from(string_view filename, std::size_t nb_processe
                     return line;
                 }
             }
-            throw std::runtime_error("Expected line with values");
+            throw std::runtime_error("expected line with values");
         };
         try {
             // Expected content is known, "demand driven" parser.
@@ -46,14 +46,13 @@ Matrix_M_MK1 read_estimated_a_from(string_view filename, std::size_t nb_processe
                 }
             }
         } catch(const std::runtime_error & e) {
-            throw std::runtime_error(
-                fmt::format("Parsing estimated a at line {}: {}", reader.current_line_number() + 1, e.what()));
+            throw std::runtime_error(fmt::format("at line {}: {}", reader.current_line_number() + 1, e.what()));
         }
         const auto end = instant();
         fmt::print(stderr, "Estimated a loaded from '{}': time = {}\n", filename, duration_string(end - start));
         return estimated_a;
     } catch(const std::runtime_error & e) {
-        throw std::runtime_error(fmt::format("Reading estimated a from {}: {}", filename, e.what()));
+        throw std::runtime_error(fmt::format("Reading estimated a from {} ; {}", filename, e.what()));
     }
 }
 
@@ -68,6 +67,7 @@ int main(int argc, char * argv[]) {
     std::unique_ptr<HistogramBase> base;
     std::vector<ProcessFile> process_files;
     string_view estimated_a_filename;
+    string_view output_suffix = "lambda_hat";
     bool dump_region_info_option = false;
 
     parser.flag({"h", "help"}, "Display this help", [&]() {
@@ -104,6 +104,12 @@ int main(int argc, char * argv[]) {
             estimated_a_filename = value;
         });
 
+    parser.option(
+        {"s", "output-suffix"},
+        "suffix",
+        "lambda_hat values of file.bed stored in file.bed.<suffix>",
+        [&](string_view value) { output_suffix = value; });
+
     parser.flag(
         {"dump-region-info"}, "Stop after parsing and print region/process point counts", [&dump_region_info_option]() {
             dump_region_info_option = true;
@@ -122,13 +128,55 @@ int main(int argc, char * argv[]) {
         if(base == nullptr) {
             throw std::runtime_error("Function base is not defined");
         }
+        const std::size_t base_size = base->base_size;
 
         // Read input files
-        const auto data_points = read_process_files(process_files);
-        const auto points = extract_point_lists(data_points);
-        auto estimated_a = read_estimated_a_from(estimated_a_filename, points.nb_processes(), base->base_size);
+        const ProcessFilesContent process_files_content = read_process_files(process_files);
+        const DataByProcessRegion<SortedVec<Point>> points = extract_point_lists(process_files_content.points);
+        const std::size_t nb_processes = points.nb_processes();
+        const std::size_t nb_regions = points.nb_regions();
+        const Matrix_M_MK1 estimated_a = read_estimated_a_from(estimated_a_filename, nb_processes, base_size);
 
-        fmt::print("{}\n", estimated_a.inner);
+        // Compute lambda hat values
+        auto lambda_hat_values = DataByProcessRegion<std::vector<double>>(points.nb_processes(), points.nb_regions());
+        {
+            const auto start = instant();
+            for(RegionId r = 0; r < nb_regions; r += 1) {
+                for(ProcessId m = 0; m < nb_processes; m += 1) {
+                    lambda_hat_values.data(m, r) =
+                        compute_lambda_hat_m_for_all_Nm(points.data_for_region(r), m, *base, estimated_a);
+                    assert(lambda_hat_values.data(m, r).size() == points.data(m, r).size());
+                }
+            }
+            const auto end = instant();
+            fmt::print(stderr, "Computed lambda_hat values ; time = {}\n", duration_string(end - start));
+        }
+
+        // Output
+        {
+            const auto start = instant();
+            for(ProcessId m = 0; m < nb_processes; m += 1) {
+                std::string output_filename = fmt::format("{}.{}", process_files[m].filename, output_suffix);
+                try {
+                    auto file = open_file(output_filename, "w");
+                    fmt::print(file.get(), "# region_name successive_lambda_hats_for_points\n");
+                    for(RegionId r = 0; r < nb_regions; r += 1) {
+                        const auto & region_name = process_files_content.region_names[r];
+                        for(double v : lambda_hat_values.data(m, r)) {
+                            fmt::print(file.get(), "{}\t{}\n", region_name, v);
+                        }
+                    }
+                } catch(const std::runtime_error & e) {
+                    throw std::runtime_error(fmt::format("Writing lambda_hats to {} ; {}", output_filename, e.what()));
+                }
+            }
+            const auto end = instant();
+            fmt::print(
+                stderr,
+                "Written output files (adding suffix '{}') ; time = {}\n",
+                output_suffix,
+                duration_string(end - start));
+        }
 
     } catch(const CommandLineParser::Exception & exc) {
         fmt::print(stderr, "Error: {}. Use --help for a list of options.\n", exc.what());

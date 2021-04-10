@@ -243,12 +243,17 @@ inline std::vector<std::string> union_of_all_region_names(const std::vector<BedF
     return std::vector<std::string>(region_name_set.begin(), region_name_set.end());
 }
 
-inline DataByProcessRegion<SortedVec<DataPoint>> read_process_files(const std::vector<ProcessFile> & files) {
+struct ProcessFilesContent {
+    std::vector<std::string> region_names;
+    DataByProcessRegion<SortedVec<DataPoint>> points;
+};
+
+inline ProcessFilesContent read_process_files(const std::vector<ProcessFile> & files) {
     if(files.empty()) {
         throw std::runtime_error("read_process_files: process list is empty");
     }
     auto bed_files_content = map_to_vector(files, [](const ProcessFile & f) { return read_regions_from(f.filename); });
-    const std::vector<std::string> all_region_names = union_of_all_region_names(bed_files_content);
+    std::vector<std::string> all_region_names = union_of_all_region_names(bed_files_content);
 
     // Fill a 2D matrix of lists of PointInterval with contents from bed files.
     // Missing regions in some processes will lead to empty lists.
@@ -281,7 +286,7 @@ inline DataByProcessRegion<SortedVec<DataPoint>> read_process_files(const std::v
         fmt::print(stderr, "  {}%", double(number_missing) / double(nb_regions) * 100.);
     }
     fmt::print(stderr, "\n");
-    return points;
+    return {std::move(all_region_names), std::move(points)};
 }
 
 // Print a table with region statistics to stdout. Used for checking data parsing.
