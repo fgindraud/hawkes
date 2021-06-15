@@ -70,6 +70,9 @@ int main(int argc, char * argv[]) {
     string_view output_suffix = "lambda_hat";
     bool dump_region_info_option = false;
 
+    constexpr auto undefined_override_tmax = -std::numeric_limits<Point>::infinity();
+    Point override_tmax = undefined_override_tmax;
+
     parser.flag({"h", "help"}, "Display this help", [&]() {
         parser.usage(stderr, command_line.program_name());
         std::exit(EXIT_SUCCESS);
@@ -85,6 +88,12 @@ int main(int argc, char * argv[]) {
             const auto delta = PointSpace(parse_strict_positive_double(delta_value, "histogram delta"));
             base = std::make_unique<HistogramBase>(base_size, delta);
         });
+
+    parser.option(
+        {"tmax"},
+        "value",
+        "Override tmax (default tmax[r] = max{union_m N_{m,r}})",
+        [&override_tmax](string_view value) { override_tmax = Point(parse_double(value, "tmax override value")); });
 
     // File parsing : generate a list of (file, options), read later.
     parser.option(
@@ -137,8 +146,29 @@ int main(int argc, char * argv[]) {
         const std::size_t nb_regions = points.nb_regions();
         const Matrix_M_MK1 estimated_a = read_estimated_a_from(estimated_a_filename, nb_processes, base_size);
 
+        // Check tmax or determine default
+        std::vector<Point> tmax;
+        if(override_tmax != undefined_override_tmax) {
+            // If overriden, use the same tmax for every region.
+            // In practice it will only be used for one region, so this is ok.
+            tmax = std::vector<Point>(nb_regions, override_tmax);
+        } else {
+            // Default tmax when not overriden by command line argument
+            for(RegionId r = 0; r < nb_regions; r += 1) {
+                Point tmax_r = -std::numeric_limits<Point>::infinity();
+                for(ProcessId m = 0; m < nb_processes; m += 1) {
+                    const SortedVec<Point> & sorted_points = points.data(m, r);
+                    if(sorted_points.size() > 0) {
+                        tmax_r = std::max(tmax_r, sorted_points[sorted_points.size() - 1]);
+                    }
+                }
+                tmax.push_back(tmax_r);
+            }
+        }
+
         // Compute lambda hat values
-        auto lambda_hat_values = DataByProcessRegion<std::vector<double>>(points.nb_processes(), points.nb_regions());
+        auto lambda_hat_values = DataByProcessRegion<std::vector<double>>(nb_processes, nb_regions);
+        auto lambda_hat_tmax_values = DataByProcessRegion<double>(nb_processes, nb_regions);
         {
             const auto start = instant();
             for(RegionId r = 0; r < nb_regions; r += 1) {
@@ -146,6 +176,11 @@ int main(int argc, char * argv[]) {
                     lambda_hat_values.data(m, r) =
                         compute_lambda_hat_m_for_all_Nm(points.data_for_region(r), m, *base, estimated_a);
                     assert(lambda_hat_values.data(m, r).size() == points.data(m, r).size());
+
+                    // There may be better options to compute lambda_hat_m(tmax[r]) if we had constraints on tmax.
+                    // This recomputes the integrals only for tmax, but this is clean and has ok computation cost.
+                    lambda_hat_tmax_values.data(m, r) =
+                        compute_lambda_hat_m(points.data_for_region(r), m, *base, estimated_a, tmax[r]);
                 }
             }
             const auto end = instant();
@@ -155,6 +190,7 @@ int main(int argc, char * argv[]) {
         // Output
         {
             const auto start = instant();
+            // lambda_hat(points)
             for(ProcessId m = 0; m < nb_processes; m += 1) {
                 std::string output_filename = fmt::format("{}.{}", process_files[m].filename, output_suffix);
                 try {
@@ -168,6 +204,24 @@ int main(int argc, char * argv[]) {
                     }
                 } catch(const std::runtime_error & e) {
                     throw std::runtime_error(fmt::format("Writing lambda_hats to {} ; {}", output_filename, e.what()));
+                }
+            }
+            // lambda_hat(tmax)
+            {
+                std::string output_filename = fmt::format("tmax.{}", output_suffix);
+                try {
+                    auto file = open_file(output_filename, "w");
+                    fmt::print(file.get(), "# region_name lambda_hat_{{m=0}}(tmax), ..., lambda_hat_{{m=M-1}}(tmax)\n");
+                    for(RegionId r = 0; r < nb_regions; r += 1) {
+                        fmt::print(
+                            file.get(),
+                            "{}\t{}\n",
+                            process_files_content.region_names[r],
+                            fmt::join(lambda_hat_tmax_values.data_for_region(r), "\t"));
+                    }
+                } catch(const std::runtime_error & e) {
+                    throw std::runtime_error(
+                        fmt::format("Writing lambda_hats(tmax) to {} ; {}", output_filename, e.what()));
                 }
             }
             const auto end = instant();

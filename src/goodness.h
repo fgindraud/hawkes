@@ -78,7 +78,6 @@ inline std::vector<double> compute_lambda_hat_m_for_all_Nm(
     assert(points.size() == nb_processes);
     assert(base.base_size == base_size);
     assert(m < nb_processes);
-    const auto normalization_factor = base.normalization_factor;
     // Create list of {a(m,lk), integral(l,k)}, ignoring cases where a(m,l,k)==0
     struct WeightedIntegral {
         double weight;
@@ -93,7 +92,7 @@ inline std::vector<double> compute_lambda_hat_m_for_all_Nm(
                 auto integral = IntegralSumPhiK(points[l], base.histogram(k).interval);
                 integral.value_at_t(0.);
                 integral.set_value(0.);
-                weighted_integrals.push_back(WeightedIntegral{a, std::move(integral)});
+                weighted_integrals.push_back(WeightedIntegral{a * base.normalization_factor, std::move(integral)});
             }
         }
     }
@@ -105,7 +104,44 @@ inline std::vector<double> compute_lambda_hat_m_for_all_Nm(
         for(auto & weighted_integral : weighted_integrals) {
             sum_a_integrals_indicator += weighted_integral.weight * weighted_integral.integral.value_at_t(x_m);
         }
-        lambda_hat_for_x_m.push_back(sum_a_integrals_indicator * normalization_factor);
+        lambda_hat_for_x_m.push_back(sum_a_integrals_indicator);
     }
     return lambda_hat_for_x_m;
+}
+
+/* Compute one lambda_hat_m (used for t=tmax)
+ *
+ * lambda_hat_m(t) = sum_lk estimated_a_{m,l,k} int_0^t sum_{x_l in N_l} phi_k(x - x_l) dx.
+ */
+inline double compute_lambda_hat_m(
+    span<const SortedVec<PointSpace>> points,
+    std::size_t m,
+    const HistogramBase & base,
+    const Matrix_M_MK1 & estimated_a,
+    Point t) {
+    // Checks
+    const auto nb_processes = estimated_a.nb_processes;
+    const auto base_size = estimated_a.base_size;
+    assert(points.size() == nb_processes);
+    assert(base.base_size == base_size);
+    assert(m < nb_processes);
+    if (t <= 0.) {
+        // Integrals from 0 to t.
+        return 0.;
+    }
+    // Create list of {a(m,lk), integral(l,k)}, ignoring cases where a(m,l,k)==0
+    double sum_a_integrals = 0.;
+    for(ProcessId l = 0; l < nb_processes; l += 1) {
+        for(FunctionBaseId k = 0; k < base_size; k += 1) {
+            const double a = estimated_a.get_lk(m, l, k);
+            if(a != 0.) {
+                // Integrate up to 0. then reset accumulated value ; ready to start integration from 0.
+                auto integral = IntegralSumPhiK(points[l], base.histogram(k).interval);
+                integral.value_at_t(0.);
+                integral.set_value(0.);
+                sum_a_integrals += a * integral.value_at_t(t);
+            }
+        }
+    }
+    return sum_a_integrals * base.normalization_factor;
 }
