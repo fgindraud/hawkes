@@ -190,38 +190,41 @@ int main(int argc, char * argv[]) {
         // Output
         {
             const auto start = instant();
-            // lambda_hat(points)
             for(ProcessId m = 0; m < nb_processes; m += 1) {
-                std::string output_filename = fmt::format("{}.{}", process_files[m].filename, output_suffix);
-                try {
-                    auto file = open_file(output_filename, "w");
-                    fmt::print(file.get(), "# region_name successive_lambda_hats_for_points\n");
-                    for(RegionId r = 0; r < nb_regions; r += 1) {
-                        const auto & region_name = process_files_content.region_names[r];
-                        for(double v : lambda_hat_values.data(m, r)) {
-                            fmt::print(file.get(), "{}\t{}\n", region_name, v);
+                // lambda_hat(points)
+                {
+                    std::string output_filename = fmt::format("{}.{}", process_files[m].filename, output_suffix);
+                    try {
+                        auto file = open_file(output_filename, "w");
+                        fmt::print(file.get(), "# region_name successive_lambda_hats_for_points\n");
+                        for(RegionId r = 0; r < nb_regions; r += 1) {
+                            const auto & region_name = process_files_content.region_names[r];
+                            for(double v : lambda_hat_values.data(m, r)) {
+                                fmt::print(file.get(), "{}\t{}\n", region_name, v);
+                            }
                         }
+                    } catch(const std::runtime_error & e) {
+                        throw std::runtime_error(
+                            fmt::format("Writing lambda_hats(points) to {} ; {}", output_filename, e.what()));
                     }
-                } catch(const std::runtime_error & e) {
-                    throw std::runtime_error(fmt::format("Writing lambda_hats to {} ; {}", output_filename, e.what()));
                 }
-            }
-            // lambda_hat(tmax)
-            {
-                std::string output_filename = fmt::format("tmax.{}", output_suffix);
-                try {
-                    auto file = open_file(output_filename, "w");
-                    fmt::print(file.get(), "# region_name lambda_hat_{{m=0}}(tmax), ..., lambda_hat_{{m=M-1}}(tmax)\n");
-                    for(RegionId r = 0; r < nb_regions; r += 1) {
-                        fmt::print(
-                            file.get(),
-                            "{}\t{}\n",
-                            process_files_content.region_names[r],
-                            fmt::join(lambda_hat_tmax_values.data_for_region(r), "\t"));
+                // lambda_hat(tmax)
+                {
+                    std::string output_filename = fmt::format("{}.{}.tmax", process_files[m].filename, output_suffix);
+                    try {
+                        auto file = open_file(output_filename, "w");
+                        fmt::print(file.get(), "# region_name lambda_hat_tmax\n");
+                        for(RegionId r = 0; r < nb_regions; r += 1) {
+                            fmt::print(
+                                file.get(),
+                                "{}\t{}\n",
+                                process_files_content.region_names[r],
+                                lambda_hat_tmax_values.data(m, r));
+                        }
+                    } catch(const std::runtime_error & e) {
+                        throw std::runtime_error(
+                            fmt::format("Writing lambda_hats(tmax) to {} ; {}", output_filename, e.what()));
                     }
-                } catch(const std::runtime_error & e) {
-                    throw std::runtime_error(
-                        fmt::format("Writing lambda_hats(tmax) to {} ; {}", output_filename, e.what()));
                 }
             }
             const auto end = instant();
