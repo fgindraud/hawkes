@@ -1,8 +1,19 @@
-# Réunion méthodo 10 mai 2022
+# Réunion méthodo 14 juin 2022
 
-Check with Anna if ok to present
+Check with Anna if ok to present.
 
-* hawkes process model overview : multiples points axis, interaction function
+Done
+- hawkes : multiples points axis, density function, interactions
+- functions basis
+
+Next
+- inferrence target (a) and LASSO with B,G formulas (& maybe V,Bhat, at least for the sup), no kernel histogram
+- manipulate G to get to generic formula
+- introduce convolution / correlation
+- sum of point differences
+- Bhat with sup
+- kernel case formulas : outch
+
 * inferrence overview :
 	- values to compute then lasso.
 	- convolution & cross correlation with gif from wikipedia
