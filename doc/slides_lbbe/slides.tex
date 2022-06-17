@@ -129,9 +129,112 @@ using Histogram = Scaled<Indicator>;
 
 \begin{frame}\frametitle{$\bm{B}$ and $\widehat{\bm{V}}$ using sliding windows}
     \[ \Indicator{x} \]
-    Sliding window over points to go from quadratic to approximately linear
+    Sliding window over points to go from quadratic to approximately linear.
+
+    TODO
 \end{frame}
 
-%TODO itemize version of slides
+\begin{frame}\frametitle{$\widehat{\bm{B}}$ sup by enumerating function values}
+    $\sup_x \left|\sum_{X_l \in N_l} \Indicator{I}(x - X_l) \right| $ can be evaluated exactly.
+
+    Enumerate point of change.
+
+    TODO
+\end{frame}
+
+\begin{frame}\frametitle{$G_{l,l',k,k'}$ expressed using function correlation}
+    \[ \begin{split}
+        \mathsf{G}_{l,l',k,k'}
+        & = \int \left( \sum_{X_l \in N_l} \varphi_k(x-X_l) \right) \left( \sum_{X_{l'} \in N_{l'}} \varphi_{k'}(x-X_{l'}) \right) \D x \\
+        & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \int \varphi_k(x-X_l) \varphi_{k'}(x-X_{l'}) \D x \\
+        & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} \int \varphi_k(x-(X_l-X_l')) \varphi_{k'}(x) \D x \\
+        & = \sum_{X_l \in N_l, X_{l'} \in N_{l'}} [\varphi_k \Correlation \varphi_{k'}] (X_l-X_l')
+    \end{split} \]
+    In the form $\sum_{X_m \in N_m, X_l \in N_l} F(X_l - X_m)$ so we can reuse the strategy used for $\bm{B}$.
+\end{frame}
+
+\begin{frame}\frametitle{Convolution, correlation}
+    \includegraphics[width=\textwidth]{wikipedia_convolution_correlation}
+\end{frame}
+
+\begin{frame}\frametitle{Properties}
+    Shift, reversal, etc.
+\end{frame}
+
+\begin{frame}\frametitle{Trapezoid}
+    Derive computation for Indicator self correlated
+\end{frame}
+
+\begin{frame}\frametitle{Computation strategy summary}
+
+    B, G, V hat use sum of point differences.
+    B hat use exact sup.
+
+    Use symmetries and simplifications.
+    
+    Complexities, basic benchmark.
+
+\end{frame}
+
+%%%% Kernel starts !
+
+\begin{frame}\frametitle{Kernel version}
+    Replace $\varphi_k$ by $\varphi_k \Convolution \eta_l$.
+    
+    New values of B,G,B hat, V hat.
+\end{frame}
+
+\begin{frame}\frametitle{Shape strategy}
+    Introduce trapezoid decomposition.
+
+    Need to introduce more shapes with higher order polynomials, works but tedious to do computations.
+    Rigid for future use (new kernels like $x^2$ approx of gaussian, etc).
+\end{frame}
+
+\begin{frame}\frametitle{Generalization}
+    Introduce polynom on interval.
+
+    Basic props with respect to shifting and reversing.
+\end{frame}
+
+\begin{frame}\frametitle{Convolution of polynomial}
+    Convolution : 3 pieces of polynomials with specific degrees.
+
+    Add one formula for the fun.
+
+    Distributes when convolution of sum of polynomials.
+\end{frame}
+
+\begin{frame}\frametitle{Properties / implementation}
+    Automatic convolution computation.
+
+    Demo of dump shapes.
+
+    Debug capabilities : must be continuous.
+
+    Choice of evaluation from center to reduce numerical error.
+
+    Still costly due to quick explosion of degree.
+
+    Other operators : cut to positive support (recenter polynoms and recompute coefficients).
+\end{frame}
+
+\begin{frame}\frametitle{And the sup ?}
+    Must approximate.
+
+    In case of histograms, using an approximation with indicator scaled to average polynom value.
+    Average computed automatically using integral.
+
+    In practice the sup was supposed to become negligible, not always though.
+    Better strategies could be devised.
+\end{frame}
+
+\begin{frame}\frametitle{Final strategy}
+
+    B, G, V hat using shapes and symmetries.
+
+    B hat approx sup.
+
+\end{frame}
 
 \end{document}
