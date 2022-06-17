@@ -5,10 +5,14 @@
 \usetheme{default}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\usepackage{tikz}
+\usepackage{tikz}\usetikzlibrary{calc}
 \usepackage{bbm}
 \usepackage{amsmath}
 \usepackage{hyperref}
+\usepackage{bm} % bold math mode
+
+\usepackage{minted}
+\setminted{fontsize=\footnotesize}
 
 \usepackage{pdfpages} % import slides from Patricia
 
@@ -25,6 +29,7 @@
 \DeclareMathOperator{\IntervalLeft}{left}
 \DeclareMathOperator{\IntervalRight}{right}
 \DeclareMathOperator{\IntervalCenter}{center}
+\DeclareMathOperator*{\argmin}{arg\,min}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -43,19 +48,21 @@
 }
 
 \begin{frame}\frametitle{Function basis decomposition}
-\[ h_{l \rightarrow m}(t - T) = \sum_{0 \le k < K} a_{k,l,m} \varphi_k(t - T) \]
+\[ h_{l \rightarrow m}(t - T) = \sum_{0 \le k < K} a_{k,l \rightarrow m} \varphi_k(t - T) \]
 
 \begin{columns}
     \begin{column}{0.4\textwidth}
         \textbf{Histograms}
         \small\[ \varphi_k = \frac{1}{\sqrt{\delta}} \mathbbm{1}_{]k\delta, (k+1)\delta]} \]
         \begin{center}\begin{tikzpicture}
-            \draw[->] (-0.3,0) -- (3.5,0) node[right] {$x$};
-            \draw[->] (0,-0.5) -- (0, 3.5);
+            \draw[->] (0,-0.5) -- (0, 3);
             \node[below right] at (0, 0) {$0$};
-            \draw[color=blue] (-0.3,0.3) node[left]{$\varphi_0$} -| (0,1) -| (1,0.3) -- (3.5,0.3);
-            \draw[color=green] (-0.3,1.3) node[left]{$\varphi_1$} -| (1,2) -| (2,1.3) -- (3.5,1.3);
-            \draw[color=red] (-0.3,2.3) node[left]{$\varphi_2$} -| (2,3) -| (3,2.3) -- (3.5,2.3);
+            \draw[dashed] (0,0) -- (1,0) node[below] {$\delta$};
+            \draw[color=blue] (-0.3,0) node[left]{$\varphi_0$} -| (0,0.7) -| (1,0) -- (3.5,0);
+            \draw[dashed] (1,1) -- (2,1);
+            \draw[color=green] (-0.3,1) node[left]{$\varphi_1$} -| (1,1.7) -| (2,1) -- (3.5,1);
+            \draw[dashed] (2,2) -- (3,2);
+            \draw[color=red] (-0.3,2) node[left]{$\varphi_2$} -| (2,2.7) -| (3,2) -- (3.5,2);
         \end{tikzpicture}\end{center}
     \end{column}
     \begin{column}{0.6\textwidth}
@@ -68,15 +75,63 @@
         \]
         \small \[ 0 \le s < \text{Nscale} \qquad 0 \le p < 2^s \]
         \begin{center}\begin{tikzpicture}
-            \draw[->] (-0.3,0) -- (4.5,0) node[right] {$x$};
-            \draw[->] (0,-0.5) -- (0, 3.5);
+            \draw[->] (0,-0.6) -- (0, 3);
             \node[below right] at (0, 0) {$0$};
-            \draw[color=blue] (-0.3,0.5) node[left]{$\varphi_{0,0}$} -| (0,0.9) -| (2,0.1) -| (4,0.5) -- (4.5,0.5);
-            \draw[color=green] (-0.3,1.5) node[left]{$\varphi_{1,0}$} -| (0,1.9) -| (1,1.1) -| (2,1.5) -- (4.5,1.5);
-            \draw[color=red] (-0.3,2.5) node[left]{$\varphi_{1,1}$} -| (2,2.9) -| (3,2.1) -| (4,2.5) -- (4.5,2.5);
+            \draw[dashed] (0,0) -- (4,0) node[above] {$\delta$};
+            \draw[color=blue] (-0.3,0) node[left]{$\varphi_{0,0}$} -| (0,0.4) -| (2,-0.4) -| (4,0) -- (4.5,0);
+            \draw[dashed] (0,1.2) -- (2,1.2);
+            \draw[color=green] (-0.3,1.2) node[left]{$\varphi_{1,0}$} -| (0,1.8) -| (1,0.6) -| (2,1.2) -- (4.5,1.2);
+            \draw[dashed] (2,2.2) -- (4,2.2);
+            \draw[color=red] (-0.3,2.2) node[left]{$\varphi_{1,1}$} -| (2,2.8) -| (3,1.6) -| (4,2.2) -- (4.5,2.2);
         \end{tikzpicture}\end{center}
     \end{column}
 \end{columns}
 \end{frame}
+
+\begin{frame}\frametitle{Inferrence optimization problem (Lasso)}
+\begin{tikzpicture}
+    \node (lasso) at (0,0) {$\displaystyle \widehat{\bm{a}} = \argmin_{\bm{a}} \bm{a}^\intercal \bm{G} \bm{a} - 2 \bm{a}^\intercal \bm{B} + \lambda \bm{d}^\intercal |\bm{a}|$};
+    \draw[->] ($(lasso)+(2.7,0.3)$) |- ++(1,0.2) node[right] {$\left[ a_{k,l \rightarrow m} \right] : float[k \times l \times m]$};
+    \draw[->] ($(lasso)+(1.2,-0.1)$) |- ++(-4,-0.6) |- ++(0.3,-0.9) node[right] {$\displaystyle
+        b_{k,l \rightarrow m} = \sum_{X_l \in N_l, X_m \in N_m} \varphi_k (X_m - X_l)
+    $};
+    \draw[->] ($(lasso)+(-0.35,-0.1)$) |- ++(-2.7,-0.4) |- ++(0.5,-2.5) node[right] {$\displaystyle
+        G_{l,l',k,k'} = \int_\R \left( \sum_{X_l \in N_l} \varphi_k(x-X_l) \right) \left( \sum_{X_{l'} \in N_{l'}} \varphi_{k'}(x-X_{l'}) \right) \D x
+    $};
+    \draw[->] ($(lasso)+(2.2,-0.1)$) |- ++(6,-0.4) |- ++(-3.5,-5) node[left] (D) {$\displaystyle
+        \left. \begin{aligned}
+            \widehat{v}_{k,l \rightarrow m} & = \sum_{X_m \in N_m} \left( \sum_{X_l \in N_l} \varphi_k(X_m-X_l) \right)^2 \\
+            \widehat{b}_{k,l \rightarrow m} & = \sup_x \left|\sum_{X_l \in N_l} \varphi_k(x - X_l) \right| \\
+        \end{aligned} \right\}
+    $};
+\end{tikzpicture}
+\end{frame}
+
+\begin{frame}[fragile]\frametitle{General optimizations}
+    Symmetries
+    \[ G_{l,l',k,k'} = G_{l',l,k',k} \]
+    
+    Factoring scaling out : dealing with $\Indicator{[a,b]}$ is easier
+    \begin{minted}[]{C++}
+template<typename Inner> double compute(const Scaled<Inner> & shape) {
+    return shape.scale * compute(shape.inner);
+}
+double compute(const Indicator & ind) { ... }
+using Histogram = Scaled<Indicator>;
+    \end{minted}
+    
+    Shifting invariance with histograms
+    \begin{itemize}
+        \item $G_{l,l',k,k'} = G_{l,l',k+c,k+'c}$ (using $x \rightarrow x + \delta c$)
+        \item $\widehat{b}_{k,l \rightarrow m} = \sup_x \left|\sum_{X_l \in N_l} \varphi_k(x - X_l) \right|$ independent of $m$ or $k$
+    \end{itemize}
+\end{frame}
+
+\begin{frame}\frametitle{$\bm{B}$ and $\widehat{\bm{V}}$ using sliding windows}
+    \[ \Indicator{x} \]
+    Sliding window over points to go from quadratic to approximately linear
+\end{frame}
+
+%TODO itemize version of slides
 
 \end{document}
